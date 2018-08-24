@@ -230,11 +230,11 @@ namespace Merino
 				case MyColumns.Name:
 					{
 						// Do toggle
-						Rect toggleRect = cellRect;
-						toggleRect.x += GetContentIndent(item);
-						toggleRect.width = kToggleWidth;
-						if (toggleRect.xMax < cellRect.xMax)
-							item.data.enabled = EditorGUI.Toggle(toggleRect, item.data.enabled); // hide when outside cell rect
+//						Rect toggleRect = cellRect;
+//						toggleRect.x += GetContentIndent(item);
+//						toggleRect.width = kToggleWidth;
+//						if (toggleRect.xMax < cellRect.xMax)
+//							item.data.enabled = EditorGUI.Toggle(toggleRect, item.data.enabled); // hide when outside cell rect
 
 						// Default icon and label
 						args.rowRect = cellRect;

@@ -1,0 +1,386 @@
+title: Start
+tags: 
+colorID: 0
+position: 0,0
+---
+
+<<Fade @ black, 0.0, 1.0, 1.0>>
+
+// example scene
+SETTING AN EXAMPLE, a short visual novel by Robert Yang
+
+<<Fade @ white, 1.0, 1.0, 1.0>>
+<<PlayAudio @ ambient_birds, 0.5>>
+RPT Studios; Hoboken, New Jersey, USA
+
+// setup scene
+<<Scene @ bg_office>>
+<<FadeIn @ 1.0>>
+<<Act @ Eve, cool-girl, left, center, green>>
+<<Act @ Adam, biz-guy, right, center, #226677>>
+<<Flip @ Eve>>
+<<Flip @ Adam>>
+<<PlayAudio @ music_funny, 1.0, loop>>
+
+// Eve trying to fire Adam
+Eve: Hey Adam, thanks for coming in.
+Adam: Ok yeah, listen, Steve needs the prototype done by Thursday, and I'm bustin' my fuckin' balls trying to get the demon boss encounter implemented in time for the milestone.
+<<Flip @ Adam>>
+Adam: Whatever this is about, can we make this quick?
+
+[[Eve: (ok, fine: you're fired)|FiredNow]]
+[[Eve: (slowly, or else he'll cause a scene)|FiredSlow]]
+[[Eve: (take it even slower)|History]]
+
+===
+
+
+title: History
+tags: 
+colorID: 0
+position: 10,0
+---
+
+Eve: Tell me Adam, how long have you been working with us here at RPT Studios?
+Adam: This is my second year as a coder here, I think.
+Adam: ...
+<<Flip @ Adam>>
+Adam: Is that it? Can't this wait until later?
+<<Flip @ Adam>>
+Adam: Some of us have games to make, you know.
+Eve: And would you say that you're doing good work? Without any distractions? Is everything OK at home?
+Adam: Well it was shaky at first, with the big move from Nebraska, and getting used to the city and all. 
+Adam: But ever since I went in on that great two bedroom with Steve, it's been great.
+[[Gay]]
+
+===
+
+
+title: FiredSlow
+tags: 
+colorID: 0
+position: 20,0
+---
+
+Eve: Close the door and take a seat, please.
+<<Shake @ Adam>>
+Adam: Oh shit. Is this about the e-mail? Steve wrote it and told me to send it! It wasn't me!
+
+<<set $betray to true>>
+
+-> Eve: About that e-mail.
+	Eve: Well, about that e-mail.
+	Eve: You sent it to every department. From your work e-mail address. And it's somehow Steve's fault?
+	Adam: Steve messaged it to me, said it was funny, and said everyone else would think it's funny too.
+-> Eve: Speaking of Steve...
+	Eve: Actually, speaking of Steve...
+
+[[Gay]]
+
+===
+
+
+
+title: FiredNow
+tags: 
+colorID: 0
+position: 30,30
+---
+
+<<StopAudioAll @>>
+Eve: ... You're fired.
+<<Shake @ Adam>>
+Adam: ...
+Adam: I'm... fired?...
+Eve: That's what I said.
+<<Shake @ Adam>>
+<<PlayAudio @ music_funny, 1.0, loop>>
+Adam: ... Ha!
+Eve: ...
+<<Shake @ Adam, 1.0>>
+Adam: HahahaHAHAHA!
+<<Flip @ Adam>>
+Adam: Oh man, I almost believed you!
+
+<<if $gay is true>>
+Adam: It's so great how us gays can share jokes like this now. The straights will never understand. We're practically like sisters.
+-> Eve: Um, you are NOT my sister.
+	Eve: Um, you are NOT my sister.
+-> Eve: A minute ago you were telling me you're straight
+	Eve: A minute ago you were telling me you're straight.
+-> Eve: Sometimes sisters get into shit tho.
+	Eve: Sometimes sisters get into shit tho.
+<<else>>
+Adam: Did Steve put you up to this? What a jokester. What a legend, what a pal. I love that sonuvabitch. Best prank ever.
+<<endif>>
+
+Adam: Anyway, good hustle there, really believable and really funny.
+<<Flip @ Adam>>
+Adam: Imagine, firing me... I guess you really do have a sense of humor.
+<<Flip @ Adam>>
+Adam: Well, this was fun, but I really gotta get back to work now.
+<<Move @ Adam, 1.25, 0.5, 0.5>>
+
+<<if $gay is true>>
+-> Eve: Sit your fabulous ass down. Now.
+	Eve: Get back here, girl. And sit your firm fabulous gym-toned ass down. Now.
+-> Eve: I'm sorry, Adam.
+	Eve: I'm sorry, Adam.
+<<else>>
+-> Eve: Sit your ass down. Now.
+	Eve: Sit your ass down. Now.
+-> Eve: I'm sorry, Adam.
+	Eve: This isn't a joke. Sorry, dude.
+-> Eve: You deserve it though.
+	Eve: While I pity the breathtaking depth of your denial, it's also kind of hilarious.
+<<endif>>
+
+<<Move @ Adam, right, middle, 1.0>>
+Adam: ...
+Adam: ... Oh my god. This is real? RPT is letting me go?
+<<Move @ Adam, right, bottom, 1.0>>
+
+// if Adam hasn't confessed, then you're meaner
+<<if $gay != true>>
+Eve: We prefer the word "termination".
+<<endif>>
+
+Adam: Geezus. I can't believe... after three years...
+Eve: (cough) Two years.
+<<Shake @ Adam, 1.0>>
+Adam: After two long years of faithful service...
+Adam: ... this is how you repay me?! 
+<<Move @ Adam, right, middle, 0.1>>
+Adam: I MOVED ACROSS THE COUNTRY FOR THIS!
+Eve: Oh, come on. Nebraska's only halfway.
+<<Shake @ Adam, 1.0>>
+Adam: This company is nothing without me! Nothing, you hear me?
+Eve: I'm glad you're taking this so well.
+<<Shake @ Adam, 1.0>>
+Adam: You'll rue this day. Ohhhh you'll regret crossing Adam H. Pickles, if it's the last thing I do, I swear it...
+<<Flip @ Adam>>
+Adam: You can take away my job, but you'll NEVER take away my dignity!
+<<Move @ Adam, 1.25, 0.5, 1.0>>
+<<Move @ Eve, center, 0.5, 0.5>>
+Eve: ...
+Eve: Well, at least I never took away his dignity.
+<<Move @ Adam, right, 0.5, 0.25>>
+<<Move @ Eve, left, 0.5, 0.25>>
+Adam: PLEASE TAKE ME BACK PLEASE
+<<Shake @ Adam, 1.0>>
+Adam: I HAVE NOWHERE ELSE TO GO
+<<Shake @ Adam, 1.0>>
+Adam: I'M NOTHING WITHOUT THIS JOB
+<<Shake @ Adam, 1.0>>
+Adam: WHAT WILL STEVE THINK OF ME
+<<StopAudioAll @>>
+Eve: Umm, about that. Steve was...
+
+-> Eve: You should ask Steve at home. <<if $gay is true>>
+	<<Move @ Eve, center, center, 1.0>>
+	Eve: Maybe you should just ask Steve about it.
+	Eve: Go home, pour yourself a nice whisky, get real fucking drunk...
+	<<Move @ Eve, left, center, 1.0>>
+	<<Flip @ Eve>>
+	Eve: ... and then ask your boyfriend why you don't have a job anymore.
+	<<Flip @ Eve>>
+-> Eve: Steve's the one who got you fired.
+	Eve: Steve was kind of, well, he had a role, he maybe said a thing...
+
+<<PlayAudio @ music_romantic, 1.0, loop>>
+
+Adam: ...
+Adam: What are you saying?
+Eve: I shouldn't be telling you this, but Steve's been giving you bad performance reviews each quarter.
+Adam: No. No he's not.
+<<Flip @ Eve>>
+Eve: I'm sorry.
+
+<<if $betray is true>>
+Eve: Remember that e-mail he told you to send?
+Adam: That was just a mistake, he had no way of knowing... He didn't plan that on purpose.
+<<endif>>
+
+Eve: Now, uh, it's company policy for you to leave the premises immediately. We'll ship your things to the address we have on file.
+<<if $gay != true>>
+Adam: But he's my roommate. I can't go back there.
+<<else>>
+Adam: But I live with him. I can't go back there.
+<<endif>>
+<<Flip @ Adam>>
+Adam: What am I supposed to do?
+
+-> Eve: Not my problem.
+	Eve: That's not my problem.
+-> Eve: I can't help.
+	Eve: My hands are tied. I can't do anything for you. I wasn't even supposed to tell you about Steve.
+	Adam: I wish you didn't. I wish everything could go back the way it was.
+	Eve: It can't. It doesn't work like that.
+	Adam: ...
+-> Eve: (fix broken white boy) <<if $gay is true and $betray is true>>
+	Eve: Well, OK, there's one possibility.
+	Adam: ...
+	[[TrueEnding]]
+
+Eve: I'll try to give you a recommendation for your next thing.
+Adam: ...
+Eve: Um, good luck.
+<<Move @ Eve, -0.25, 0.5, 2.0>>
+
+<<Fade @ black>>
+(SAD END)
+
+===
+
+title: TrueEnding
+tags: 
+colorID: 0
+position: 40,40
+---
+
+Eve: Remember that e-mail?
+<<Shake @ Adam>>
+Adam: Yeah, alright already, I know I shouldn't have sent it, I screwed up, OK!
+Adam: He said he wanted me to have the credit for such a funny joke. He said everyone would like me more.
+Eve: And you just wanted to be liked.
+<<Shake @ Adam>>
+Adam: WHO DOESN'T WANT TO BE LIKED???
+-> Eve: I don't. Not anymore.
+	Eve: I don't care about being liked.
+	Eve: Ever try being the one black woman in a game company?
+	Eve: So I decided, fine, OK, I'll play the cold hard bitch in HR.
+	Adam: Ah no, you're not that cold.
+	-> Eve: Be quiet when a grown-up is talking.
+-> Eve: How old are you again?
+	Eve: How old are you again?
+	Adam: 22.
+	Eve: Are you sure you're not a 12 year old in a big boy body? Like that Tom Hanks movie.
+	Adam: You mean "Big"?
+	Eve: No I meant Road To Perdition, you little fucking baby -- of course I mean Big.
+
+Eve: Anyway, I bring up the e-mail because I remember it too.
+Eve: The CEO was furious.
+Eve: ... But I convinced management to give you one last chance.
+Adam: Really? I thought you hated me.
+Eve: Honey, if I hated every single entitled man-child prick in this company, I'd... I guess I'd...
+Eve: ...
+Eve: Why the fuck am I still working in a company that burns me out every day?
+Adam: Because you want to sacrifice an entire lifetime of well-being to help the game industry brand itself as mildly progressive?
+Eve: Fuck games. I'm done with this shit.
+Eve: I'm quitting. 
+Eve: But first...
+Eve: (on loudspeaker) Attention, all RPT employees: you have 1 minute to evacuate the building. This is not a drill.
+Adam: What the hell?
+Eve: Instead of burning out people, we're going to burn out the industry. We're going to burn this whole motherfucker down.
+-> Adam: I thought you had a plan to get me my job back?
+	Eve: Oh, no, I was just fucking with you. You were basically fired two months ago already, it's way too late to do anything about it now.
+-> Adam: I'm... going to go now.
+	Adam: I changed my mind. I'll just quietly leave the premises now, and wait for my possessions to be shipped to the address on file...
+	Adam: Actually, let's just forget we ever had this conversation. Bye now.
+	Eve: Sit your ass down, Adam H. Pickles.
+	Eve: We're in this together now.
+	Eve: They fired you after two long years of loyal service.
+	<<if $gay is true>>
+	Eve: Your boyfriend betrayed you to get ahead.
+	<<endif>>
+	Eve: You don't owe them anything except... revenge.
+-> Adam: Right on, my sapphic sister! <<if $gay is true>>
+	Adam: In gay solidarity! Right on, my sapphic sister!
+	Eve: ...
+	Eve: I'll let that slide this time, but the next time those words leave your mouth, I'm killing you.
+
+Adam: Ok.
+Adam: ...
+Adam: Burn it all!!!
+Eve: Burn!!!
+
+<<HideAll @>>
+<<Fade @ orange,0.0,1.0,0.5>>
+
+They never did find out who exactly burned down RPT Studios that day, or who scrambled countless Steam datacenters, or who emptied the bank accounts of numerous EA and Ubisoft executives...
+But we know in our hearts that it was Adam and Eve, gay anti-capitalist vigilantes, setting an example for us all.
+(TRUE END)
+
+===
+
+
+title: Gay
+tags: 
+colorID: 0
+position: 40,20
+---
+
+Eve: How would you characterize your relationship with Steve?
+Adam: Huh? Why? You think we're gay or something?
+
+-> Eve: No, I mean your professional relationship.
+	Eve: ... Uh, what?
+	Eve: No, I'm talking about your professional relationship.
+	Adam: But come to think of it, I've been thinking about Steve a lot lately...
+	Eve: That's nice, but about your work --
+	Adam: His eyes are like a... 
+	Eve: ... like a tiger in the moonlight?
+	Adam: Yeah! And his ass is like an 18-wheeler lost in a sewer. 
+	Eve: You're on your own with that one.
+	Adam: Oh my god, maybe I really am gay. This meeting's been a real eye-opener.
+	<<Shake @ Adam, 0.5>>
+	Adam: Look at us! Crying together!
+	Eve: I'm not crying.
+	<<Shake @ Adam, 0.5>>
+	Adam: Real human tears! Wow...
+-> Eve: Gayer than a brunch in July.
+	Eve: Gayer than a brunch in July.
+	Adam: Oh my god. Is it that obvious?
+	-> Eve: Duh.
+	-> Eve: No, not at all!
+	Eve: Don't worry about it.
+	Eve: Besides, you and Steve look cute together, always blowing kisses at each other when you think no one's watching.
+	Adam: You knew about that?
+	Eve: And the whole office knows it was you two who broke the table in the breakroom.
+	Adam: What kind of table can't withstand a few thrusting motions? 
+	Adam: ... It was ugly anyway.
+	Eve: The table.
+	Adam: Yes, the table.
+-> Eve: Maybe it really was Adam and Steve.
+	Eve: Hey, what Adam and Steve do in their two bedroom condo is none of my business.
+	Adam: Damn straight.
+	Adam: ... I mean, I am. Straight. That is.
+	Eve: Understood.
+	Adam: Completely. Heterosexual. No gay thoughts here.
+	Eve: Right.
+	Adam: I saw a boob once --
+
+Eve: Hey! This isn't about you being gay! I'm gay too! I don't care!
+Adam: Are you gay like a brunch in July?
+-> Eve: Gay like a tiger in the moonlight.
+	<<Fade @ black, 0.0, 0.3, 2.0>>
+	<<Move @ Eve, 0.5, 0.5, 2.0>>
+	<<StopAudioAll @>>
+	Eve: I'm gay like a tiger in the moonlight.
+	<<Flip @ Eve>>
+	Eve: Maybe I'm gay like silence, gay like the shadow.
+-> Eve: ... like an 18-wheeler lost in a sewer.
+	<<Fade @ black, 0.0, 0.3, 2.0>>	
+	<<Move @ Eve, 0.5, 0.5, 2.0>>
+	<<StopAudioAll @>>
+	Eve: I'm gay like an 18-wheeler lost in a sewer.
+	<<Flip @ Eve>>
+	Eve: Or I'm gay like muscle cramps, gay like a hangnail.
+-> Eve: ... like revenge, dripping from a tree.
+	<<Fade @ black, 0.0, 0.3, 2.0>>
+	<<Move @ Eve, 0.5, 0.5, 2.0>>
+	<<StopAudioAll @>>
+	Eve: I'm gay like revenge, dripping down from a tree.
+	<<Flip @ Eve>>
+	Eve: I'm gay like a fury tamed only by gravity.
+Adam: You know, historically, I've always been a really strong ally for the lesbian community.
+<<PlayAudio @ music_funny, 1.0, true>>
+<<FadeIn @ 0.5>>
+<<Move @ Eve, left, 0.5, 1.0>>
+<<Flip @ Eve>>
+Eve: ...
+<<set $gay to true>>
+Eve: By the way, on a completely unrelated note, the purpose of this meeting is to inform you that...
+[[FiredNow]]
+
+===

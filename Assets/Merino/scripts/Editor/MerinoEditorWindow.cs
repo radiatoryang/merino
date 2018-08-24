@@ -5,7 +5,9 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
-using UnityEditor.TreeViewExamples;
+
+using Yarn;
+using Yarn.Unity;
 
 namespace Merino
 {
@@ -15,7 +17,7 @@ namespace Merino
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
-		[SerializeField] bool doubleClickOpensFile = true;
+		bool doubleClickOpensFile = true;
 		
 		[NonSerialized] float sidebarWidth = 200f;
 		
@@ -80,7 +82,7 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+40f, 20f, position.width-sidebarWidth-70, position.height-40);}
+			get { return new Rect( sidebarWidth+40f, 10, position.width-sidebarWidth-70, position.height-30);}
 		}
 
 		Rect bottomToolbarRect
@@ -95,48 +97,70 @@ namespace Merino
 
 		void InitIfNeeded ()
 		{
-			if (!m_Initialized)
-			{
-				// Check if it already exists (deserialized from window layout file or scriptable object)
-				if (viewState == null)
-					viewState = new TreeViewState();
+			if (m_Initialized) return;
+			
+			// Check if it already exists (deserialized from window layout file or scriptable object)
+			if (viewState == null)
+				viewState = new TreeViewState();
 
-				bool firstInit = m_MultiColumnHeaderState == null;
-				var headerState = MerinoTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
-				if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
-					MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
-				m_MultiColumnHeaderState = headerState;
+			bool firstInit = m_MultiColumnHeaderState == null;
+			var headerState = MerinoTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
+			if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
+				MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
+			m_MultiColumnHeaderState = headerState;
 				
-				var multiColumnHeader = new MyMultiColumnHeader(headerState);
-				if (firstInit)
-					multiColumnHeader.ResizeToFit ();
+			var multiColumnHeader = new MyMultiColumnHeader(headerState);
+			if (firstInit)
+				multiColumnHeader.ResizeToFit ();
 
-				var treeModel = new TreeModel<MerinoTreeElement>(GetData());
+			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
 				
-				m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
+			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
 
-				m_SearchField = new SearchField();
-				m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
+			m_SearchField = new SearchField();
+			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
 
-				m_Initialized = true;
-			}
+			m_Initialized = true;
 		}
 		
 		IList<MerinoTreeElement> GetData ()
 		{
 //			if (m_MyTreeAsset != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
 //				return m_MyTreeAsset.treeElements;
-			
-			if ( currentFile != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
-				return m_MyTreeAsset.treeElements;
 
-			// generate default data
-			var treeElements = new List<MerinoTreeElement>(2);
+
+			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
-			var start = new MerinoTreeElement("Start", 0, 1);
 			treeElements.Add(root);
-			treeElements.Add(start);
+			
+			// extract data from the text file
+			if (currentFile != null)
+			{
+				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile));
+				var nodes = YarnSpinnerLoader.GetNodesFromText(currentFile.text, NodeFormat.Text);
+				foreach (var node in nodes)
+				{
+					var newItem = new MerinoTreeElement(node.title,0,treeElements.Count);
+					newItem.nodeBody = node.body;
+					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
+					newItem.nodeTags = node.tags;
+					treeElements.Add(newItem);
+				}
+			}
+			else 
+			{ // generate default data
+				var start = new MerinoTreeElement("Start", 0, 1);
+				treeElements.Add(start);
+			}
+
 			return treeElements;
+		}
+
+		// writes data to the file
+		void SetData()
+		{
+			
+			
 		}
 
 		/// <summary>
@@ -198,7 +222,7 @@ namespace Merino
 		void DrawSelectedNodes(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
-
+			EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
 			
 
 //			using (new EditorGUILayout.VerticalScope())
@@ -207,11 +231,11 @@ namespace Merino
 				foreach (var id in viewState.selectedIDs)
 				{
 				//	EditorGUILayout.BeginVertical();
-					EditorGUILayout.TextField( m_TreeView.treeModel.Find(id).name);
-					string passage = "blah blah blah\nlorem ipsum\nplaceholder";
+					m_TreeView.treeModel.Find(id).name = EditorGUILayout.TextField( m_TreeView.treeModel.Find(id).name);
+					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
-					GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true),
-						GUILayout.MaxHeight(height));
+					m_TreeView.treeModel.Find(id).nodeBody = GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true),
+					GUILayout.MaxHeight(height));
 				//	EditorGUILayout.EndVertical();
 					EditorGUILayout.Space();
 					EditorGUILayout.Separator();

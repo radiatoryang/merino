@@ -12,9 +12,9 @@ namespace Merino
 	//	public Material material;
 		public Color nodeColor;
 		public Vector2Int nodePosition;
-		public string text = "";
-		public string[] tags;
-		public string nodeContent = "";
+		//public string nodeTitle = "";
+		public string nodeTags = "";
+		public string nodeBody = "";
 		public bool enabled;
 
 		public MerinoTreeElement (string name, int depth, int id) : base (name, depth, id)

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor.IMGUI.Controls;
+using UnityEditor;
 
-
-namespace UnityEditor.TreeViewExamples
+namespace Merino
 {
 
 	[CustomEditor (typeof(MyTreeAsset))]
@@ -26,7 +26,7 @@ namespace UnityEditor.TreeViewExamples
 			var jsonState = SessionState.GetString (kSessionStateKeyPrefix + asset.GetInstanceID (), "");
 			if (!string.IsNullOrEmpty (jsonState))
 				JsonUtility.FromJsonOverwrite (jsonState, treeViewState);
-			var treeModel = new TreeModel<MyTreeElement> (asset.treeElements);
+			var treeModel = new TreeModel<MerinoTreeElement> (asset.treeElements);
 			m_TreeView = new MyTreeView(treeViewState, treeModel);
 			m_TreeView.beforeDroppingDraggedItems += OnBeforeDroppingDraggedItems;
 			m_TreeView.Reload ();
@@ -110,7 +110,7 @@ namespace UnityEditor.TreeViewExamples
 					TreeElement parent = (selection.Count == 1 ? m_TreeView.treeModel.Find (selection[0]) : null) ?? m_TreeView.treeModel.root;
 					int depth = parent != null ? parent.depth + 1 : 0;
 					int id = m_TreeView.treeModel.GenerateUniqueID ();
-					var element = new MyTreeElement ("Item " + id, depth, id);
+					var element = new MerinoTreeElement ("Item " + id, depth, id);
 					m_TreeView.treeModel.AddElement(element, parent, 0);
 
 					// Select newly created element
@@ -127,9 +127,9 @@ namespace UnityEditor.TreeViewExamples
 		}
 
 
-		class MyTreeView : TreeViewWithTreeModel<MyTreeElement>
+		class MyTreeView : TreeViewWithTreeModel<MerinoTreeElement>
 		{
-			public MyTreeView(TreeViewState state, TreeModel<MyTreeElement> model)
+			public MyTreeView(TreeViewState state, TreeModel<MerinoTreeElement> model)
 				: base(state, model)
 			{
 				showBorder = true;

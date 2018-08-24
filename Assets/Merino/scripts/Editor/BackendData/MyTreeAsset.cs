@@ -1,15 +1,16 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEditor.TreeViewExamples;
 
-namespace UnityEditor.TreeViewExamples
+namespace Merino
 {
 	
 	[CreateAssetMenu (fileName = "TreeDataAsset", menuName = "Tree Asset", order = 1)]
 	public class MyTreeAsset : ScriptableObject
 	{
-		[SerializeField] List<MyTreeElement> m_TreeElements = new List<MyTreeElement> ();
+		[SerializeField] List<MerinoTreeElement> m_TreeElements = new List<MerinoTreeElement> ();
 
-		internal List<MyTreeElement> treeElements
+		internal List<MerinoTreeElement> treeElements
 		{
 			get { return m_TreeElements; }
 			set { m_TreeElements = value; }

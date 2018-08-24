@@ -5,25 +5,24 @@ using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEditor;
-using UnityEditor.TreeViewExamples;
 
 namespace Merino
 {
-	internal class MerinoTreeView : TreeViewWithTreeModel<MyTreeElement>
+	internal class MerinoTreeView : TreeViewWithTreeModel<MerinoTreeElement>
 	{
 		const float kRowHeights = 20f;
 		const float kToggleWidth = 18f;
 		public bool showControls = true;
 
-		static Texture2D[] s_TestIcons =
-		{
-			EditorGUIUtility.FindTexture ("Folder Icon"),
-			EditorGUIUtility.FindTexture ("AudioSource Icon"),
-			EditorGUIUtility.FindTexture ("Camera Icon"),
-			EditorGUIUtility.FindTexture ("Windzone Icon"),
-			EditorGUIUtility.FindTexture ("GameObject Icon")
-
-		};
+//		static Texture2D[] s_TestIcons =
+//		{
+//			EditorGUIUtility.FindTexture ("Folder Icon"),
+//			EditorGUIUtility.FindTexture ("AudioSource Icon"),
+//			EditorGUIUtility.FindTexture ("Camera Icon"),
+//			EditorGUIUtility.FindTexture ("Windzone Icon"),
+//			EditorGUIUtility.FindTexture ("GameObject Icon")
+//
+//		};
 
 		// All columns
 		enum MyColumns
@@ -86,7 +85,7 @@ namespace Merino
 			}
 		}
 
-		public MerinoTreeView (TreeViewState state, MultiColumnHeader multicolumnHeader, TreeModel<MyTreeElement> model) : base (state, multicolumnHeader, model)
+		public MerinoTreeView (TreeViewState state, MultiColumnHeader multicolumnHeader, TreeModel<MerinoTreeElement> model) : base (state, multicolumnHeader, model)
 		{
 			Assert.AreEqual(m_SortOptions.Length , Enum.GetValues(typeof(MyColumns)).Length, "Ensure number of sort options are in sync with number of MyColumns enum values");
 
@@ -140,7 +139,7 @@ namespace Merino
 			if (sortedColumns.Length == 0)
 				return;
 
-			var myTypes = rootItem.children.Cast<TreeViewItem<MyTreeElement> >();
+			var myTypes = rootItem.children.Cast<TreeViewItem<MerinoTreeElement> >();
 			var orderedQuery = InitialOrder (myTypes, sortedColumns);
 			for (int i=1; i<sortedColumns.Length; i++)
 			{
@@ -167,7 +166,7 @@ namespace Merino
 			rootItem.children = orderedQuery.Cast<TreeViewItem> ().ToList ();
 		}
 
-		IOrderedEnumerable<TreeViewItem<MyTreeElement>> InitialOrder(IEnumerable<TreeViewItem<MyTreeElement>> myTypes, int[] history)
+		IOrderedEnumerable<TreeViewItem<MerinoTreeElement>> InitialOrder(IEnumerable<TreeViewItem<MerinoTreeElement>> myTypes, int[] history)
 		{
 			SortOption sortOption = m_SortOptions[history[0]];
 			bool ascending = multiColumnHeader.IsSortedAscending(history[0]);
@@ -202,7 +201,7 @@ namespace Merino
 
 		protected override void RowGUI (RowGUIArgs args)
 		{
-			var item = (TreeViewItem<MyTreeElement>) args.item;
+			var item = (TreeViewItem<MerinoTreeElement>) args.item;
 
 			for (int i = 0; i < args.GetNumVisibleColumns (); ++i)
 			{
@@ -210,7 +209,7 @@ namespace Merino
 			}
 		}
 
-		void CellGUI (Rect cellRect, TreeViewItem<MyTreeElement> item, MyColumns column, ref RowGUIArgs args)
+		void CellGUI (Rect cellRect, TreeViewItem<MerinoTreeElement> item, MyColumns column, ref RowGUIArgs args)
 		{
 			// Center cell rect vertically (makes it easier to place controls, icons etc in the cells)
 			CenterRectUsingSingleLineHeight(ref cellRect);

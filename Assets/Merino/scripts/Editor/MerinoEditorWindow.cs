@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
@@ -14,12 +15,15 @@ namespace Merino
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
+		[SerializeField] bool doubleClickOpensFile = true;
 		
 		[NonSerialized] float sidebarWidth = 200f;
 		
 		SearchField m_SearchField;
 		MerinoTreeView m_TreeView;
 		MyTreeAsset m_MyTreeAsset;
+
+		TextAsset currentFile;
 
 		[MenuItem("Window/Merino (Yarn Editor)")]
 		public static MerinoEditorWindow GetWindow ()
@@ -34,20 +38,34 @@ namespace Merino
 		[OnOpenAsset]
 		public static bool OnOpenAsset (int instanceID, int line)
 		{
-			var myTreeAsset = EditorUtility.InstanceIDToObject (instanceID) as MyTreeAsset;
-			if (myTreeAsset != null)
+//			var myTreeAsset = EditorUtility.InstanceIDToObject (instanceID) as MyTreeAsset;
+//			if (myTreeAsset != null)
+//			{
+//				var window = GetWindow ();
+//				window.SetTreeAsset(myTreeAsset);
+//				return true;
+//			}
+			var myTextAsset = EditorUtility.InstanceIDToObject(instanceID) as TextAsset;
+			if (myTextAsset != null)
 			{
 				var window = GetWindow ();
-				window.SetTreeAsset(myTreeAsset);
-				return true;
+				return window.SetTreeAsset(myTextAsset);
 			}
 			return false; // we did not handle the open
 		}
 
-		void SetTreeAsset (MyTreeAsset myTreeAsset)
+		bool SetTreeAsset (TextAsset myTextAsset)
 		{
-			m_MyTreeAsset = myTreeAsset;
-			m_Initialized = false;
+			if (doubleClickOpensFile && IsProbablyYarnFile(myTextAsset))
+			{
+				currentFile = myTextAsset;
+				m_Initialized = false;
+				return true;
+			}
+			else
+			{
+				return false;
+			}
 		}
 
 		Rect multiColumnTreeViewRect
@@ -93,7 +111,7 @@ namespace Merino
 				if (firstInit)
 					multiColumnHeader.ResizeToFit ();
 
-				var treeModel = new TreeModel<MyTreeElement>(GetData());
+				var treeModel = new TreeModel<MerinoTreeElement>(GetData());
 				
 				m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
 
@@ -104,13 +122,38 @@ namespace Merino
 			}
 		}
 		
-		IList<MyTreeElement> GetData ()
+		IList<MerinoTreeElement> GetData ()
 		{
-			if (m_MyTreeAsset != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
+//			if (m_MyTreeAsset != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
+//				return m_MyTreeAsset.treeElements;
+			
+			if ( currentFile != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
 				return m_MyTreeAsset.treeElements;
 
-			// generate some test data
-			return MyTreeElementGenerator.GenerateRandomTree(130); 
+			// generate default data
+			var treeElements = new List<MerinoTreeElement>(2);
+			var root = new MerinoTreeElement("Root", -1, 0);
+			var start = new MerinoTreeElement("Start", 0, 1);
+			treeElements.Add(root);
+			treeElements.Add(start);
+			return treeElements;
+		}
+
+		/// <summary>
+		/// Checks to see if TextAsset is a probably valid .yarn.txt file, or if it's just a random text file
+		/// </summary>
+		/// <param name="textAsset"></param>
+		/// <returns></returns>
+		bool IsProbablyYarnFile(TextAsset textAsset)
+		{
+			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
+			{
+				return true;
+			}
+			else
+			{
+				return false;
+			}
 		}
 
 		void OnSelectionChange ()
@@ -118,10 +161,10 @@ namespace Merino
 			if (!m_Initialized)
 				return;
 
-			var myTreeAsset = Selection.activeObject as MyTreeAsset;
-			if (myTreeAsset != null && myTreeAsset != m_MyTreeAsset)
+			var possibleYarnFile = Selection.activeObject as TextAsset;
+			if (possibleYarnFile != null && possibleYarnFile != currentFile && IsProbablyYarnFile(possibleYarnFile))
 			{
-				m_MyTreeAsset = myTreeAsset;
+				currentFile = possibleYarnFile;
 				m_TreeView.treeModel.SetData (GetData ());
 				m_TreeView.Reload ();
 			}
@@ -199,7 +242,7 @@ namespace Merino
 
 				GUILayout.FlexibleSpace();
 
-				GUILayout.Label (m_MyTreeAsset != null ? AssetDatabase.GetAssetPath (m_MyTreeAsset) : string.Empty);
+				GUILayout.Label (currentFile != null ? AssetDatabase.GetAssetPath (currentFile) : string.Empty);
 
 				GUILayout.FlexibleSpace ();
 

@@ -11,8 +11,8 @@ namespace Merino
 	internal class MerinoTreeView : TreeViewWithTreeModel<MerinoTreeElement>
 	{
 		const float kRowHeights = 20f;
-		const float kToggleWidth = 18f;
-		public bool showControls = true;
+		const float kToggleWidth = 4f; // was 18
+		public bool showControls = false;
 
 //		static Texture2D[] s_TestIcons =
 //		{
@@ -342,11 +342,11 @@ namespace Merino
 //				},
 				new MultiColumnHeaderState.Column 
 				{
-					headerContent = new GUIContent("Name"),
+					headerContent = new GUIContent("Node Name"),
 					headerTextAlignment = TextAlignment.Left,
 					sortedAscending = true,
-					sortingArrowAlignment = TextAlignment.Center,
-					width = 150, 
+					sortingArrowAlignment = TextAlignment.Right,
+					width = 90, 
 					minWidth = 60,
 					autoResize = true,
 					allowToggleVisibility = false

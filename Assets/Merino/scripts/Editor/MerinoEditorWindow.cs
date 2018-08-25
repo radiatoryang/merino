@@ -7,6 +7,8 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
+using UnityEngine.Experimental.PlayerLoop;
+using UnityEngine.UI;
 using UnityEngine.Windows;
 using Yarn;
 using Yarn.Unity;
@@ -23,8 +25,9 @@ namespace Merino
 		[SerializeField] bool useAutosave = false;
 		bool doubleClickOpensFile = true;
 		
-		[NonSerialized] float sidebarWidth = 200f;
+		[NonSerialized] float sidebarWidth = 150f;
 		[SerializeField] Vector2 scrollPos;
+		double lastTabTime = 0.0; // this is a really bad hack
 		
 		SearchField m_SearchField;
 		MerinoTreeView m_TreeView;
@@ -235,6 +238,16 @@ namespace Merino
 			SaveDataToFile();
 		}
 
+		void DeleteNode(int id)
+		{
+			m_TreeView.treeModel.RemoveElements( new List<int>() {id});
+			if (viewState.selectedIDs.Contains(id))
+			{
+				viewState.selectedIDs.Remove(id);
+			}
+			SaveDataToFile();
+		}
+
 		void OnSelectionChange ()
 		{
 			if (!m_Initialized)
@@ -283,6 +296,14 @@ namespace Merino
 			m_TreeView.OnGUI(rect);
 		}
 
+		void ResetMerino()
+		{
+			currentFile = null;
+			viewState = null;
+			m_Initialized = false;
+			InitIfNeeded();
+		}
+
 		void DrawSelectedNodes(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
@@ -290,17 +311,17 @@ namespace Merino
 			GUILayout.BeginHorizontal();
 			if (currentFile != null)
 			{
-				useAutosave = EditorGUILayout.Toggle(useAutosave, GUILayout.Width(16));
-				GUILayout.Label("AutoSave?   ", GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
+				useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), useAutosave, GUILayout.Width(16));
+				GUILayout.Label(new GUIContent("AutoSave?   ", "if enabled, will automatically save every change"), GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
 				GUI.enabled = !useAutosave;
-				if (GUILayout.Button("Save", GUILayout.MaxWidth(60)))
+				if (GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
 				{
 					SaveDataToFile();
 					AssetDatabase.Refresh();
 				}
 				GUI.enabled = true;
 			}
-			if (GUILayout.Button("Save As...", GUILayout.MaxWidth(100)))
+			if (GUILayout.Button( new GUIContent("Save As...", "save all changes as a new .yarn.txt file"), GUILayout.MaxWidth(100)))
 			{
 				string defaultPath = Application.dataPath + "/";
 				string defaultName = "NewYarnStory";
@@ -320,34 +341,124 @@ namespace Merino
 				}
 			}
 
-			if (GUILayout.Button("New File", GUILayout.MaxWidth(100)))
+			if (GUILayout.Button(new GUIContent("New File", "will throw away any unsaved changes, and reset Merino to a new blank file"), GUILayout.MaxWidth(100)))
 			{
-				currentFile = null;
-				viewState = null;
-				m_Initialized = false;
-				InitIfNeeded();
+				ResetMerino();
 			}
 			GUILayout.Space(10);
-			EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
+			//if ( currentFile != null ) { GUILayout.Label(EditorGUIUtility.FindTexture ("Folder Icon"), GUILayout.Width(24), GUILayout.Height(24));}
+			//EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
+			EditorGUI.BeginChangeCheck();
+			var newFile = (TextAsset)EditorGUILayout.ObjectField(currentFile, typeof(TextAsset), false);
+			if (EditorGUI.EndChangeCheck())
+			{
+				currentFile = newFile;
+				if (currentFile != null && IsProbablyYarnFile(currentFile))
+				{
+					m_TreeView.treeModel.SetData(GetData());
+					m_TreeView.Reload();
+				}
+				else if (currentFile != null)
+				{
+					Debug.LogWarningFormat(currentFile, "Merino: the TextAsset at {0} doesn't seem to be a valid .yarn.txt file. Can't load it. Sorry.", AssetDatabase.GetAssetPath(currentFile));
+					currentFile = null;
+				}
+				else
+				{
+					currentFile = null;
+					ResetMerino();
+				}
+			}
 			GUILayout.EndHorizontal();
 
+			int idToDelete = -1;
+			bool forceSave = false;
 			if (viewState.selectedIDs.Count > 0)
 			{
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 				
 				foreach (var id in viewState.selectedIDs)
 				{
+					// start node container
 					EditorGUI.BeginChangeCheck();
+					EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 					
+					// NODE HEADER
+					EditorGUILayout.BeginHorizontal();
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name);
+					if (GUILayout.Button("Delete", GUILayout.Width(100)))
+					{
+						idToDelete = id;
+					}
+					EditorGUILayout.EndHorizontal();
+					
+					// NODE BODY
+					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
+					// save colors for later
+//					var backupColor = GUI.color;
+					var backupContentColor = GUI.contentColor;
+//					var backupBackgroundColor = GUI.backgroundColor;
+					
+ 
+					//get the texteditor of the textarea to control selection
+					GUI.contentColor = new Color ( 1f, 1f, 1f, 0.25f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
+					
+					// stuff for tabs
+					GUI.SetNextControlName ( "TextArea" );
 					string newBody = GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+					
+					// tab support
+					string oldBody = newBody;
+					newBody = KeyboardTabSupport(newBody, te);
+					if (oldBody.Length != newBody.Length)
+					{
+						forceSave = true;
+					}
+
+					// syntax highlight via label overlay
+					Rect lastRect = GUILayoutUtility.GetLastRect();
+					lastRect.x += 2;
+					lastRect.y += 1f;
+					lastRect.width -= 6;
+					lastRect.height -= 1;
+					string syntaxHighlight = DoSyntaxMarch(newBody);
+					
+					GUIStyle textStyle = new GUIStyle();
+					textStyle.normal.textColor = Color.white * 0.8f;
+					textStyle.richText = true;
+					textStyle.wordWrap = true;
+					GUI.contentColor = backupContentColor;
+					
+					GUI.Label(lastRect, syntaxHighlight, textStyle);
+ 
+//					CheckKeys ( te, ev );
+					//set background of all textfield transparent
+//					GUI.backgroundColor = new Color ( 1f, 1f, 1f, 0f );
+// 
+//					//backup selection to remake it after process
+//					int backupPos = te.cursorIndex;
+//					int backupSelPos = te.selectIndex;
+//					//get last position in text
+//					te.MoveTextEnd ( );
+//					int endpos = te.cursorIndex;
+//					//draw textfield with color on top of text area
+//					var textStyle = new GUIStyle ( GUI.skin.textArea );
+//					UpdateSyntaxHighlighting( te, endpos, textStyle, backupPos, backupSelPos );				
+					
+					//Reset color
+//					GUI.color = backupColor;
+//					GUI.contentColor = backupContentColor;
+//					GUI.backgroundColor = backupBackgroundColor;
+					
+					// close out node container
+					EditorGUILayout.EndVertical();
 					EditorGUILayout.Space();
 					EditorGUILayout.Separator();
 					
 					// did user edit something?
-					if (EditorGUI.EndChangeCheck())
+					if (EditorGUI.EndChangeCheck() || forceSave)
 					{
 						// TODO: fix this somehow? I guess the file isn't writing quickly enough for Undo to catch it
 						if (currentFile != null)
@@ -363,14 +474,81 @@ namespace Merino
 					}
 				}
 
+				// delete the node with this ID
+				if (idToDelete > -1)
+				{
+					DeleteNode(idToDelete);
+				}
+
 				EditorGUILayout.EndScrollView();
 			}
 			else
 			{
-				EditorGUILayout.HelpBox(" Select node(s) in sidebar.\n\n Left-Click: select\n Left-Click + Shift: select multiple\n Left-Click + Ctrl or Command: add / remove from selection", MessageType.Info);
+				if ( currentFile == null ) { EditorGUILayout.HelpBox(" To edit a Yarn.txt file, select it in your Project tab OR use the TextAsset object picker above.\n ... or, just work with the blank default template here, and then click [Save As].", MessageType.Info);}
+				EditorGUILayout.HelpBox(" Select node(s) from the sidebar on the left.\n - Left-Click:  select\n - Left-Click + Shift:  select multiple\n - Left-Click + Ctrl / Left-Click + Command:  add / remove from selection", MessageType.Info);
 			}
 
 			GUILayout.EndArea();
+		}
+
+		// I CAN'T GET THIS TO WORK AHHHHHHH
+		string KeyboardTabSupport(string text, TextEditor te)
+		{
+			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
+			{
+				int cursorIndex = te.cursorIndex;
+				GUI.FocusControl("TextArea");
+				if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
+				{
+					lastTabTime = EditorApplication.timeSinceStartup;
+					text = text.Insert(te.cursorIndex, "\t");
+					te.cursorIndex = cursorIndex + 1;
+					te.selectIndex = te.cursorIndex;
+				}
+
+				Event.current.Use();
+//				GetWindow<MerinoEditorWindow>().Focus();
+				GUI.FocusControl("TextArea");
+//				GUIUtility.hotControl = 0;
+//				GUIUtility.keyboardControl = te.controlID;
+//				EditorGUIUtility.editingTextField = true;
+
+			}
+			return text;
+		}
+
+		string DoSyntaxMarch(string text)
+		{
+			var textLines = text.Split('\n');
+			for (int i = 0; i < textLines.Length; i++)
+			{
+				var newColor = CheckSyntax(textLines[i]);
+				if (newColor != Color.white)
+				{
+					textLines[i] = string.Format("<color=#{0}>{1}</color>", ColorUtility.ToHtmlStringRGB(newColor), textLines[i]);
+				}
+			}
+
+			return string.Join("\n", textLines);
+		}
+
+		Color CheckSyntax (string syntax )
+		{
+			string newSyntax = syntax.Replace("\t", "").TrimEnd(' ').TrimStart(' '); // cleanup string
+			if ( newSyntax.StartsWith ( "//" ) )
+			{
+				return new Color(0.3f, 0.6f, 0.25f);
+			} else if (newSyntax.StartsWith("->"))
+			{
+				return new Color(0.8f, 0.5f, 0.1f);
+			} else if (newSyntax.StartsWith("<<"))
+			{
+				return Color.cyan;
+			}
+			else
+			{
+				return Color.white;
+			}
 		}
 
 		void BottomToolBar (Rect rect)

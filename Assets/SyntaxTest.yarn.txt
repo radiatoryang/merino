@@ -1,0 +1,24 @@
+title: NewNode2
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: Start
+tags: 
+colorID: 0
+position: 0,0
+---
+This is the Start node. Write the beginning of your Yarn story here.
+
+<<Does this work?>>
+
+-> What is wrong
+// This is a comment
+I finally	got tabs	working		wow
+-> With this
+	-> wow it really works
+		-> holy shit
+I have no idea
+===

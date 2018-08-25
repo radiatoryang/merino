@@ -1,0 +1,48 @@
+title: NewNode7
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: NewNode6
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: NewNode5
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: NewNode4
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: NewNode3
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
+title: Start
+tags: 
+colorID: 0
+position: 0,0
+---
+This is the Start node. Write the beginning of your Yarn story here.
+
+It looks like file saving and basic writing functions work now!!!
+
+Wow!!!
+
+...
+===

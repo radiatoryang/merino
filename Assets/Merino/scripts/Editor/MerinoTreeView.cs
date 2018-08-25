@@ -346,7 +346,7 @@ namespace Merino
 					headerTextAlignment = TextAlignment.Left,
 					sortedAscending = true,
 					sortingArrowAlignment = TextAlignment.Right,
-					width = 90, 
+					width = 150, 
 					minWidth = 60,
 					autoResize = true,
 					allowToggleVisibility = false

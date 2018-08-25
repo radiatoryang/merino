@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.IO;
@@ -13,6 +14,7 @@ using UnityEngine.Windows;
 using Yarn;
 using Yarn.Unity;
 using File = System.IO.File;
+using EditorCoroutines;
 
 namespace Merino
 {
@@ -25,7 +27,7 @@ namespace Merino
 		[SerializeField] bool useAutosave = false;
 		bool doubleClickOpensFile = true;
 		
-		[NonSerialized] float sidebarWidth = 150f;
+		[NonSerialized] float sidebarWidth = 180f;
 		[SerializeField] Vector2 scrollPos;
 		double lastTabTime = 0.0; // this is a really bad hack
 		
@@ -34,6 +36,29 @@ namespace Merino
 		MyTreeAsset m_MyTreeAsset;
 
 		TextAsset currentFile;
+		Font monoFont;
+		
+		// Yarn Spinner running stuff
+		MerinoDialogueUI dialogueUI;
+		Dialogue _dialogue;
+		Dialogue dialogue {
+			get {
+				if (_dialogue == null) {
+					// Create the main Dialogue runner, and pass our variableStorage to it
+					_dialogue = new Yarn.Dialogue ( new MerinoVariableStorage() );
+					dialogueUI = new MerinoDialogueUI();
+					
+					// Set up the logging system.
+					_dialogue.LogDebugMessage = delegate (string message) {
+						Debug.Log (message);
+					};
+					_dialogue.LogErrorMessage = delegate (string message) {
+						Debug.LogError (message);
+					};
+				}
+				return _dialogue;
+			}
+		}
 
 		[MenuItem("Window/Merino (Yarn Editor)")]
 		public static MerinoEditorWindow GetWindow ()
@@ -107,6 +132,12 @@ namespace Merino
 		{
 			if (m_Initialized) return;
 			
+			// load font
+			if (monoFont == null)
+			{
+				monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Fonts/Inconsolata-Regular.ttf");
+			}
+			
 			// Check if it already exists (deserialized from window layout file or scriptable object)
 			if (viewState == null)
 				viewState = new TreeViewState();
@@ -164,9 +195,24 @@ namespace Merino
 			else 
 			{ // generate default data
 				var start = new MerinoTreeElement("Start", 0, 1);
-				start.nodeBody = "This is the Start node. Write the beginning of your Yarn story here.";
+				start.nodeBody = "This is the Start node. Write the beginning of your Yarn story here." +
+				                 "\n// You can make comments with '//' and the player won't see it." +
+				                 "\n\nThere's two ways to do choices in Yarn. The most basic way is to link to other nodes like this:" +
+				                 "\n[[Go see more examples|Start_MoreExamples]]\n[[Actually, let's restart this node again|Start]]" +
+				                 "\n\nIMPORTANT: node options are offered to player only at the END of the entire passage, like after this line:";
+								 
+
+				var start2 = new MerinoTreeElement("Start_MoreExamples", 0, 2);
+				start2.nodeBody = "This node is called Start_MoreExamples.\nThe second way to do choices in Yarn is with 'shortcut options' like this:" +
+				                  "\n\n->This is option 1\n\tThis happens if player selects option 1" +
+				                  "\n->This is option 2\n\tThis happens if player selects option 2\n\t<<set $didOption2 to true>>" +
+				                  "\n\n<<if $didOption2 is true>>\nYep, you definitely chose option 2!\n<<else>>\nThis happens if they chose option 1\n<<endif>>" +
+				                  "\n\nDo you want to go back to Start now?\n-> Yes, send me back to Start.\n\t[[Start]]\n-> No thanks.\n\nOk that's the end, good luck!";
+				
 				treeElements.Add(start);
+				treeElements.Add(start2);
 			}
+			
 
 			return treeElements;
 		}
@@ -183,29 +229,35 @@ namespace Merino
 			}
 		}
 
+		string SaveDataAsString()
+		{
+			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
+			var allTreeInfo = m_TreeView.treeModel.root.children;
+			foreach (var item in allTreeInfo)
+			{
+				var itemCasted = (MerinoTreeElement) item;
+				var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
+
+				newNodeInfo.title = itemCasted.name;
+				newNodeInfo.body = itemCasted.nodeBody;
+				newNodeInfo.tags = itemCasted.nodeTags;
+				var newPosition = new YarnSpinnerLoader.NodeInfo.Position();
+				newPosition.x = itemCasted.nodePosition.x;
+				newPosition.y = itemCasted.nodePosition.y;
+				newNodeInfo.position = newPosition;
+
+				nodeInfo.Add(newNodeInfo);
+			}
+
+			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfo);
+		}
+
 		// writes data to the file
 		void SaveDataToFile()
 		{
 			if (currentFile != null)
 			{
-				var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-				var allTreeInfo = m_TreeView.treeModel.root.children;
-				foreach (var item in allTreeInfo)
-				{
-					var itemCasted = (MerinoTreeElement) item;
-					var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
-
-					newNodeInfo.title = itemCasted.name;
-					newNodeInfo.body = itemCasted.nodeBody;
-					newNodeInfo.tags = itemCasted.nodeTags;
-					var newPosition = new YarnSpinnerLoader.NodeInfo.Position();
-					newPosition.x = itemCasted.nodePosition.x;
-					newPosition.y = itemCasted.nodePosition.y;
-					newNodeInfo.position = newPosition;
-
-					nodeInfo.Add(newNodeInfo);
-				}
-				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfo));
+				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveDataAsString() );
 				EditorUtility.SetDirty(currentFile);
 			}
 		}
@@ -274,6 +326,11 @@ namespace Merino
 				DrawSelectedNodes(nodeEditRect);
 			}
 
+			if (dialogueUI != null)
+			{
+				dialogueUI.OnGUI(nodeEditRect);
+			}
+
 		//	BottomToolBar (bottomToolbarRect);
 		}
 
@@ -303,6 +360,79 @@ namespace Merino
 			m_Initialized = false;
 			InitIfNeeded();
 		}
+
+		void PlayFrom(string startPassageName)
+		{
+			if (isDialogueRunning)
+			{
+				return;
+			}
+			
+			dialogue.LoadString( SaveDataAsString() );
+			
+			// use EditorCoroutines to run the dialogue
+			this.StartCoroutine(RunDialogue(startPassageName));
+		}
+
+		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
+		bool isDialogueRunning;
+		IEnumerator RunDialogue (string startNode = "Start")
+        {
+            // Mark that we're in conversation.
+            isDialogueRunning = true;
+
+            // Signal that we're starting up.
+            yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
+
+            // Get lines, options and commands from the Dialogue object,
+            // one at a time.
+            foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode)) {
+
+                if (step is Yarn.Dialogue.LineResult) {
+
+                    // Wait for line to finish displaying
+                    var lineResult = step as Yarn.Dialogue.LineResult;
+                    yield return this.StartCoroutine (this.dialogueUI.RunLine (lineResult.line));
+
+                } else if (step is Yarn.Dialogue.OptionSetResult) {
+
+                    // Wait for user to finish picking an option
+                    var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
+                    yield return this.StartCoroutine (
+                        this.dialogueUI.RunOptions (
+                        optionSetResult.options,
+                        optionSetResult.setSelectedOptionDelegate
+                    ));
+
+                } else if (step is Yarn.Dialogue.CommandResult) {
+
+                    // Wait for command to finish running
+
+                    var commandResult = step as Yarn.Dialogue.CommandResult;
+
+//                    if (DispatchCommand(commandResult.command.text) == true) {
+//                        // command was dispatched
+//                    } else {
+                        yield return this.StartCoroutine (this.dialogueUI.RunCommand (commandResult.command));
+//                    }
+
+
+                } else if(step is Yarn.Dialogue.NodeCompleteResult) {
+
+                    // Wait for post-node action
+                    var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
+                    yield return this.StartCoroutine (this.dialogueUI.NodeComplete (nodeResult.nextNode));
+                }
+            }
+
+            // No more results! The dialogue is done.
+            yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
+
+            // Clear the 'is running' flag. We do this after DialogueComplete returns,
+            // to allow time for any animations that might run while transitioning
+            // out of a conversation (ie letterboxing going away, etc)
+            isDialogueRunning = false;
+        }
 
 		void DrawSelectedNodes(Rect rect)
 		{
@@ -373,6 +503,7 @@ namespace Merino
 
 			int idToDelete = -1;
 			bool forceSave = false;
+			int idToPreview = -1;
 			if (viewState.selectedIDs.Count > 0)
 			{
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
@@ -385,7 +516,11 @@ namespace Merino
 					
 					// NODE HEADER
 					EditorGUILayout.BeginHorizontal();
-					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name);
+					var nameStyle = new GUIStyle( EditorStyles.textField );
+					nameStyle.font = monoFont;
+					nameStyle.fontSize = 16;
+					nameStyle.fixedHeight = 20f;
+					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, nameStyle);
 					if (GUILayout.Button("Delete", GUILayout.Width(100)))
 					{
 						idToDelete = id;
@@ -401,13 +536,17 @@ namespace Merino
 					
  
 					//get the texteditor of the textarea to control selection
-					GUI.contentColor = new Color ( 1f, 1f, 1f, 0.25f );
+					GUI.contentColor = new Color ( 0f, 0f, 0f, 0.16f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
 					// stuff for tabs
 					GUI.SetNextControlName ( "TextArea" );
-					string newBody = GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+					
+					// draw the body
+					var bodyStyle = new GUIStyle( EditorStyles.textArea );
+					bodyStyle.font = monoFont;
+					string newBody = GUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 					
 					// tab support
 					string oldBody = newBody;
@@ -425,34 +564,22 @@ namespace Merino
 					lastRect.height -= 1;
 					string syntaxHighlight = DoSyntaxMarch(newBody);
 					
-					GUIStyle textStyle = new GUIStyle();
-					textStyle.normal.textColor = Color.white * 0.8f;
-					textStyle.richText = true;
-					textStyle.wordWrap = true;
+					GUIStyle highlightOverlay = new GUIStyle();
+					highlightOverlay.font = monoFont;
+					highlightOverlay.normal.textColor = Color.white * 0.8f;
+					highlightOverlay.richText = true;
+					highlightOverlay.wordWrap = true;
 					GUI.contentColor = backupContentColor;
 					
-					GUI.Label(lastRect, syntaxHighlight, textStyle);
+					GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
+					
+					// add "Play" button
+					if (GUILayout.Button("Preview this", GUILayout.Width(100)))
+					{
+						idToPreview = id;
+					}
  
-//					CheckKeys ( te, ev );
-					//set background of all textfield transparent
-//					GUI.backgroundColor = new Color ( 1f, 1f, 1f, 0f );
-// 
-//					//backup selection to remake it after process
-//					int backupPos = te.cursorIndex;
-//					int backupSelPos = te.selectIndex;
-//					//get last position in text
-//					te.MoveTextEnd ( );
-//					int endpos = te.cursorIndex;
-//					//draw textfield with color on top of text area
-//					var textStyle = new GUIStyle ( GUI.skin.textArea );
-//					UpdateSyntaxHighlighting( te, endpos, textStyle, backupPos, backupSelPos );				
-					
-					//Reset color
-//					GUI.color = backupColor;
-//					GUI.contentColor = backupContentColor;
-//					GUI.backgroundColor = backupBackgroundColor;
-					
-					// close out node container
+					// close out node container				
 					EditorGUILayout.EndVertical();
 					EditorGUILayout.Space();
 					EditorGUILayout.Separator();
@@ -481,6 +608,12 @@ namespace Merino
 				}
 
 				EditorGUILayout.EndScrollView();
+				
+				// detect if we need to do play preview
+				if (idToPreview > -1)
+				{
+					PlayFrom( m_TreeView.treeModel.Find(idToPreview).name);
+				}
 			}
 			else
 			{
@@ -491,7 +624,7 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 
-		// I CAN'T GET THIS TO WORK AHHHHHHH
+		// I can't believe I finally got this to work, wow
 		string KeyboardTabSupport(string text, TextEditor te)
 		{
 			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
@@ -507,12 +640,7 @@ namespace Merino
 				}
 
 				Event.current.Use();
-//				GetWindow<MerinoEditorWindow>().Focus();
 				GUI.FocusControl("TextArea");
-//				GUIUtility.hotControl = 0;
-//				GUIUtility.keyboardControl = te.controlID;
-//				EditorGUIUtility.editingTextField = true;
-
 			}
 			return text;
 		}
@@ -538,10 +666,13 @@ namespace Merino
 			if ( newSyntax.StartsWith ( "//" ) )
 			{
 				return new Color(0.3f, 0.6f, 0.25f);
-			} else if (newSyntax.StartsWith("->"))
+			} else if (newSyntax.StartsWith("->") )
 			{
 				return new Color(0.8f, 0.5f, 0.1f);
-			} else if (newSyntax.StartsWith("<<"))
+			} else if (newSyntax.StartsWith("[["))
+			{
+				return new Color(0.9f, 0.5f, 0.8f);
+			}else if (newSyntax.StartsWith("<<"))
 			{
 				return Color.cyan;
 			}
@@ -610,6 +741,166 @@ namespace Merino
 
 			GUILayout.EndArea();
 		}
+	}
+
+	// based a bit on YarnSpinner/ExampleDialogueUI
+	public class MerinoDialogueUI
+	{
+		public IEnumerator DialogueStarted()
+		{
+			yield return 0;
+		}
+		
+		public IEnumerator RunLine(Yarn.Line line)
+		{
+			yield return 0;
+		}
+		
+		public IEnumerator RunCommand (Yarn.Command command)
+		{
+			yield return 0;
+		}
+		
+		public IEnumerator RunOptions (Yarn.Options optionsCollection, Yarn.OptionChooser optionChooser)
+		{
+			yield return 0;
+		}
+		
+		public IEnumerator NodeComplete(string nextNode)
+		{
+			yield return 0;
+		}
+		
+		public IEnumerator DialogueComplete()
+		{
+			yield return 0;
+		}
+		
+		public void OnGUI(Rect rect)
+		{
+			
+		}
+	}
+
+	// this is pretty much just YarnSpinner/ExampleVariableStorage with all the MonoBehaviour stuff taken out
+	public class MerinoVariableStorage : VariableStorage
+	{
+		/// Where we actually keeping our variables
+		Dictionary<string, Yarn.Value> variables = new Dictionary<string, Yarn.Value> ();
+	
+		/// A default value to apply when the object wakes up, or
+		/// when ResetToDefaults is called
+		[System.Serializable]
+		public class DefaultVariable
+		{
+			/// Name of the variable
+			public string name;
+			/// Value of the variable
+			public string value;
+			/// Type of the variable
+			public Yarn.Value.Type type;
+		}
+	
+		/// Our list of default variables, for debugging.
+		public DefaultVariable[] defaultVariables;
+	
+		/// Reset to our default values when the game starts
+		public MerinoVariableStorage ()
+		{
+			ResetToDefaults ();
+		}
+	
+		/// Erase all variables and reset to default values
+		public void ResetToDefaults ()
+		{
+			Clear ();
+	
+			// For each default variable that's been defined, parse the string
+			// that the user typed in in Unity and store the variable
+			foreach (var variable in defaultVariables) {
+				
+				object value;
+	
+				switch (variable.type) {
+				case Yarn.Value.Type.Number:
+					float f = 0.0f;
+					float.TryParse(variable.value, out f);
+					value = f;
+					break;
+	
+				case Yarn.Value.Type.String:
+					value = variable.value;
+					break;
+	
+				case Yarn.Value.Type.Bool:
+					bool b = false;
+					bool.TryParse(variable.value, out b);
+					value = b;
+					break;
+	
+				case Yarn.Value.Type.Variable:
+					// We don't support assigning default variables from other variables
+					// yet
+					Debug.LogErrorFormat("Can't set variable {0} to {1}: You can't " +
+						"set a default variable to be another variable, because it " +
+						"may not have been initialised yet.", variable.name, variable.value);
+					continue;
+	
+				case Yarn.Value.Type.Null:
+					value = null;
+					break;
+	
+				default:
+					throw new System.ArgumentOutOfRangeException ();
+	
+				}
+	
+				var v = new Yarn.Value(value);
+	
+				SetValue ("$" + variable.name, v);
+			}
+		}
+			
+		/// Set a variable's value
+		public void SetNumber (string variableName, float value)
+		{
+			// Copy this value into our list
+			variables[variableName] = new Yarn.Value(value);
+		}
+	
+		/// Get a variable's value
+		public float GetNumber (string variableName)
+		{
+			// If we don't have a variable with this name, return the null value
+			if (variables.ContainsKey(variableName) == false)
+				return -1f;
+		
+			return variables [variableName].AsNumber;
+		}
+	
+		/// Set a variable's value
+		public void SetValue (string variableName, Yarn.Value value)
+		{
+			// Copy this value into our list
+			variables[variableName] = new Yarn.Value(value);
+		}
+	
+		/// Get a variable's value
+		public Yarn.Value GetValue (string variableName)
+		{
+			// If we don't have a variable with this name, return the null value
+			if (variables.ContainsKey(variableName) == false)
+				return Yarn.Value.NULL;
+			
+			return variables [variableName];
+		}
+	
+		/// Erase all variables
+		public void Clear ()
+		{
+			variables.Clear ();
+		}
+			
 	}
 
 

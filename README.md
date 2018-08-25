@@ -24,3 +24,11 @@ version 0.5
 version 0.6
 - generate nodes (prefix, count, one-way or not, connectivity chance, min / max exits, max dead ends)
 - untangle nodes
+
+### uses
+- Unity Editor Coroutines https://github.com/marijnz/unity-editor-coroutines
+- Yarn Spinner https://github.com/thesecretlab/YarnSpinner
+- Yarn https://github.com/InfiniteAmmoInc/Yarn
+
+### license?
+MIT

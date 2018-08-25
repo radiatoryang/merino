@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
-
+using UnityEngine.Windows;
 using Yarn;
 using Yarn.Unity;
+using File = System.IO.File;
 
 namespace Merino
 {
@@ -17,9 +20,11 @@ namespace Merino
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
+		[SerializeField] bool useAutosave = false;
 		bool doubleClickOpensFile = true;
 		
 		[NonSerialized] float sidebarWidth = 200f;
+		[SerializeField] Vector2 scrollPos;
 		
 		SearchField m_SearchField;
 		MerinoTreeView m_TreeView;
@@ -136,31 +141,70 @@ namespace Merino
 			// extract data from the text file
 			if (currentFile != null)
 			{
+				AssetDatabase.Refresh();
 				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile));
 				var nodes = YarnSpinnerLoader.GetNodesFromText(currentFile.text, NodeFormat.Text);
 				foreach (var node in nodes)
 				{
-					var newItem = new MerinoTreeElement(node.title,0,treeElements.Count);
-					newItem.nodeBody = node.body;
+					// clean some of the stuff to help prevent file corruption
+					string cleanName = CleanYarnField(node.title, true);
+					string cleanBody = CleanYarnField(node.body);
+					string cleanTags = CleanYarnField(node.tags, true);
+					// write data to the objects
+					var newItem = new MerinoTreeElement( cleanName ,0,treeElements.Count);
+					newItem.nodeBody = cleanBody;
 					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
-					newItem.nodeTags = node.tags;
+					newItem.nodeTags = cleanTags;
 					treeElements.Add(newItem);
 				}
 			}
 			else 
 			{ // generate default data
 				var start = new MerinoTreeElement("Start", 0, 1);
+				start.nodeBody = "This is the Start node. Write the beginning of your Yarn story here.";
 				treeElements.Add(start);
 			}
 
 			return treeElements;
 		}
 
-		// writes data to the file
-		void SetData()
+		string CleanYarnField(string inputString, bool extraClean=false)
 		{
-			
-			
+			if (extraClean)
+			{
+				return inputString.Replace("===", " ").Replace("---", " ").Replace("title:", " ").Replace("tags:", " ").Replace("position:", " ").Replace("colorID:", " ");
+			}
+			else
+			{
+				return inputString.Replace("===", " ").Replace("---", " ");
+			}
+		}
+
+		// writes data to the file
+		void SaveDataToFile()
+		{
+			if (currentFile != null)
+			{
+				var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
+				var allTreeInfo = m_TreeView.treeModel.root.children;
+				foreach (var item in allTreeInfo)
+				{
+					var itemCasted = (MerinoTreeElement) item;
+					var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
+
+					newNodeInfo.title = itemCasted.name;
+					newNodeInfo.body = itemCasted.nodeBody;
+					newNodeInfo.tags = itemCasted.nodeTags;
+					var newPosition = new YarnSpinnerLoader.NodeInfo.Position();
+					newPosition.x = itemCasted.nodePosition.x;
+					newPosition.y = itemCasted.nodePosition.y;
+					newNodeInfo.position = newPosition;
+
+					nodeInfo.Add(newNodeInfo);
+				}
+				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfo));
+				EditorUtility.SetDirty(currentFile);
+			}
 		}
 
 		/// <summary>
@@ -180,13 +224,24 @@ namespace Merino
 			}
 		}
 
+		void AddNewNode()
+		{
+			var newID = m_TreeView.treeModel.GenerateUniqueID();
+			var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
+			newNode.nodeBody = "Write stuff here.";
+			m_TreeView.treeModel.AddElement(newNode, m_TreeView.treeModel.root, 0);
+			m_TreeView.FrameItem(newID);
+			m_TreeView.SetSelection( new List<int>() {newID} );
+			SaveDataToFile();
+		}
+
 		void OnSelectionChange ()
 		{
 			if (!m_Initialized)
 				return;
 
 			var possibleYarnFile = Selection.activeObject as TextAsset;
-			if (possibleYarnFile != null && possibleYarnFile != currentFile && IsProbablyYarnFile(possibleYarnFile))
+			if (possibleYarnFile != null && IsProbablyYarnFile(possibleYarnFile)) // possibleYarnFile != currentFile
 			{
 				currentFile = possibleYarnFile;
 				m_TreeView.treeModel.SetData (GetData ());
@@ -201,12 +256,12 @@ namespace Merino
 			SearchBar (toolbarRect);
 			DoTreeView (multiColumnTreeViewRect);
 
-			if (viewState != null && viewState.selectedIDs.Count > 0)
+			if (viewState != null)
 			{
 				DrawSelectedNodes(nodeEditRect);
 			}
 
-			//BottomToolBar (bottomToolbarRect);
+		//	BottomToolBar (bottomToolbarRect);
 		}
 
 		void SearchBar (Rect rect)
@@ -216,33 +271,105 @@ namespace Merino
 
 		void DoTreeView (Rect rect)
 		{
+			float BUTTON_HEIGHT = 20;
+			var buttonRect = rect;
+			buttonRect.height = BUTTON_HEIGHT;
+			if (GUI.Button(buttonRect, "+ NEW NODE"))
+			{
+				AddNewNode();
+			}
+			rect.y += BUTTON_HEIGHT;
+			rect.height -= BUTTON_HEIGHT;
 			m_TreeView.OnGUI(rect);
 		}
 
 		void DrawSelectedNodes(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
-			EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
 			
+			GUILayout.BeginHorizontal();
+			if (currentFile != null)
+			{
+				useAutosave = EditorGUILayout.Toggle(useAutosave, GUILayout.Width(16));
+				GUILayout.Label("AutoSave?   ", GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
+				GUI.enabled = !useAutosave;
+				if (GUILayout.Button("Save", GUILayout.MaxWidth(60)))
+				{
+					SaveDataToFile();
+					AssetDatabase.Refresh();
+				}
+				GUI.enabled = true;
+			}
+			if (GUILayout.Button("Save As...", GUILayout.MaxWidth(100)))
+			{
+				string defaultPath = Application.dataPath + "/";
+				string defaultName = "NewYarnStory";
+				if (currentFile != null)
+				{
+					defaultPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6) + AssetDatabase.GetAssetPath(currentFile);
+					defaultName = currentFile.name.Substring(0, currentFile.name.Length - 5);
+				}
+				string fullFilePath = EditorUtility.SaveFilePanel("Merino: save yarn.txt", Path.GetDirectoryName(defaultPath), defaultName, "yarn.txt");
+				if (fullFilePath.Length > 0)
+				{
+					File.WriteAllText(fullFilePath, "");
+					AssetDatabase.Refresh();
+					currentFile = AssetDatabase.LoadAssetAtPath<TextAsset>( "Assets" + fullFilePath.Substring(Application.dataPath.Length));
+					SaveDataToFile();
+					AssetDatabase.Refresh();
+				}
+			}
 
-//			using (new EditorGUILayout.VerticalScope())
-//			{
+			if (GUILayout.Button("New File", GUILayout.MaxWidth(100)))
+			{
+				currentFile = null;
+				viewState = null;
+				m_Initialized = false;
+				InitIfNeeded();
+			}
+			GUILayout.Space(10);
+			EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
+			GUILayout.EndHorizontal();
+
+			if (viewState.selectedIDs.Count > 0)
+			{
+				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 				
 				foreach (var id in viewState.selectedIDs)
 				{
-				//	EditorGUILayout.BeginVertical();
-					m_TreeView.treeModel.Find(id).name = EditorGUILayout.TextField( m_TreeView.treeModel.Find(id).name);
+					EditorGUI.BeginChangeCheck();
+					
+					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name);
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
-					m_TreeView.treeModel.Find(id).nodeBody = GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true),
-					GUILayout.MaxHeight(height));
-				//	EditorGUILayout.EndVertical();
+					string newBody = GUILayout.TextArea(passage, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 					EditorGUILayout.Space();
 					EditorGUILayout.Separator();
+					
+					// did user edit something?
+					if (EditorGUI.EndChangeCheck())
+					{
+						// TODO: fix this somehow? I guess the file isn't writing quickly enough for Undo to catch it
+						if (currentFile != null)
+						{
+							Undo.RecordObject(currentFile, "Merino: edit file ");
+						}
+						m_TreeView.treeModel.Find(id).name = newName;
+						m_TreeView.treeModel.Find(id).nodeBody = newBody;
+						if (currentFile != null && useAutosave)
+						{
+							SaveDataToFile();
+						}
+					}
 				}
-				
-//			}
-			
+
+				EditorGUILayout.EndScrollView();
+			}
+			else
+			{
+				EditorGUILayout.HelpBox(" Select node(s) in sidebar.\n\n Left-Click: select\n Left-Click + Shift: select multiple\n Left-Click + Ctrl or Command: add / remove from selection", MessageType.Info);
+			}
+
 			GUILayout.EndArea();
 		}
 

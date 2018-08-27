@@ -786,7 +786,7 @@ namespace Merino
 
 						GUIStyle highlightOverlay = new GUIStyle();
 						highlightOverlay.font = monoFont;
-						highlightOverlay.normal.textColor = Color.white * 0.8f;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
 						highlightOverlay.richText = true;
 						highlightOverlay.wordWrap = true;
 						
@@ -901,10 +901,10 @@ namespace Merino
 				return new Color(0.8f, 0.5f, 0.1f);
 			} else if (newSyntax.StartsWith("[["))
 			{
-				return new Color(0.9f, 0.5f, 0.8f);
+				return new Color(0.8f, 0.4f, 0.6f);
 			}else if (newSyntax.StartsWith("<<"))
 			{
-				return Color.cyan;
+				return new Color(0f, 0.6f, 0.7f);
 			}
 			else
 			{

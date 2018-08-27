@@ -187,7 +187,6 @@ namespace Merino
 
 			treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
 			undoData.Clear();
-			Debug.Log( treeData != null);
 			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
 				
 			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
@@ -196,11 +195,12 @@ namespace Merino
 			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
 
 			m_Initialized = true;
+			OnSelectionChange();
 		}
 
 		void OnUndo()
 		{
-			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.01)
+			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.005)
 			{
 				return;
 			}
@@ -224,6 +224,10 @@ namespace Merino
 			
 			// repaint tree view so names get updated
 			m_TreeView.Reload();
+			if (currentFile != null && useAutosave)
+			{
+				SaveDataToFile();
+			}
 		}
 
 
@@ -337,6 +341,13 @@ namespace Merino
 		// used internally for playtest preview, but also by SaveDataToFile
 		string SaveNodesAsString()
 		{
+			if (treeData == null)
+			{
+				Debug.LogError("Merino TreeData got corrupted somehow! Trying to reinitialize... but if you can reproduce this, please file a bug report at https://github.com/radiatoryang/merino/issues");
+				m_Initialized = false;
+				InitIfNeeded();
+			}
+			
 			// gather data
 			ValidateNodeTitles();
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
@@ -368,12 +379,14 @@ namespace Merino
 		}
 
 		// writes data to the file
+		double lastSaveTime;
 		void SaveDataToFile()
 		{
 			if (currentFile != null)
 			{
 				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveNodesAsString() );
 				EditorUtility.SetDirty(currentFile);
+				lastSaveTime = EditorApplication.timeSinceStartup;
 			}
 		}
 
@@ -423,6 +436,13 @@ namespace Merino
 			var possibleYarnFile = Selection.activeObject as TextAsset;
 			if (possibleYarnFile != null && IsProbablyYarnFile(possibleYarnFile)) // possibleYarnFile != currentFile
 			{
+				// if we already have an Asset selected, make sure it's refreshed
+				if (currentFile != null)
+				{
+					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+				}
+
+				// ok load this new file now?
 				currentFile = possibleYarnFile;
 				viewState.selectedIDs.Clear();
 				ForceStopDialogue();
@@ -624,15 +644,13 @@ namespace Merino
 			{
 				useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), useAutosave, GUILayout.Width(16));
 				GUILayout.Label(new GUIContent("AutoSave?   ", "if enabled, will automatically save every change"), GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
-				GUI.enabled = !useAutosave;
-				if (GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
+				if (!useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
 				{
 					SaveDataToFile();
-					AssetDatabase.Refresh();
+					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
 				}
-				GUI.enabled = true;
 			}
-			if (GUILayout.Button( new GUIContent("Save As...", "save all changes as a new .yarn.txt file"), GUILayout.MaxWidth(100)))
+			if (GUILayout.Button( new GUIContent("Save As...", "save all changes as a new .yarn.txt file"), GUILayout.MaxWidth(80)))
 			{
 				string defaultPath = Application.dataPath + "/";
 				string defaultName = "NewYarnStory";
@@ -648,11 +666,11 @@ namespace Merino
 					AssetDatabase.Refresh();
 					currentFile = AssetDatabase.LoadAssetAtPath<TextAsset>( "Assets" + fullFilePath.Substring(Application.dataPath.Length));
 					SaveDataToFile();
-					AssetDatabase.Refresh();
+					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
 				}
 			}
 
-			if (GUILayout.Button(new GUIContent("New File", "will throw away any unsaved changes, and reset Merino to a new blank file"), GUILayout.MaxWidth(100)))
+			if (GUILayout.Button(new GUIContent("New File", "will throw away any unsaved changes, and reset Merino to a new blank file"), GUILayout.MaxWidth(80)))
 			{
 				ResetMerino();
 			}
@@ -991,6 +1009,13 @@ namespace Merino
 		// This gets called many times a second
 		public void Update()
 		{
+			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
+			if (EditorApplication.timeSinceStartup > lastSaveTime + 1.0 && currentFile != null)
+			{
+				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+				lastSaveTime = EditorApplication.timeSinceStartup + 9999; // don't save again until SaveDataToFile resets the variable
+			}
+			
 			if (isDialogueRunning)
 			{
 				// MASSIVELY improves framerate, wow, amazing
@@ -1000,6 +1025,12 @@ namespace Merino
 
 		void OnDestroy()
 		{
+			// if destroyed, make sure the text file got refreshed at least
+			if (currentFile != null)
+			{
+				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+			}
+			
 			Undo.undoRedoPerformed -= OnUndo;
 			Undo.ClearUndo(treeData);
 			

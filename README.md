@@ -3,10 +3,10 @@
 Merino is a narrative design tool that lets you write Yarn scripts inside the Unity Editor. It is built on top of Yarn Spinner and Yarn.
 
 ## download / install
-download and install from the Releases page; the "complete" .unitypackage comes with Yarn Spinner, the "minimal" .unitypackage is just the Merino folder
+download and install from the [Releases page](https://github.com/radiatoryang/merino/releases); the "complete" .unitypackage comes with Yarn Spinner, the "minimal" .unitypackage is just the Merino folder
 
 ## usage
-read the wiki documentation: https://github.com/radiatoryang/merino/wiki
+read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support
 
 ### roadmap
 

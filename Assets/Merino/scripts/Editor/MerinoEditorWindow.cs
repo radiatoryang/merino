@@ -63,13 +63,15 @@ namespace Merino
 		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
 		
 		// Yarn Spinner running stuff
+		MerinoVariableStorage varStorage;
 		MerinoDialogueUI dialogueUI;
 		Dialogue _dialogue;
 		Dialogue dialogue {
 			get {
 				if (_dialogue == null) {
 					// Create the main Dialogue runner, and pass our variableStorage to it
-					_dialogue = new Yarn.Dialogue ( new MerinoVariableStorage() );
+					varStorage = new MerinoVariableStorage();
+					_dialogue = new Yarn.Dialogue ( varStorage );
 					dialogueUI = new MerinoDialogueUI();
 					dialogueUI.consolasFont = monoFont;
 					
@@ -504,7 +506,7 @@ namespace Merino
 					x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)
 				).ToArray(), 
 				EditorStyles.toolbarPopup, 
-				GUILayout.Width(200)
+				GUILayout.Width(120)
 			);
 			if (currentJumpIndex != newJumpIndex)
 			{
@@ -529,10 +531,18 @@ namespace Merino
 
 			GUILayout.FlexibleSpace();
 			// stop on dialogue end
-			autoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("Auto Advance?", "automatically advance dialogue, with no user input, until there's a choice"), autoAdvance, GUILayout.Width(120));
+			var smallToggleStyle = new GUIStyle();
+			smallToggleStyle.fontSize = 10;
+			smallToggleStyle.alignment = TextAnchor.MiddleLeft;
+			if (EditorGUIUtility.isProSkin)
+			{
+				smallToggleStyle.normal.textColor = Color.gray;
+				
+			}
+			autoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), autoAdvance, smallToggleStyle, GUILayout.Width(100));
 			GUILayout.FlexibleSpace();
 			// stop on dialogue end
-			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("Close On End?", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, GUILayout.Width(120));
+			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
 			// stop button
 			var backupColor = GUI.backgroundColor;
 			GUI.backgroundColor = Color.red;
@@ -601,6 +611,7 @@ namespace Merino
 			if (reset)
 			{
 				dialogue.UnloadAll();
+				varStorage.ResetToDefaults();
 				dialogue.LoadString(SaveNodesAsString());
 			}
 			this.StopAllCoroutines();
@@ -612,7 +623,7 @@ namespace Merino
 		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
 		[NonSerialized] bool isDialogueRunning;
 		IEnumerator RunDialogue (string startNode = "Start")
-        {
+        {        
             // Mark that we're in conversation.
             isDialogueRunning = true;
 
@@ -910,7 +921,7 @@ namespace Merino
 				// detect if we need to do play preview
 				if (idToPreview > -1)
 				{
-					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name);
+					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name, !isDialogueRunning);
 				}
 			}
 			else

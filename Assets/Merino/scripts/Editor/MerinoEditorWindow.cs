@@ -20,6 +20,9 @@ using Yarn;
 using Yarn.Unity;
 using File = System.IO.File;
 using EditorCoroutines;
+using TreeEditor;
+using Directory = System.IO.Directory;
+using Random = System.Random;
 
 namespace Merino
 {
@@ -42,8 +45,7 @@ namespace Merino
 		double lastTabTime = 0.0; // this is a really bad hack
 		
 		SearchField m_SearchField;
-
-		MerinoTreeView m_TreeView;
+		[SerializeField] MerinoTreeView m_TreeView;
 		public MerinoTreeView treeView
 		{
 			get { return m_TreeView; }
@@ -138,12 +140,12 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+20f, 10, position.width-sidebarWidth-30, position.height-20-playPreviewHeight);} // was height-30
+			get { return new Rect( sidebarWidth+15f, 10, position.width-sidebarWidth-20, position.height-20-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth+20f, position.height-10-playPreviewHeight, position.width-sidebarWidth-30, playPreviewHeight);}
+			get { return new Rect( sidebarWidth+15f, position.height-10-playPreviewHeight, position.width-sidebarWidth-20, playPreviewHeight);}
 		}
 
 		Rect bottomToolbarRect
@@ -198,7 +200,7 @@ namespace Merino
 
 		void OnUndo()
 		{
-			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.1)
+			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.01)
 			{
 				return;
 			}
@@ -214,14 +216,14 @@ namespace Merino
 				moveCursorUndoID = recent.id;
 				
 				int newIndex = CompareStringsAndFindDiffIndex(recent.bodyText, treeDataNode.nodeBody); // TODO: strip all "\" out?
-				if (moveCursorUndoIndex == -1 || newIndex >= 0) // sometimes it suddenly spits out -1 for no reason
+				if (moveCursorUndoIndex == -1 || newIndex >= 0) // sometimes it suddenly spits out -1 when the logging is slightly off, so we need to ignore it in that case
 				{
 					moveCursorUndoIndex = newIndex;
 				}
-				
-				Debug.Log(moveCursorUndoIndex);
-
 			}
+			
+			// repaint tree view so names get updated
+			m_TreeView.Reload();
 		}
 
 
@@ -292,12 +294,62 @@ namespace Merino
 			}
 		}
 
-		string SaveDataAsString()
+		// ensure unique node titles, very important for YarnSpinner
+		void ValidateNodeTitles()
 		{
-			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-			var allTreeInfo = m_TreeView.treeModel.root.children;
-			foreach (var item in allTreeInfo)
+			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// validate data: ensure unique node names
+			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
+			bool doRenaming = false;
+			for (int i=0;i<treeNodes.Count;i++)
 			{
+				// if there's a node already with that name, then append unique suffix
+				if (nodeTitles.Values.Contains(treeNodes[i].name))
+				{
+					nodeTitles.Add(i, treeNodes[i].name + "_" + Path.GetRandomFileName().Split('.')[0]);
+					doRenaming = true;
+				}
+				else
+				{ // otherwise, business as usual
+					nodeTitles.Add(i, treeNodes[i].name);
+				}
+			}
+			if (doRenaming)
+			{
+				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break some of your scripting, you can undo it. The following nodes were renamed: ";
+				Undo.RecordObject(treeData, "Merino: AutoRename");
+				foreach (var kvp in nodeTitles)
+				{
+					if (treeData.treeElements[kvp.Key].name != kvp.Value)
+					{
+						renamedNodes += string.Format("\n* {0} > {1}", treeNodes[kvp.Key].name, kvp.Value);
+						treeData.treeElements[kvp.Key].name = kvp.Value;
+					}
+				}
+				EditorUtility.SetDirty(treeData);
+				Debug.LogWarning(renamedNodes + "\n\n");
+				// repaint tree view so names get updated
+				m_TreeView.Reload();
+			}
+
+		}
+
+		// used internally for playtest preview, but also by SaveDataToFile
+		string SaveNodesAsString()
+		{
+			// gather data
+			ValidateNodeTitles();
+			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
+			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// save data to string
+			foreach (var item in treeNodes)
+			{
+				// skip the root
+				if (item.depth == -1)
+				{
+					continue;
+				}
+				
 				var itemCasted = (MerinoTreeElement) item;
 				var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
 
@@ -320,7 +372,7 @@ namespace Merino
 		{
 			if (currentFile != null)
 			{
-				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveDataAsString() );
+				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveNodesAsString() );
 				EditorUtility.SetDirty(currentFile);
 			}
 		}
@@ -408,16 +460,26 @@ namespace Merino
 			var toolbarStyle = new GUIStyle( EditorStyles.toolbar );
 			toolbarStyle.alignment = TextAnchor.MiddleCenter;
 			EditorGUILayout.BeginHorizontal(toolbarStyle, GUILayout.ExpandWidth(true));
-		
-			GUILayout.Label("current node: " + dialogue.currentNode, toolbarStyle);
+
+			if (GUILayout.Button("node: " + dialogue.currentNode, EditorStyles.toolbarButton))
+			{
+				var matchingNode = treeData.treeElements.Find(x => x.name == dialogue.currentNode);
+				if (matchingNode != null)
+				{
+					viewState.selectedIDs.Clear();
+					viewState.selectedIDs.Add(matchingNode.id);
+				}
+			}
 			
 			GUILayout.FlexibleSpace();
-			
+			var backupColor = GUI.backgroundColor;
+			GUI.backgroundColor = Color.red;
 			if (GUILayout.Button(new GUIContent("Stop", "click to force stop the play preview"), EditorStyles.toolbarButton))
 			{
 				ForceStopDialogue();
 			}
-			
+
+			GUI.backgroundColor = backupColor;
 			EditorGUILayout.EndHorizontal();
 			GUILayout.EndArea();
 		}
@@ -477,7 +539,7 @@ namespace Merino
 			}
 			
 			dialogue.UnloadAll();
-			dialogue.LoadString( SaveDataAsString() );
+			dialogue.LoadString( SaveNodesAsString() );
 			
 			// use EditorCoroutines to run the dialogue
 			this.StartCoroutine(RunDialogue(startPassageName));
@@ -631,7 +693,7 @@ namespace Merino
 			if (viewState.selectedIDs.Count > 0)
 			{
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
-				GUI.enabled = !isDialogueRunning; // if dialogue is running, don't let them edit anything
+				// GUI.enabled = !isDialogueRunning; // if dialogue is running, don't let them edit anything
 				
 				foreach (var id in viewState.selectedIDs)
 				{
@@ -642,7 +704,7 @@ namespace Merino
 					// NODE HEADER
 					EditorGUILayout.BeginHorizontal();
 					// add "Play" button
-					if (GUILayout.Button(new GUIContent("▶", "click to play preview this node"), GUILayout.Width(24) ) )
+					if (GUILayout.Button(new GUIContent("▶", "click to playtest this node"), GUILayout.Width(24) ) )
 					{
 						idToPreview = id;
 					}
@@ -663,7 +725,7 @@ namespace Merino
 					
 					// NODE BODY
 					var backupContentColor = GUI.contentColor;
-					GUI.contentColor = isDialogueRunning ? backupContentColor : new Color ( 0f, 0f, 0f, 0.16f );
+					GUI.contentColor = GUI.enabled==false ? backupContentColor : new Color ( 0f, 0f, 0f, 0.16f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
@@ -681,7 +743,7 @@ namespace Merino
 					GUI.contentColor = backupContentColor;
 					
 					// only run the fancier stuff if we're not in playtesting mode
-					if (isDialogueRunning == false)
+					if (GUI.enabled)
 					{
 						// manual tab support for GUILayout.TextArea... no longer needed for EditorGUILayout.TextArea
 //						string oldBody = newBody;
@@ -731,7 +793,7 @@ namespace Merino
 						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
 					}
 
-					if (GUILayout.Button(new GUIContent("▶ Preview", "click to play preview this node"), GUILayout.Width(80) ) )
+					if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
 					{
 						idToPreview = id;
 					}
@@ -759,6 +821,9 @@ namespace Merino
 						{
 							SaveDataToFile();
 						}
+						
+						// repaint tree view so names get updated
+						m_TreeView.Reload();
 					}
 				}
 

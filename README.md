@@ -4,8 +4,8 @@ Merino is a narrative design tool that lets you write Yarn scripts inside the Un
 
 ## download / install
 download and install from the [Releases page](https://github.com/radiatoryang/merino/releases);
-- "complete" .unitypackage comes with Yarn Spinner
-- "minimal" .unitypackage is just the Merino folder
+- "complete" .unitypackage includes Yarn Spinner
+- "minimal" .unitypackage is just Merino folder
 
 ## usage
 read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support

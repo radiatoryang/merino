@@ -13,21 +13,18 @@ read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for i
 
 ### roadmap
 v0.4
+- line numbers, zoom to line number
+- catch Yarn.Loader parse exceptions, display in Merino window
 - refactor code and cleanup
 - user preferences: let user customize syntax highlighting colors, fonts / font sizes
 
 v0.5
 - auto-complete typing
-- detect characters, functions, nodes, variables for auto-complete
+- detect characters, functions, nodes, variables for auto-complete + /Resources/Editor/MerinoAutocompleteList.txt ?
 - inline syntax highlighting for variable names somehow
 
 v0.6
 - node map visualization
-
-v0.7
-- node analysis (reachability, random traversal)
-- node generator (prefix, count, one-way or not, connectivity chance, min / max exits, max dead ends)
-- untangle nodes / node organizer
 
 ### uses other peoples code
 - Unity Editor Coroutines https://github.com/marijnz/unity-editor-coroutines

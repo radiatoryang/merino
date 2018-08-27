@@ -30,5 +30,8 @@ version 0.6
 - Yarn Spinner https://github.com/thesecretlab/YarnSpinner
 - Yarn https://github.com/InfiniteAmmoInc/Yarn
 
+### see also
+- Ropework, a visual novel template for Unity / Yarn Spinner https://github.com/radiatoryang/ropework
+
 ### license?
 MIT

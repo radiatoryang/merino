@@ -1,5 +1,5 @@
 # merino
-<img width=30% align=right src=https://raw.githubusercontent.com/radiatoryang/merino/master/merino_example.png> 
+<img width=60% align=right src=https://raw.githubusercontent.com/radiatoryang/merino/master/merino_example.png> 
 Merino is a narrative design tool that lets you write Yarn scripts inside the Unity Editor. It is built on top of Yarn Spinner and Yarn.
 
 ## download / install

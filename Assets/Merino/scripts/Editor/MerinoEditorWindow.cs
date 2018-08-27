@@ -42,7 +42,7 @@ namespace Merino
 			get { return isDialogueRunning ? 180f : 0f; }
 		}
 		[SerializeField] Vector2 scrollPos;
-		double lastTabTime = 0.0; // this is a really bad hack
+		// double lastTabTime = 0.0; // this is a really bad hack
 		
 		SearchField m_SearchField;
 		[SerializeField] MerinoTreeView m_TreeView;
@@ -145,7 +145,7 @@ namespace Merino
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth+15f, position.height-10-playPreviewHeight, position.width-sidebarWidth-20, playPreviewHeight);}
+			get { return new Rect( sidebarWidth+15f, position.height-10-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-10);}
 		}
 
 		Rect bottomToolbarRect
@@ -153,7 +153,7 @@ namespace Merino
 			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
 		}
 
-		void InitIfNeeded ()
+		void InitIfNeeded (bool ignoreSelection=false)
 		{
 			if (m_Initialized) return;
 
@@ -195,7 +195,11 @@ namespace Merino
 			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
 
 			m_Initialized = true;
-			OnSelectionChange();
+
+			if (!ignoreSelection)
+			{
+				OnSelectionChange();
+			}
 		}
 
 		void OnUndo()
@@ -276,7 +280,7 @@ namespace Merino
 				                  "\n\n->This is option 1\n\tYou selected option 1." +
 				                  "\n->This is option 2\n\tYou selected option 2.\n\t<<set $didOption2 to true>>" +
 				                  "\n\nBased on choices, you can set variables, and then check those variables later.\n<<if $didOption2 is true>>\nBy checking $didOption2, I remember you chose option 2!\n<<else>>\nI can't detect a variable $didOption2, so that means you chose option 1\n<<endif>>" +
-				                  "\n\nDo you want to go back to Start now?\n-> Yes, send me back to Start.\n\t[[Start]]\n-> No thanks.\n\nOk that's the end, good luck!";
+				                  "\n\nDo you want to go back to Start now?\n-> Yes, send me back to Start.\n\t[[Start]]\n-> No thanks, I want to stop.\n\nOk here's the end, good luck!";
 				
 				treeElements.Add(start);
 				treeElements.Add(start2);
@@ -473,15 +477,46 @@ namespace Merino
 		//	BottomToolBar (bottomToolbarRect);
 		}
 
+		[SerializeField] bool stopOnDialogueEnd = true;
+		[SerializeField] bool autoAdvance = false;
 		void PreviewToolbar(Rect rect)
 		{
 			// toolbar
 			GUILayout.BeginArea(rect);
-			var toolbarStyle = new GUIStyle( EditorStyles.toolbar );
+			var toolbarStyle = new GUIStyle(EditorStyles.toolbar);
 			toolbarStyle.alignment = TextAnchor.MiddleCenter;
 			EditorGUILayout.BeginHorizontal(toolbarStyle, GUILayout.ExpandWidth(true));
 
-			if (GUILayout.Button("node: " + dialogue.currentNode, EditorStyles.toolbarButton))
+			// jump to node button, but only if dialogue is already running
+			var jumpOptions = dialogue.allNodes.ToList();
+			var currentJumpIndex = jumpOptions.IndexOf(dialogue.currentNode);
+			bool dialogueEnded = false;
+			if (dialogue.currentNode == null)
+			{ // if there is no current node, then tell them that
+				dialogueEnded = true;
+				currentJumpIndex = 0;
+				jumpOptions.Insert(0, "<Stopped> Jump to Node?...");
+			}
+			var newJumpIndex = EditorGUILayout.Popup(
+				new GUIContent("", "the node you're currently playing; you can also jump to any other node"), 
+				currentJumpIndex, 
+				jumpOptions.Select( 
+					x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)
+				).ToArray(), 
+				EditorStyles.toolbarPopup, 
+				GUILayout.Width(200)
+			);
+			if (currentJumpIndex != newJumpIndex)
+			{
+				if ( !dialogueEnded || newJumpIndex > 0) {
+					PlaytestFrom(jumpOptions[newJumpIndex], false);
+				}
+			}
+			GUILayout.Space(4);
+			
+			// current node button
+			GUI.enabled = !dialogueEnded;
+			if (GUILayout.Button(new GUIContent("View Node Source", "click to see Yarn script for this node"), EditorStyles.toolbarButton))
 			{
 				var matchingNode = treeData.treeElements.Find(x => x.name == dialogue.currentNode);
 				if (matchingNode != null)
@@ -490,11 +525,18 @@ namespace Merino
 					viewState.selectedIDs.Add(matchingNode.id);
 				}
 			}
-			
+			GUI.enabled = true;
+
 			GUILayout.FlexibleSpace();
+			// stop on dialogue end
+			autoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("Auto Advance?", "automatically advance dialogue, with no user input, until there's a choice"), autoAdvance, GUILayout.Width(120));
+			GUILayout.FlexibleSpace();
+			// stop on dialogue end
+			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("Close On End?", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, GUILayout.Width(120));
+			// stop button
 			var backupColor = GUI.backgroundColor;
 			GUI.backgroundColor = Color.red;
-			if (GUILayout.Button(new GUIContent("Stop", "click to force stop the play preview"), EditorStyles.toolbarButton))
+			if (GUILayout.Button(new GUIContent("Close", "click to force stop the playtest preview and close it"), EditorStyles.toolbarButton))
 			{
 				ForceStopDialogue();
 			}
@@ -503,6 +545,7 @@ namespace Merino
 			EditorGUILayout.EndHorizontal();
 			GUILayout.EndArea();
 		}
+		
 
 		void SearchBar (Rect rect)
 		{
@@ -537,7 +580,9 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
-			InitIfNeeded();
+			Selection.objects = new UnityEngine.Object[0]; // deselect all
+			Undo.undoRedoPerformed -= OnUndo;
+			InitIfNeeded(true);
 		}
 
 		void ForceStopDialogue()
@@ -551,16 +596,15 @@ namespace Merino
 			this.StopAllCoroutines();
 		}
 
-		void PlayFrom(string startPassageName)
+		void PlaytestFrom(string startPassageName, bool reset=true)
 		{
-			if (isDialogueRunning)
+			if (reset)
 			{
-				return;
+				dialogue.UnloadAll();
+				dialogue.LoadString(SaveNodesAsString());
 			}
-			
-			dialogue.UnloadAll();
-			dialogue.LoadString( SaveNodesAsString() );
-			
+			this.StopAllCoroutines();
+
 			// use EditorCoroutines to run the dialogue
 			this.StartCoroutine(RunDialogue(startPassageName));
 		}
@@ -585,7 +629,7 @@ namespace Merino
 
                     // Wait for line to finish displaying
                     var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line));
+	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, autoAdvance));
 //	                while (dialogueUI.inputContinue == false)
 //	                {
 //		                yield return new WaitForSeconds(0.01f);
@@ -610,7 +654,7 @@ namespace Merino
 //                    if (DispatchCommand(commandResult.command.text) == true) {
 //                        // command was dispatched
 //                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command));
+	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, autoAdvance));
 //                    }
 
 
@@ -625,6 +669,10 @@ namespace Merino
 	        
             // No more results! The dialogue is done.
             // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
+	        while (stopOnDialogueEnd==false)
+	        {
+		        yield return new WaitForSeconds(0.01f);
+	        }
 
             // Clear the 'is running' flag. We do this after DialogueComplete returns,
             // to allow time for any animations that might run while transitioning
@@ -670,9 +718,11 @@ namespace Merino
 				}
 			}
 
+			// NEW FILE BUTTON
 			if (GUILayout.Button(new GUIContent("New File", "will throw away any unsaved changes, and reset Merino to a new blank file"), GUILayout.MaxWidth(80)))
 			{
 				ResetMerino();
+				return;
 			}
 			GUILayout.Space(10);
 
@@ -860,7 +910,7 @@ namespace Merino
 				// detect if we need to do play preview
 				if (idToPreview > -1)
 				{
-					PlayFrom( m_TreeView.treeModel.Find(idToPreview).name);
+					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name);
 				}
 			}
 			else
@@ -873,25 +923,26 @@ namespace Merino
 		}
 
 		// I can't believe I finally got this to work, wow
-		string KeyboardTabSupport(string text, TextEditor te)
-		{
-			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
-			{
-				int cursorIndex = te.cursorIndex;
-				GUI.FocusControl("TextArea");
-				if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
-				{
-					lastTabTime = EditorApplication.timeSinceStartup;
-					text = text.Insert(te.cursorIndex, "\t");
-					te.cursorIndex = cursorIndex + 1;
-					te.selectIndex = te.cursorIndex;
-				}
-
-				Event.current.Use();
-				GUI.FocusControl("TextArea");
-			}
-			return text;
-		}
+		// only needed for GUILayout.TextArea
+//		string KeyboardTabSupport(string text, TextEditor te)
+//		{
+//			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
+//			{
+//				int cursorIndex = te.cursorIndex;
+//				GUI.FocusControl("TextArea");
+//				if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
+//				{
+//					lastTabTime = EditorApplication.timeSinceStartup;
+//					text = text.Insert(te.cursorIndex, "\t");
+//					te.cursorIndex = cursorIndex + 1;
+//					te.selectIndex = te.cursorIndex;
+//				}
+//
+//				Event.current.Use();
+//				GUI.FocusControl("TextArea");
+//			}
+//			return text;
+//		}
 
 		string DoSyntaxMarch(string text)
 		{
@@ -1072,8 +1123,9 @@ namespace Merino
 
 		public Font consolasFont;
 
-		public IEnumerator RunLine(Yarn.Line line)
+		public IEnumerator RunLine(Yarn.Line line, bool autoAdvance)
 		{
+			optionStrings = new string[0];
 			// display dialog
             if (textSpeed > 0.0f) {
                 // Display the line one character at a time
@@ -1103,7 +1155,7 @@ namespace Merino
 			showContinuePrompt = true;
 
             // Wait for any user input
-            while (inputContinue == false)
+            while (inputContinue == false && autoAdvance == false)
             {
 	            yield return new WaitForSeconds(0.01f);
             }
@@ -1112,13 +1164,14 @@ namespace Merino
 			showContinuePrompt = false;
 		}
 		
-		public IEnumerator RunCommand (Yarn.Command command)
+		public IEnumerator RunCommand (Yarn.Command command, bool autoAdvance)
 		{
+			optionStrings = new string[0];
 			displayString = "(Yarn command: <<" + command.text + ">>)";
 			inputContinue = false;
 			useConsolasFont = true;
 			showContinuePrompt = true;
-			while (inputContinue == false)
+			while (inputContinue == false && autoAdvance == false)
 			{
 				yield return new WaitForSeconds(0.01f);
 			}

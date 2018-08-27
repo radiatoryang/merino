@@ -8,7 +8,7 @@ download and install from the [Releases page](https://github.com/radiatoryang/me
 - "complete" .unitypackage includes Yarn Spinner
 - "minimal" .unitypackage is just Merino folder
 
-## usage
+## usage / help / how-to / documentation
 read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support
 
 ### roadmap

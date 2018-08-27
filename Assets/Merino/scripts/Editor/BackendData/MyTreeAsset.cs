@@ -5,7 +5,7 @@ using UnityEditor.TreeViewExamples;
 namespace Merino
 {
 	
-	[CreateAssetMenu (fileName = "TreeDataAsset", menuName = "Tree Asset", order = 1)]
+	//[CreateAssetMenu (fileName = "TreeDataAsset", menuName = "Tree Asset", order = 1)]
 	public class MyTreeAsset : ScriptableObject
 	{
 		[SerializeField] List<MerinoTreeElement> m_TreeElements = new List<MerinoTreeElement> ();
@@ -21,5 +21,19 @@ namespace Merino
 			if (m_TreeElements.Count == 0)
 				m_TreeElements = MyTreeElementGenerator.GenerateRandomTree(160);
 		}
+	}
+	
+	public class MerinoTreeData : ScriptableObject
+	{
+		public int editedID = -1;
+		public double timestamp;
+		[SerializeField] List<MerinoTreeElement> m_TreeElements = new List<MerinoTreeElement> ();
+
+		internal List<MerinoTreeElement> treeElements
+		{
+			get { return m_TreeElements; }
+			set { m_TreeElements = value; }
+		}
+
 	}
 }

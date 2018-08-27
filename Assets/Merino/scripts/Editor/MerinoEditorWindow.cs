@@ -1,11 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Net;
 using System.Text;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Permissions;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
@@ -39,12 +42,23 @@ namespace Merino
 		double lastTabTime = 0.0; // this is a really bad hack
 		
 		SearchField m_SearchField;
+
 		MerinoTreeView m_TreeView;
-		MyTreeAsset m_MyTreeAsset;
+		public MerinoTreeView treeView
+		{
+			get { return m_TreeView; }
+		}
+		[SerializeField] MerinoTreeData treeData;
+	//	MyTreeAsset m_MyTreeAsset;
 
 		Texture helpIcon;
 		TextAsset currentFile;
 		Font monoFont;
+		
+		// better undo support
+		double lastUndoTime;
+		int moveCursorUndoID, moveCursorUndoIndex;
+		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
 		
 		// Yarn Spinner running stuff
 		MerinoDialogueUI dialogueUI;
@@ -137,14 +151,11 @@ namespace Merino
 			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
 		}
 
-		public MerinoTreeView treeView
-		{
-			get { return m_TreeView; }
-		}
-
 		void InitIfNeeded ()
 		{
 			if (m_Initialized) return;
+
+			Undo.undoRedoPerformed += OnUndo;
 			
 			// load font
 			if (monoFont == null)
@@ -172,6 +183,9 @@ namespace Merino
 			if (firstInit)
 				multiColumnHeader.ResizeToFit ();
 
+			treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
+			undoData.Clear();
+			Debug.Log( treeData != null);
 			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
 				
 			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
@@ -181,7 +195,36 @@ namespace Merino
 
 			m_Initialized = true;
 		}
-		
+
+		void OnUndo()
+		{
+			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.1)
+			{
+				return;
+			}
+			lastUndoTime = EditorApplication.timeSinceStartup;
+			
+			// detect which nodes changed, if any
+			// is the current treeData timestamp earlier than our undo log?... if so, then an undo probably happened
+			for( int i=undoData.Count-1; i>0 && treeData.timestamp < undoData[i].time; i-- )
+			{
+				var recent = undoData[i];
+				var treeDataNode = treeData.treeElements.Where(x => x.id == recent.id).First();
+				
+				moveCursorUndoID = recent.id;
+				
+				int newIndex = CompareStringsAndFindDiffIndex(recent.bodyText, treeDataNode.nodeBody); // TODO: strip all "\" out?
+				if (moveCursorUndoIndex == -1 || newIndex >= 0) // sometimes it suddenly spits out -1 for no reason
+				{
+					moveCursorUndoIndex = newIndex;
+				}
+				
+				Debug.Log(moveCursorUndoIndex);
+
+			}
+		}
+
+
 		IList<MerinoTreeElement> GetData ()
 		{
 //			if (m_MyTreeAsset != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
@@ -232,9 +275,9 @@ namespace Merino
 				treeElements.Add(start);
 				treeElements.Add(start2);
 			}
-			
 
-			return treeElements;
+			treeData.treeElements = treeElements;
+			return treeData.treeElements;
 		}
 
 		string CleanYarnField(string inputString, bool extraClean=false)
@@ -389,9 +432,17 @@ namespace Merino
 			float BUTTON_HEIGHT = 20;
 			var buttonRect = rect;
 			buttonRect.height = BUTTON_HEIGHT;
-			if (GUI.Button(buttonRect, "+ NEW NODE"))
+
+			bool addNewNode = false;
+			EditorGUI.BeginChangeCheck();
+			addNewNode = GUI.Button(buttonRect, "+ NEW NODE");
+			if (EditorGUI.EndChangeCheck())
 			{
-				AddNewNode();
+//				Undo.RecordObject(treeData, "Merino: add new node");
+//				if (addNewNode)
+//				{
+					AddNewNode();
+//				}
 			}
 			rect.y += BUTTON_HEIGHT;
 			rect.height -= BUTTON_HEIGHT;
@@ -500,6 +551,8 @@ namespace Merino
 	        Repaint();
         }
 
+		bool spaceWillIncrementUndo = false;
+
 		void DrawMainPane(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
@@ -542,8 +595,7 @@ namespace Merino
 				ResetMerino();
 			}
 			GUILayout.Space(10);
-			//if ( currentFile != null ) { GUILayout.Label(EditorGUIUtility.FindTexture ("Folder Icon"), GUILayout.Width(24), GUILayout.Height(24));}
-			//EditorGUILayout.SelectableLabel( currentFile != null ? AssetDatabase.GetAssetPath(currentFile) : "[no file loaded]", EditorStyles.whiteLargeLabel);
+
 			EditorGUI.BeginChangeCheck();
 			var newFile = (TextAsset)EditorGUILayout.ObjectField(currentFile, typeof(TextAsset), false);
 			if (EditorGUI.EndChangeCheck())
@@ -574,7 +626,7 @@ namespace Merino
 			GUILayout.EndHorizontal();
 
 			int idToDelete = -1;
-			bool forceSave = false;
+//			bool forceSave = false;
 			int idToPreview = -1;
 			if (viewState.selectedIDs.Count > 0)
 			{
@@ -610,36 +662,56 @@ namespace Merino
 					
 					
 					// NODE BODY
-					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
-					// save colors for later
-//					var backupColor = GUI.color;
 					var backupContentColor = GUI.contentColor;
-//					var backupBackgroundColor = GUI.backgroundColor;
-					
- 
-					//get the texteditor of the textarea to control selection
 					GUI.contentColor = isDialogueRunning ? backupContentColor : new Color ( 0f, 0f, 0f, 0.16f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
-					// stuff for tabs
-					GUI.SetNextControlName ( "TextArea" );
+					// stuff for manual keyboard tab support
+//					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
+					var te = typeof(EditorGUI)
+						.GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic)
+						.GetValue(null) as TextEditor;
+					GUI.SetNextControlName ( "TextArea" + newName );
 					
 					// draw the body
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
-					string newBody = GUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+					string newBody = EditorGUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 					GUI.contentColor = backupContentColor;
 					
 					// only run the fancier stuff if we're not in playtesting mode
 					if (isDialogueRunning == false)
 					{
-						// tab support
-						string oldBody = newBody;
-						newBody = KeyboardTabSupport(newBody, te);
-						if (oldBody.Length != newBody.Length)
+						// manual tab support for GUILayout.TextArea... no longer needed for EditorGUILayout.TextArea
+//						string oldBody = newBody;
+//						newBody = KeyboardTabSupport(newBody, te);
+//						if (oldBody.Length != newBody.Length)
+//						{
+//							forceSave = true;
+//						}
+
+						if ( moveCursorUndoID == id && moveCursorUndoIndex >= 0 && te != null && GUIUtility.keyboardControl == te.controlID )
 						{
-							forceSave = true;
+							te.cursorIndex = moveCursorUndoIndex;
+							te.selectIndex = moveCursorUndoIndex;
+							// moveCursorUndo* will get blanked out after the foreach loop
+						}
+						
+						// detect whether to increment the undo group
+						if (te != null && GUIUtility.keyboardControl == te.controlID)
+						{
+							var e = Event.current;
+							if (spaceWillIncrementUndo && e.isKey && (e.keyCode == KeyCode.Space || e.keyCode == KeyCode.Tab || e.keyCode == KeyCode.Return))
+							{
+								Undo.IncrementCurrentGroup();
+								spaceWillIncrementUndo = false;
+							}
+
+							if (!spaceWillIncrementUndo && e.isKey && e.keyCode != KeyCode.Space)
+							{
+								spaceWillIncrementUndo = true;
+							}
 						}
 
 						// syntax highlight via label overlay
@@ -670,15 +742,19 @@ namespace Merino
 					EditorGUILayout.Separator();
 					
 					// did user edit something?
-					if (EditorGUI.EndChangeCheck() || forceSave)
+					if (EditorGUI.EndChangeCheck() )
 					{
-						// TODO: fix this somehow? I guess the file isn't writing quickly enough for Undo to catch it
-						if (currentFile != null)
-						{
-							Undo.RecordObject(currentFile, "Merino: edit file ");
-						}
+						// undo stuff
+						Undo.RecordObject(treeData, "Merino > " + newName );
+						
 						m_TreeView.treeModel.Find(id).name = newName;
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
+						treeData.editedID = id;
+						treeData.timestamp = EditorApplication.timeSinceStartup;
+						
+						// log the undo data
+						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
+						
 						if (currentFile != null && useAutosave)
 						{
 							SaveDataToFile();
@@ -692,6 +768,9 @@ namespace Merino
 					DeleteNode(idToDelete);
 				}
 
+				moveCursorUndoID = -1;
+				moveCursorUndoIndex = -1;
+				
 				GUI.enabled = true;
 				EditorGUILayout.EndScrollView();
 				
@@ -828,6 +907,22 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 		
+		/// <summary>
+		/// Compare two strings and return the index of the first difference.  Return -1 if the strings are equal.
+		/// </summary>
+		/// <param name="s1"></param>
+		/// <param name="s2"></param>
+		/// <returns></returns>
+		int CompareStringsAndFindDiffIndex(string s1, string s2)
+		{
+			int index = 0;
+			int min = Math.Min(s1.Length, s2.Length);
+			while (index < min && s1[index] == s2[index]) 
+				index++;
+
+			return (index == min && s1.Length == s2.Length) ? -1 : index;
+		}
+		
 		// This gets called many times a second
 		public void Update()
 		{
@@ -840,7 +935,28 @@ namespace Merino
 
 		void OnDestroy()
 		{
+			Undo.undoRedoPerformed -= OnUndo;
+			Undo.ClearUndo(treeData);
+			
+			DestroyImmediate(treeData,true);
+			undoData.Clear();
+			
 			ForceStopDialogue();
+		}
+	}
+
+	[SerializeField]
+	public struct MerinoUndoLog
+	{
+		public int id;
+		public double time;
+		public string bodyText;
+
+		public MerinoUndoLog(int id, double time, string bodyText)
+		{
+			this.id = id;
+			this.time = time;
+			this.bodyText = bodyText;
 		}
 	}
 

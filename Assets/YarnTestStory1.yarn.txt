@@ -5,6 +5,13 @@ position: 0,0
 ---
 Write stuff here.
 ===
+title: NewNode7
+tags: 
+colorID: 0
+position: 0,0
+---
+Write stuff here.
+===
 title: NewNode6
 tags: 
 colorID: 0

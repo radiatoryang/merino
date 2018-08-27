@@ -8,6 +8,7 @@ using UnityEditor;
 
 namespace Merino
 {
+	
 	internal class MerinoTreeView : TreeViewWithTreeModel<MerinoTreeElement>
 	{
 		const float kRowHeights = 20f;

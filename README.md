@@ -12,16 +12,20 @@ download and install from the [Releases page](https://github.com/radiatoryang/me
 read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support
 
 ### roadmap
-version 0.4
+v0.4
 - refactor code and cleanup
+- user preferences: let user customize syntax highlighting colors, fonts / font sizes
+
+v0.5
 - auto-complete typing
 - detect characters, functions, nodes, variables for auto-complete
 - inline syntax highlighting for variable names somehow
 
-version 0.5
+v0.6
 - node map visualization
 
-version 0.6
+v0.7
+- node analysis (reachability, random traversal)
 - node generator (prefix, count, one-way or not, connectivity chance, min / max exits, max dead ends)
 - untangle nodes / node organizer
 

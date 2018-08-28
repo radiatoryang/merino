@@ -1,0 +1,43 @@
+title: Start
+tags: 
+colorID: 0
+position: 0,0
+---
+This is the Start node. Write the beginning of your Yarn story here.
+// You can make comments with '//' and the player won't see it.
+
+// There's two ways to do choices in Yarn. The most basic way is to link to other nodes like this:
+[[Go see more examples|Start_MoreExamples]]
+[[Actually, let's restart this node again|Start]]
+
+// IMPORTANT: node options are only offered at the end of the passage
+Do you want to read more about Yarn features?
+===
+title: Start_MoreExamples
+tags: 
+colorID: 0
+position: 0,0
+---
+This node is called Start_MoreExamples.
+The second way to do choices in Yarn is with 'shortcut options' like this:
+
+->This is option 1
+	You selected option 1.
+->This is option 2
+	You selected option 2.
+	<<set $didOption2 to true>>
+
+Based on choices, you can set variables, and then check those variables later.
+<<if $didOption2 is true>>
+By checking $didOption2, I remember you chose option 2!
+<<else>>
+I can't detect a variable $didOption2, so that means you chose option 1
+<<endif>>
+
+Do you want to go back to Start now?
+-> Yes, send me back to Start.
+	[[Start]]
+-> No thanks, I want to stop.
+
+Ok here's the end, good luck!
+===

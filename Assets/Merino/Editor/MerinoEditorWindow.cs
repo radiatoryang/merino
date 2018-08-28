@@ -2,134 +2,47 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Net;
 using System.Text;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Security.Permissions;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
-using UnityEngine.Experimental.PlayerLoop;
-using UnityEngine.UI;
-using UnityEngine.Windows;
 using Yarn;
-using Yarn.Unity;
 using File = System.IO.File;
 using EditorCoroutines;
-using TreeEditor;
-using Directory = System.IO.Directory;
 using Random = System.Random;
+// wow that's a lot of usings
 
 namespace Merino
 {
 
-	[HelpURL("http://example.com/docs/MyComponent.html")]
 	class MerinoEditorWindow : EditorWindow
 	{
+		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
-		[SerializeField] bool useAutosave = false;
-		bool doubleClickOpensFile = true;
-		
-		[NonSerialized] float sidebarWidth = 180f;
-		float playPreviewHeight
-		{
-			get { return isDialogueRunning ? 180f : 0f; }
-		}
-		[SerializeField] Vector2 scrollPos;
-		// double lastTabTime = 0.0; // this is a really bad hack
-		
 		SearchField m_SearchField;
+		[SerializeField] MerinoTreeData treeData;
 		[SerializeField] MerinoTreeView m_TreeView;
-		public MerinoTreeView treeView
-		{
+		public MerinoTreeView treeView {
 			get { return m_TreeView; }
 		}
-		[SerializeField] MerinoTreeData treeData;
-	//	MyTreeAsset m_MyTreeAsset;
-
-		Texture helpIcon;
-		TextAsset currentFile;
-		Font monoFont;
+		// double lastTabTime = 0.0; // this is a really bad hack
 		
-		// better undo support
-		double lastUndoTime;
-		int moveCursorUndoID, moveCursorUndoIndex;
-		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
+		// UI settings
+		[SerializeField] bool stopOnDialogueEnd = true;
+		[SerializeField] bool autoAdvance = false;
 		
-		// Yarn Spinner running stuff
-		MerinoVariableStorage varStorage;
-		MerinoDialogueUI dialogueUI;
-		Dialogue _dialogue;
-		Dialogue dialogue {
-			get {
-				if (_dialogue == null) {
-					// Create the main Dialogue runner, and pass our variableStorage to it
-					varStorage = new MerinoVariableStorage();
-					_dialogue = new Yarn.Dialogue ( varStorage );
-					dialogueUI = new MerinoDialogueUI();
-					dialogueUI.consolasFont = monoFont;
-					
-					// Set up the logging system.
-					_dialogue.LogDebugMessage = delegate (string message) {
-						Debug.Log (message);
-					};
-					_dialogue.LogErrorMessage = delegate (string message) {
-						Debug.LogError (message);
-					};
-				}
-				return _dialogue;
-			}
+		[SerializeField] bool useAutosave = false;
+		bool doubleClickOpensFile = true;
+		[SerializeField] Vector2 scrollPos;
+		[NonSerialized] float sidebarWidth = 180f;
+		float playPreviewHeight {
+			get { return isDialogueRunning ? 180f : 0f; }
 		}
-
-		[MenuItem("Window/Merino (Yarn Editor)")]
-		public static MerinoEditorWindow GetWindow ()
-		{
-			var window = GetWindow<MerinoEditorWindow>();
-			window.titleContent = new GUIContent("Merino (Yarn)");
-			window.Focus();
-			window.Repaint();
-			return window;
-		}
-
-		[OnOpenAsset]
-		public static bool OnOpenAsset (int instanceID, int line)
-		{
-//			var myTreeAsset = EditorUtility.InstanceIDToObject (instanceID) as MyTreeAsset;
-//			if (myTreeAsset != null)
-//			{
-//				var window = GetWindow ();
-//				window.SetTreeAsset(myTreeAsset);
-//				return true;
-//			}
-			var myTextAsset = EditorUtility.InstanceIDToObject(instanceID) as TextAsset;
-			if (myTextAsset != null)
-			{
-				var window = GetWindow ();
-				return window.SetTreeAsset(myTextAsset);
-			}
-			return false; // we did not handle the open
-		}
-
-		bool SetTreeAsset (TextAsset myTextAsset)
-		{
-			if (doubleClickOpensFile && IsProbablyYarnFile(myTextAsset))
-			{
-				currentFile = myTextAsset;
-				m_Initialized = false;
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-
 		Rect multiColumnTreeViewRect
 		{
 			get { return new Rect(10, 30, sidebarWidth, position.height-40); }
@@ -155,6 +68,66 @@ namespace Merino
 			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
 		}
 
+		// misc resources
+		Texture helpIcon;
+		TextAsset currentFile;
+		Font monoFont;
+		
+		// undo management
+		double lastUndoTime;
+		int moveCursorUndoID, moveCursorUndoIndex;
+		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
+		bool spaceWillIncrementUndo = false; // used just in Main Pane
+		
+		// Yarn Spinner running stuff
+		[NonSerialized] bool isDialogueRunning;
+		MerinoVariableStorage varStorage;
+		MerinoDialogueUI dialogueUI;
+		Dialogue _dialogue;
+		Dialogue dialogue {
+			get {
+				if (_dialogue == null) {
+					// Create the main Dialogue runner, and pass our variableStorage to it
+					varStorage = new MerinoVariableStorage();
+					_dialogue = new Yarn.Dialogue ( varStorage );
+					dialogueUI = new MerinoDialogueUI();
+					dialogueUI.consolasFont = monoFont;
+					
+					// Set up the logging system.
+					_dialogue.LogDebugMessage = delegate (string message) {
+						Debug.Log (message);
+					};
+					_dialogue.LogErrorMessage = delegate (string message) {
+						Debug.LogError (message);
+					};
+				}
+				return _dialogue;
+			}
+		}
+
+		#region EditorWindowStuff
+		
+		[MenuItem("Window/Merino (Yarn Editor)")]
+		public static MerinoEditorWindow GetWindow ()
+		{
+			var window = GetWindow<MerinoEditorWindow>();
+			window.titleContent = new GUIContent("Merino (Yarn)");
+			window.Focus();
+			window.Repaint();
+			return window;
+		}
+		
+		void ResetMerino()
+		{
+			currentFile = null;
+			viewState = null;
+			m_Initialized = false;
+			ForceStopDialogue();
+			Selection.objects = new UnityEngine.Object[0]; // deselect all
+			Undo.undoRedoPerformed -= OnUndo;
+			InitIfNeeded(true);
+		}
+		
 		void InitIfNeeded (bool ignoreSelection=false)
 		{
 			if (m_Initialized) return;
@@ -164,7 +137,7 @@ namespace Merino
 			// load font
 			if (monoFont == null)
 			{
-				monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Fonts/Inconsolata-Regular.ttf");
+				monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Editor/Fonts/Inconsolata-Regular.ttf");
 			}
 			
 			// load help icon
@@ -203,7 +176,76 @@ namespace Merino
 				OnSelectionChange();
 			}
 		}
+		
+		void OnSelectionChange ()
+		{
+			if (!m_Initialized)
+				return;
 
+			var possibleYarnFile = Selection.activeObject as TextAsset;
+			if (possibleYarnFile != null && IsProbablyYarnFile(possibleYarnFile)) // possibleYarnFile != currentFile
+			{
+				// if we already have an Asset selected, make sure it's refreshed
+				if (currentFile != null)
+				{
+					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+				}
+
+				// ok load this new file now?
+				currentFile = possibleYarnFile;
+				viewState.selectedIDs.Clear();
+				ForceStopDialogue();
+				m_TreeView.treeModel.SetData (GetData ());
+				m_TreeView.Reload ();
+			}
+		}
+		
+		[OnOpenAsset]
+		public static bool OnOpenAsset (int instanceID, int line)
+		{
+			var myTextAsset = EditorUtility.InstanceIDToObject(instanceID) as TextAsset;
+			if (myTextAsset != null)
+			{
+				var window = GetWindow ();
+				return window.SetTreeAsset(myTextAsset);
+			}
+			return false; // we did not handle the open
+		}
+		
+		// This gets called many times a second
+		public void Update()
+		{
+			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
+			if (EditorApplication.timeSinceStartup > lastSaveTime + 1.0 && currentFile != null)
+			{
+				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+				lastSaveTime = EditorApplication.timeSinceStartup + 9999; // don't save again until SaveDataToFile resets the variable
+			}
+			
+			if (isDialogueRunning)
+			{
+				// MASSIVELY improves framerate, wow, amazing
+				Repaint();
+			}
+		}
+
+		void OnDestroy()
+		{
+			// if destroyed, make sure the text file got refreshed at least
+			if (currentFile != null)
+			{
+				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+			}
+			
+			Undo.undoRedoPerformed -= OnUndo;
+			Undo.ClearUndo(treeData);
+			
+			DestroyImmediate(treeData,true);
+			undoData.Clear();
+			
+			ForceStopDialogue();
+		}
+		
 		void OnUndo()
 		{
 			if (EditorApplication.timeSinceStartup < lastUndoTime + 0.005)
@@ -235,24 +277,54 @@ namespace Merino
 				SaveDataToFile();
 			}
 		}
+		#endregion
+		
+		
+		
+		#region LoadingAndSaving
 
-
-		IList<MerinoTreeElement> GetData ()
+		bool SetTreeAsset (TextAsset myTextAsset)
 		{
-//			if (m_MyTreeAsset != null && m_MyTreeAsset.treeElements != null && m_MyTreeAsset.treeElements.Count > 0)
-//				return m_MyTreeAsset.treeElements;
-
-
+			if (doubleClickOpensFile && IsProbablyYarnFile(myTextAsset))
+			{
+				currentFile = myTextAsset;
+				m_Initialized = false;
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+		
+		bool IsProbablyYarnFile(TextAsset textAsset)
+		{
+			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
+			{
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+		
+		IList<MerinoTreeElement> GetData (TextAsset source=null)
+		{
 			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
 			treeElements.Add(root);
 			
 			// extract data from the text file
-			if (currentFile != null)
+			if (source == null && currentFile != null)
 			{
-				AssetDatabase.Refresh();
+				source = currentFile;
+			}
+
+			if (source != null) {
+				AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source));
 				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile));
-				var nodes = YarnSpinnerLoader.GetNodesFromText(currentFile.text, NodeFormat.Text);
+				var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
 				foreach (var node in nodes)
 				{
 					// clean some of the stuff to help prevent file corruption
@@ -268,24 +340,19 @@ namespace Merino
 				}
 			}
 			else 
-			{ // generate default data
-				var start = new MerinoTreeElement("Start", 0, 1);
-				start.nodeBody = "This is the Start node. Write the beginning of your Yarn story here." +
-				                 "\n// You can make comments with '//' and the player won't see it." +
-				                 "\n\n// There's two ways to do choices in Yarn. The most basic way is to link to other nodes like this:" +
-				                 "\n[[Go see more examples|Start_MoreExamples]]\n[[Actually, let's restart this node again|Start]]" +
-				                 "\n\n// IMPORTANT: node options are only offered at the end of the passage\nDo you want to read more about Yarn features?";
-								 
-
-				var start2 = new MerinoTreeElement("Start_MoreExamples", 0, 2);
-				start2.nodeBody = "This node is called Start_MoreExamples.\nThe second way to do choices in Yarn is with 'shortcut options' like this:" +
-				                  "\n\n->This is option 1\n\tYou selected option 1." +
-				                  "\n->This is option 2\n\tYou selected option 2.\n\t<<set $didOption2 to true>>" +
-				                  "\n\nBased on choices, you can set variables, and then check those variables later.\n<<if $didOption2 is true>>\nBy checking $didOption2, I remember you chose option 2!\n<<else>>\nI can't detect a variable $didOption2, so that means you chose option 1\n<<endif>>" +
-				                  "\n\nDo you want to go back to Start now?\n-> Yes, send me back to Start.\n\t[[Start]]\n-> No thanks, I want to stop.\n\nOk here's the end, good luck!";
+			{ 
+				// load default data
+				var defaultData = Resources.Load<TextAsset>("NewFileTemplate.yarn");
+				if (defaultData != null)
+				{
+					return GetData(defaultData);
+				}
+				else
+				{
+					Debug.LogError("Merino couldn't load default NewFileTemplate.yarn.txt... by default, it is in Assets/Merino/Editor/Resources/");
+					return null;
+				}
 				
-				treeElements.Add(start);
-				treeElements.Add(start2);
 			}
 
 			treeData.treeElements = treeElements;
@@ -302,46 +369,6 @@ namespace Merino
 			{
 				return inputString.Replace("===", " ").Replace("---", " ");
 			}
-		}
-
-		// ensure unique node titles, very important for YarnSpinner
-		void ValidateNodeTitles()
-		{
-			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
-			// validate data: ensure unique node names
-			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
-			bool doRenaming = false;
-			for (int i=0;i<treeNodes.Count;i++)
-			{
-				// if there's a node already with that name, then append unique suffix
-				if (nodeTitles.Values.Contains(treeNodes[i].name))
-				{
-					nodeTitles.Add(i, treeNodes[i].name + "_" + Path.GetRandomFileName().Split('.')[0]);
-					doRenaming = true;
-				}
-				else
-				{ // otherwise, business as usual
-					nodeTitles.Add(i, treeNodes[i].name);
-				}
-			}
-			if (doRenaming)
-			{
-				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break some of your scripting, you can undo it. The following nodes were renamed: ";
-				Undo.RecordObject(treeData, "Merino: AutoRename");
-				foreach (var kvp in nodeTitles)
-				{
-					if (treeData.treeElements[kvp.Key].name != kvp.Value)
-					{
-						renamedNodes += string.Format("\n* {0} > {1}", treeNodes[kvp.Key].name, kvp.Value);
-						treeData.treeElements[kvp.Key].name = kvp.Value;
-					}
-				}
-				EditorUtility.SetDirty(treeData);
-				Debug.LogWarning(renamedNodes + "\n\n");
-				// repaint tree view so names get updated
-				m_TreeView.Reload();
-			}
-
 		}
 
 		// used internally for playtest preview, but also by SaveDataToFile
@@ -395,23 +422,11 @@ namespace Merino
 				lastSaveTime = EditorApplication.timeSinceStartup;
 			}
 		}
+		#endregion
+		
+		
 
-		/// <summary>
-		/// Checks to see if TextAsset is a probably valid .yarn.txt file, or if it's just a random text file
-		/// </summary>
-		/// <param name="textAsset"></param>
-		/// <returns></returns>
-		bool IsProbablyYarnFile(TextAsset textAsset)
-		{
-			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
-			{
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
+		#region NodeManagement
 
 		void AddNewNode()
 		{
@@ -433,30 +448,149 @@ namespace Merino
 			}
 			SaveDataToFile();
 		}
-
-		void OnSelectionChange ()
+		
+		// ensure unique node titles, very important for YarnSpinner
+		void ValidateNodeTitles()
 		{
-			if (!m_Initialized)
-				return;
-
-			var possibleYarnFile = Selection.activeObject as TextAsset;
-			if (possibleYarnFile != null && IsProbablyYarnFile(possibleYarnFile)) // possibleYarnFile != currentFile
+			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// validate data: ensure unique node names
+			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
+			bool doRenaming = false;
+			for (int i=0;i<treeNodes.Count;i++)
 			{
-				// if we already have an Asset selected, make sure it's refreshed
-				if (currentFile != null)
+				// if there's a node already with that name, then append unique suffix
+				if (nodeTitles.Values.Contains(treeNodes[i].name))
 				{
-					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
+					nodeTitles.Add(i, treeNodes[i].name + "_" + Path.GetRandomFileName().Split('.')[0]);
+					doRenaming = true;
 				}
-
-				// ok load this new file now?
-				currentFile = possibleYarnFile;
-				viewState.selectedIDs.Clear();
-				ForceStopDialogue();
-				m_TreeView.treeModel.SetData (GetData ());
-				m_TreeView.Reload ();
+				else
+				{ // otherwise, business as usual
+					nodeTitles.Add(i, treeNodes[i].name);
+				}
+			}
+			if (doRenaming)
+			{
+				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break some of your scripting, you can undo it. The following nodes were renamed: ";
+				Undo.RecordObject(treeData, "Merino: AutoRename");
+				foreach (var kvp in nodeTitles)
+				{
+					if (treeData.treeElements[kvp.Key].name != kvp.Value)
+					{
+						renamedNodes += string.Format("\n* {0} > {1}", treeNodes[kvp.Key].name, kvp.Value);
+						treeData.treeElements[kvp.Key].name = kvp.Value;
+					}
+				}
+				EditorUtility.SetDirty(treeData);
+				Debug.LogWarning(renamedNodes + "\n\n");
+				// repaint tree view so names get updated
+				m_TreeView.Reload();
 			}
 		}
+		#endregion
 
+
+		
+		#region PlaytestPreview
+		void PlaytestFrom(string startPassageName, bool reset=true)
+		{
+			if (reset)
+			{
+				dialogue.UnloadAll();
+				varStorage.ResetToDefaults();
+				dialogue.LoadString(SaveNodesAsString());
+			}
+			this.StopAllCoroutines();
+
+			// use EditorCoroutines to run the dialogue
+			this.StartCoroutine(RunDialogue(startPassageName));
+		}
+		
+		void ForceStopDialogue()
+		{
+			isDialogueRunning = false;
+			if (dialogue != null)
+			{
+				dialogue.Stop();
+			}
+
+			this.StopAllCoroutines();
+		}
+
+		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
+		IEnumerator RunDialogue (string startNode = "Start")
+        {        
+            // Mark that we're in conversation.
+            isDialogueRunning = true;
+
+            // Signal that we're starting up.
+           //  yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
+
+            // Get lines, options and commands from the Dialogue object,
+            // one at a time.
+            foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
+            {
+	            dialogueUI.currentNode = dialogue.currentNode;
+
+                if (step is Yarn.Dialogue.LineResult) {
+
+                    // Wait for line to finish displaying
+                    var lineResult = step as Yarn.Dialogue.LineResult;
+	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, autoAdvance));
+//	                while (dialogueUI.inputContinue == false)
+//	                {
+//		                yield return new WaitForSeconds(0.01f);
+//	                }
+
+                } else if (step is Yarn.Dialogue.OptionSetResult) {
+
+                    // Wait for user to finish picking an option
+                    var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
+	                dialogueUI.RunOptions(optionSetResult.options, optionSetResult.setSelectedOptionDelegate);
+	                while (dialogueUI.inputOption < 0)
+	                {
+		                yield return new WaitForSeconds(0.01f);
+	                }
+
+                } else if (step is Yarn.Dialogue.CommandResult) {
+
+                    // Wait for command to finish running
+
+                    var commandResult = step as Yarn.Dialogue.CommandResult;
+
+//                    if (DispatchCommand(commandResult.command.text) == true) {
+//                        // command was dispatched
+//                    } else {
+	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, autoAdvance));
+//                    }
+
+
+                } else if(step is Yarn.Dialogue.NodeCompleteResult) {
+
+                    // Wait for post-node action
+                    var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
+                    // yield return this.StartCoroutine (this.dialogueUI.NodeComplete (nodeResult.nextNode));
+                }
+            }
+	        Debug.Log("Merino: reached the end of the dialogue.");
+	        
+            // No more results! The dialogue is done.
+            // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
+	        while (stopOnDialogueEnd==false)
+	        {
+		        yield return new WaitForSeconds(0.01f);
+	        }
+
+            // Clear the 'is running' flag. We do this after DialogueComplete returns,
+            // to allow time for any animations that might run while transitioning
+            // out of a conversation (ie letterboxing going away, etc)
+            isDialogueRunning = false;
+	        Repaint();
+        }
+		#endregion
+		
+		
+		
 		void OnGUI ()
 		{
 			InitIfNeeded();
@@ -479,8 +613,6 @@ namespace Merino
 		//	BottomToolBar (bottomToolbarRect);
 		}
 
-		[SerializeField] bool stopOnDialogueEnd = true;
-		[SerializeField] bool autoAdvance = false;
 		void PreviewToolbar(Rect rect)
 		{
 			// toolbar
@@ -556,7 +688,6 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 		
-
 		void SearchBar (Rect rect)
 		{
 			treeView.searchString = m_SearchField.OnGUI (rect, treeView.searchString);
@@ -583,117 +714,7 @@ namespace Merino
 			rect.height -= BUTTON_HEIGHT;
 			m_TreeView.OnGUI(rect);
 		}
-
-		void ResetMerino()
-		{
-			currentFile = null;
-			viewState = null;
-			m_Initialized = false;
-			ForceStopDialogue();
-			Selection.objects = new UnityEngine.Object[0]; // deselect all
-			Undo.undoRedoPerformed -= OnUndo;
-			InitIfNeeded(true);
-		}
-
-		void ForceStopDialogue()
-		{
-			isDialogueRunning = false;
-			if (dialogue != null)
-			{
-				dialogue.Stop();
-			}
-
-			this.StopAllCoroutines();
-		}
-
-		void PlaytestFrom(string startPassageName, bool reset=true)
-		{
-			if (reset)
-			{
-				dialogue.UnloadAll();
-				varStorage.ResetToDefaults();
-				dialogue.LoadString(SaveNodesAsString());
-			}
-			this.StopAllCoroutines();
-
-			// use EditorCoroutines to run the dialogue
-			this.StartCoroutine(RunDialogue(startPassageName));
-		}
-
-		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
-		[NonSerialized] bool isDialogueRunning;
-		IEnumerator RunDialogue (string startNode = "Start")
-        {        
-            // Mark that we're in conversation.
-            isDialogueRunning = true;
-
-            // Signal that we're starting up.
-           //  yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
-
-            // Get lines, options and commands from the Dialogue object,
-            // one at a time.
-            foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
-            {
-	            dialogueUI.currentNode = dialogue.currentNode;
-
-                if (step is Yarn.Dialogue.LineResult) {
-
-                    // Wait for line to finish displaying
-                    var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, autoAdvance));
-//	                while (dialogueUI.inputContinue == false)
-//	                {
-//		                yield return new WaitForSeconds(0.01f);
-//	                }
-
-                } else if (step is Yarn.Dialogue.OptionSetResult) {
-
-                    // Wait for user to finish picking an option
-                    var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
-	                dialogueUI.RunOptions(optionSetResult.options, optionSetResult.setSelectedOptionDelegate);
-	                while (dialogueUI.inputOption < 0)
-	                {
-		                yield return new WaitForSeconds(0.01f);
-	                }
-
-                } else if (step is Yarn.Dialogue.CommandResult) {
-
-                    // Wait for command to finish running
-
-                    var commandResult = step as Yarn.Dialogue.CommandResult;
-
-//                    if (DispatchCommand(commandResult.command.text) == true) {
-//                        // command was dispatched
-//                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, autoAdvance));
-//                    }
-
-
-                } else if(step is Yarn.Dialogue.NodeCompleteResult) {
-
-                    // Wait for post-node action
-                    var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
-                    // yield return this.StartCoroutine (this.dialogueUI.NodeComplete (nodeResult.nextNode));
-                }
-            }
-	        Debug.Log("Merino: reached the end of the dialogue.");
-	        
-            // No more results! The dialogue is done.
-            // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
-	        while (stopOnDialogueEnd==false)
-	        {
-		        yield return new WaitForSeconds(0.01f);
-	        }
-
-            // Clear the 'is running' flag. We do this after DialogueComplete returns,
-            // to allow time for any animations that might run while transitioning
-            // out of a conversation (ie letterboxing going away, etc)
-            isDialogueRunning = false;
-	        Repaint();
-        }
-
-		bool spaceWillIncrementUndo = false;
-
+		
 		void DrawMainPane(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
@@ -932,6 +953,8 @@ namespace Merino
 
 			GUILayout.EndArea();
 		}
+		
+		#region Utility
 
 		// I can't believe I finally got this to work, wow
 		// only needed for GUILayout.TextArea
@@ -992,7 +1015,7 @@ namespace Merino
 			}
 		}
 
-		void BottomToolBar (Rect rect)
+/*		void BottomToolBar (Rect rect)
 		{
 			GUILayout.BeginArea (rect);
 
@@ -1050,7 +1073,7 @@ namespace Merino
 			}
 
 			GUILayout.EndArea();
-		}
+		}*/
 		
 		/// <summary>
 		/// Compare two strings and return the index of the first difference.  Return -1 if the strings are equal.
@@ -1068,54 +1091,21 @@ namespace Merino
 			return (index == min && s1.Length == s2.Length) ? -1 : index;
 		}
 		
-		// This gets called many times a second
-		public void Update()
+		[SerializeField]
+		public struct MerinoUndoLog
 		{
-			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
-			if (EditorApplication.timeSinceStartup > lastSaveTime + 1.0 && currentFile != null)
+			public int id;
+			public double time;
+			public string bodyText;
+
+			public MerinoUndoLog(int id, double time, string bodyText)
 			{
-				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
-				lastSaveTime = EditorApplication.timeSinceStartup + 9999; // don't save again until SaveDataToFile resets the variable
-			}
-			
-			if (isDialogueRunning)
-			{
-				// MASSIVELY improves framerate, wow, amazing
-				Repaint();
+				this.id = id;
+				this.time = time;
+				this.bodyText = bodyText;
 			}
 		}
-
-		void OnDestroy()
-		{
-			// if destroyed, make sure the text file got refreshed at least
-			if (currentFile != null)
-			{
-				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
-			}
-			
-			Undo.undoRedoPerformed -= OnUndo;
-			Undo.ClearUndo(treeData);
-			
-			DestroyImmediate(treeData,true);
-			undoData.Clear();
-			
-			ForceStopDialogue();
-		}
-	}
-
-	[SerializeField]
-	public struct MerinoUndoLog
-	{
-		public int id;
-		public double time;
-		public string bodyText;
-
-		public MerinoUndoLog(int id, double time, string bodyText)
-		{
-			this.id = id;
-			this.time = time;
-			this.bodyText = bodyText;
-		}
+		#endregion
 	}
 
 	// based a bit on YarnSpinner/ExampleDialogueUI

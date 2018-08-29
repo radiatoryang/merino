@@ -194,7 +194,8 @@ namespace Merino
 				LoadEditorPrefs();
 				prefsLoaded = true;
 			}
-			
+
+
 			// Reset button
 			if (GUILayout.Button("Reset Merino to default settings"))
 			{
@@ -286,7 +287,7 @@ namespace Merino
 				MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
 			m_MultiColumnHeaderState = headerState;
 				
-			var multiColumnHeader = new MyMultiColumnHeader(headerState);
+			var multiColumnHeader = new MerinoMultiColumnHeader(headerState);
 			if (firstInit)
 				multiColumnHeader.ResizeToFit ();
 
@@ -514,7 +515,8 @@ namespace Merino
 			// gather data
 			ValidateNodeTitles();
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// grab nodes based on visible order in the hierarchy tree view (sorting)
+			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
 			// save data to string
 			foreach (var item in treeNodes)
 			{
@@ -1567,10 +1569,11 @@ namespace Merino
 	}
 
 
-	internal class MyMultiColumnHeader : MultiColumnHeader
+	internal class MerinoMultiColumnHeader : MultiColumnHeader
 	{
 		Mode m_Mode;
-
+		//Texture helpIcon = EditorGUIUtility.IconContent("_Help").image;
+		
 		public enum Mode
 		{
 			LargeHeader,
@@ -1578,7 +1581,7 @@ namespace Merino
 			MinimumHeaderWithoutSorting
 		}
 
-		public MyMultiColumnHeader(MultiColumnHeaderState state)
+		public MerinoMultiColumnHeader(MultiColumnHeaderState state)
 			: base(state)
 		{
 			mode = Mode.DefaultHeader;
@@ -1601,7 +1604,7 @@ namespace Merino
 						break;
 					case Mode.DefaultHeader:
 						canSort = true;
-						height = DefaultGUI.defaultHeight;
+						height = DefaultGUI.minimumHeight;
 						break;
 					case Mode.MinimumHeaderWithoutSorting:
 						canSort = false;
@@ -1609,6 +1612,23 @@ namespace Merino
 						break;
 				}
 			}
+		}
+		
+		public override void OnGUI(Rect rect, float xScroll)
+		{
+			// add extra "clear sorting" button if sorting is active
+			var clearSortRect = new Rect(rect);
+			clearSortRect.width = 18;
+			clearSortRect.height = clearSortRect.width;
+			rect.x += clearSortRect.width;
+			rect.width -= clearSortRect.width;
+			if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+			{
+				state.sortedColumnIndex = -1;
+			}
+			
+			// draw rest of the header
+			base.OnGUI(rect, xScroll);
 		}
 
 		protected override void ColumnHeaderGUI (MultiColumnHeaderState.Column column, Rect headerRect, int columnIndex)

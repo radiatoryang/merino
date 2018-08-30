@@ -36,7 +36,7 @@ namespace Merino
 		static bool prefsLoaded = false;
 		
 		static string newFileTemplatePath = "NewFileTemplate.yarn";
-		static bool doubleClickOpensFile = true;
+		static string tempDataPath = "Assets/Merino/Editor/TempData.asset";
 		
 		static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
 		static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -139,7 +139,6 @@ namespace Merino
 
 		static void ResetEditorPrefsAll()
 		{
-			doubleClickOpensFile = true;
 			newFileTemplatePath = "NewFileTemplate.yarn";
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
@@ -164,7 +163,6 @@ namespace Merino
 				SaveEditorPrefs();
 				EditorPrefs.SetBool("MerinoFirstRun", true);
 			}
-			doubleClickOpensFile = EditorPrefs.GetBool("MerinoDoubleClick", doubleClickOpensFile);
 			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
 
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
@@ -175,7 +173,6 @@ namespace Merino
 
 		public static void SaveEditorPrefs()
 		{
-			EditorPrefs.SetBool("MerinoDoubleClick", doubleClickOpensFile);
 			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
 			
 			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
@@ -205,7 +202,6 @@ namespace Merino
 			
 			// Preferences GUI
 			GUILayout.Label("File Handling", EditorStyles.boldLabel);
-			doubleClickOpensFile = EditorGUILayout.Toggle("DoubleClick Yarn files in Project tab", doubleClickOpensFile);
 			EditorGUILayout.Space();
 			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
 			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
@@ -230,6 +226,7 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
+			AssetDatabase.DeleteAsset(tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			InitIfNeeded(true);
@@ -259,6 +256,7 @@ namespace Merino
 		{
 			if (m_Initialized) return;
 
+			Debug.Log("Merino: initializing...");
 			Undo.undoRedoPerformed += OnUndo;
 			
 			// default highlight colors		
@@ -291,7 +289,19 @@ namespace Merino
 			if (firstInit)
 				multiColumnHeader.ResizeToFit ();
 
-			treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
+			// detect temp data (e.g. when going into play mode and back)
+			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(tempDataPath);
+			if (possibleTempData == null)
+			{
+				treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
+				AssetDatabase.CreateAsset(treeData, tempDataPath);
+				AssetDatabase.SaveAssets();
+			}
+			else
+			{
+				treeData = possibleTempData;
+			}
+
 			undoData.Clear();
 			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
 				
@@ -308,6 +318,7 @@ namespace Merino
 			}
 		}
 		
+		// called when something get selected in Project tab
 		void OnSelectionChange ()
 		{
 			if (!m_Initialized)
@@ -329,18 +340,6 @@ namespace Merino
 				m_TreeView.treeModel.SetData (GetData ());
 				m_TreeView.Reload ();
 			}
-		}
-		
-		[OnOpenAsset]
-		public static bool OnOpenAsset (int instanceID, int line)
-		{
-			var myTextAsset = EditorUtility.InstanceIDToObject(instanceID) as TextAsset;
-			if (myTextAsset != null)
-			{
-				var window = GetWindow ();
-				return window.SetTreeAsset(myTextAsset);
-			}
-			return false; // we did not handle the open
 		}
 		
 		// This gets called many times a second
@@ -371,7 +370,6 @@ namespace Merino
 			Undo.undoRedoPerformed -= OnUndo;
 			Undo.ClearUndo(treeData);
 			
-			DestroyImmediate(treeData,true);
 			undoData.Clear();
 			
 			ForceStopDialogue();
@@ -390,7 +388,7 @@ namespace Merino
 			for( int i=undoData.Count-1; i>0 && treeData.timestamp < undoData[i].time; i-- )
 			{
 				var recent = undoData[i];
-				var treeDataNode = treeData.treeElements.Where(x => x.id == recent.id).First();
+				var treeDataNode = treeData.treeElements.First(x => x.id == recent.id);
 				
 				moveCursorUndoID = recent.id;
 				
@@ -413,20 +411,6 @@ namespace Merino
 		
 		
 		#region LoadingAndSaving
-
-		bool SetTreeAsset (TextAsset myTextAsset)
-		{
-			if (doubleClickOpensFile && IsProbablyYarnFile(myTextAsset))
-			{
-				currentFile = myTextAsset;
-				m_Initialized = false;
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
 		
 		bool IsProbablyYarnFile(TextAsset textAsset)
 		{
@@ -454,7 +438,7 @@ namespace Merino
 
 			if (source != null) {
 				AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source));
-				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile));
+				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
 				var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
 				foreach (var node in nodes)
 				{
@@ -463,7 +447,7 @@ namespace Merino
 					string cleanBody = CleanYarnField(node.body);
 					string cleanTags = CleanYarnField(node.tags, true);
 					// write data to the objects
-					var newItem = new MerinoTreeElement( cleanName ,0,treeElements.Count);
+					var newItem = new MerinoTreeElement( cleanName, 0, treeElements.Count);
 					newItem.nodeBody = cleanBody;
 					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
 					newItem.nodeTags = cleanTags;
@@ -472,14 +456,20 @@ namespace Merino
 			}
 			else 
 			{ 
-				// load default data
+				// see if we can load temp data
+				if (treeData != null && treeData.treeElements != null && treeData.treeElements.Count > 0)
+				{
+					return treeData.treeElements;
+				}
+				
+				// otherwise, load default data from template
 				var defaultData = Resources.Load<TextAsset>(newFileTemplatePath);
 				if (defaultData != null)
 				{
 					return GetData(defaultData);
 				}
 				else
-				{
+				{ // oops, couldn't find the new file template!
 					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", newFileTemplatePath);
 					return null;
 				}
@@ -1015,10 +1005,26 @@ namespace Merino
 					GUI.SetNextControlName ( "TextArea" + newName );
 					
 					// draw the body
+					int lineDigits = -1;
+					var lineNumbers = AddLineNumbers(passage, out lineDigits);
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
+					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 					string newBody = EditorGUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 					GUI.contentColor = backupContentColor;
+					var bodyRect = GUILayoutUtility.GetLastRect();
+					
+					// overlay line numbers
+					GUIStyle highlightOverlay = new GUIStyle();
+					highlightOverlay.font = monoFont;
+					highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
+					highlightOverlay.richText = true;
+					highlightOverlay.wordWrap = true;
+
+					Rect linesRect = new Rect(bodyRect);
+					linesRect.x -= lineDigits * 12; // TODO: measure line number digits?
+					
+					GUI.Label(linesRect, lineNumbers, highlightOverlay);
 					
 					// only run the fancier stuff if we're not in playtesting mode
 					if (GUI.enabled)
@@ -1055,19 +1061,13 @@ namespace Merino
 						}
 
 						// syntax highlight via label overlay
-						Rect lastRect = GUILayoutUtility.GetLastRect();
+						Rect lastRect = new Rect(bodyRect);
 						lastRect.x += 2;
 						lastRect.y += 1f;
 						lastRect.width -= 6;
 						lastRect.height -= 1;
 						string syntaxHighlight = DoSyntaxMarch(newBody);
 
-						GUIStyle highlightOverlay = new GUIStyle();
-						highlightOverlay.font = monoFont;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
-						highlightOverlay.richText = true;
-						highlightOverlay.wordWrap = true;
-						
 						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
 					}
 
@@ -1132,7 +1132,7 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 		
-		#region Utility
+		#region MainPaneUtility
 
 		// I can't believe I finally got this to work, wow
 		// only needed for GUILayout.TextArea
@@ -1191,6 +1191,32 @@ namespace Merino
 			{
 				return Color.white;
 			}
+		}
+
+		// given a long string with line breaks, it will tranpose line numbers to them all (and hide the actual text with rich text Color)
+		string AddLineNumbers(string input, out int digits)
+		{
+			var lines = input.Split(new string[] {"\n"}, StringSplitOptions.None );
+			digits = Mathf.CeilToInt(1f * lines.Length / 10).ToString().Length + 1;
+			string invisibleBegin = "<color=#00000000>";
+			string invisibleEnd = "</color>";
+			for (int i = 0; i < lines.Length; i++)
+			{
+				// generate line numbers
+				string lineDisplay = i.ToString();
+				lineDisplay = lineDisplay.PadLeft(digits);
+				
+				// make sure the line will be long enough
+				if (lines[i].Length < digits)
+				{
+					lines[i] = lines[i].PadRight(digits);
+				}
+				
+				// add line number to line
+				lines[i] = lineDisplay + invisibleBegin + lines[i].Remove(0, digits) + invisibleEnd;
+			}
+
+			return string.Join("\n", lines);
 		}
 
 /*		void BottomToolBar (Rect rect)

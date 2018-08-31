@@ -6,7 +6,6 @@ using System.Text;
 using System.IO;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using Yarn;
@@ -36,7 +35,7 @@ namespace Merino
 		static bool prefsLoaded = false;
 		
 		static string newFileTemplatePath = "NewFileTemplate.yarn";
-		static string tempDataPath = "Assets/Merino/Editor/TempData.asset";
+		static string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
 		
 		static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
 		static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -256,8 +255,8 @@ namespace Merino
 		{
 			if (m_Initialized) return;
 
-			Debug.Log("Merino: initializing...");
 			Undo.undoRedoPerformed += OnUndo;
+			undoData.Clear();
 			
 			// default highlight colors		
 			LoadEditorPrefs();
@@ -302,11 +301,9 @@ namespace Merino
 				treeData = possibleTempData;
 			}
 
-			undoData.Clear();
-			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
-				
+			// generate sidebar data structures
+			var treeModel = new TreeModel<MerinoTreeElement>(GetData(null, true));
 			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
-
 			m_SearchField = new SearchField();
 			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
 
@@ -424,16 +421,22 @@ namespace Merino
 			}
 		}
 		
-		IList<MerinoTreeElement> GetData (TextAsset source=null)
+		IList<MerinoTreeElement> GetData (TextAsset source=null, bool isFromInit=false)
 		{
 			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
 			treeElements.Add(root);
 			
-			// extract data from the text file
-			if (source == null && currentFile != null)
+			// extract data from the text file, but only if it's not about entering playmode
+			if (source == null && currentFile != null )
 			{
 				source = currentFile;
+			}
+			
+			// hack hack hack: if we're calling GetData from init, then ignore playmode currentFile
+			if (isFromInit && EditorApplication.isPlayingOrWillChangePlaymode)
+			{
+				source = null;
 			}
 
 			if (source != null) {
@@ -993,7 +996,6 @@ namespace Merino
 					
 					// NODE BODY
 					var backupContentColor = GUI.contentColor;
-					GUI.contentColor = GUI.enabled==false ? backupContentColor : new Color ( 0f, 0f, 0f, 0.16f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
@@ -1002,49 +1004,64 @@ namespace Merino
 					var te = typeof(EditorGUI)
 						.GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic)
 						.GetValue(null) as TextEditor;
-					GUI.SetNextControlName ( "TextArea" + newName );
 					
-					// draw the body
+					// start preparing to draw the body
 					int lineDigits = -1;
 					var lineNumbers = AddLineNumbers(passage, out lineDigits);
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
 					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
-					string newBody = EditorGUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
-					GUI.contentColor = backupContentColor;
-					var bodyRect = GUILayoutUtility.GetLastRect();
 					
-					// overlay line numbers
-					GUIStyle highlightOverlay = new GUIStyle();
-					highlightOverlay.font = monoFont;
-					highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
-					highlightOverlay.richText = true;
-					highlightOverlay.wordWrap = true;
-
-					Rect linesRect = new Rect(bodyRect);
-					linesRect.x -= lineDigits * 12; // TODO: measure line number digits?
+					// at around 250-300+ lines, Merino will start giving error messages and line numbers will break: "String too long for TextMeshGenerator. Cutting off characters."
+					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines?)
+					const int chunkSize = 200;
+					// chop passage and line numbers into 200 lines
+					var linebreak = new string[] {"\n"};
+					string[] passageLines = passage.Split(linebreak, StringSplitOptions.None);
+					string[] numberLines = lineNumbers.Split(linebreak, StringSplitOptions.None);
 					
-					GUI.Label(linesRect, lineNumbers, highlightOverlay);
-					
-					// only run the fancier stuff if we're not in playtesting mode
-					if (GUI.enabled)
+					// recombine into lines chunks of 200 lines
+					int chunkCount = Mathf.CeilToInt(1f * passageLines.Length / chunkSize);
+					string[] passageChunks = new string[chunkCount];
+					string[] numberChunks = new string[chunkCount];
+					for (int i = 0; i < passageLines.Length; i+=chunkSize)
 					{
-						// manual tab support for GUILayout.TextArea... no longer needed for EditorGUILayout.TextArea
-//						string oldBody = newBody;
-//						newBody = KeyboardTabSupport(newBody, te);
-//						if (oldBody.Length != newBody.Length)
-//						{
-//							forceSave = true;
-//						}
-
+						int chunkIndex = Mathf.CeilToInt(1f * i / chunkSize);
+						passageChunks[chunkIndex] = string.Join( linebreak[0], passageLines.Skip(i).Take(chunkSize).ToArray() );
+						numberChunks[chunkIndex] = string.Join( linebreak[0], numberLines.Skip(i).Take(chunkSize).ToArray() );
+					}
+					
+					// draw chunks as TextAreas, each with their own highlighting and line number overlays
+					var newBodies = new string[chunkCount];
+					for( int x=0; x<passageChunks.Length; x++) {
+						GUI.contentColor = new Color ( 0f, 0f, 0f, 0.16f ); // the text you type is actually invisible
+						GUI.SetNextControlName ( "TextArea" + newName + x.ToString() );
+						// draw text area
+						newBodies[x] = EditorGUILayout.TextArea(passageChunks[x], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+						GUI.contentColor = backupContentColor;
+						var bodyRect = GUILayoutUtility.GetLastRect(); // we need the TextArea rect for the line number and syntax highlight overlays
+						
+						// line number style
+						GUIStyle highlightOverlay = new GUIStyle();
+						highlightOverlay.font = monoFont;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.4f;
+						highlightOverlay.richText = true;
+						highlightOverlay.wordWrap = true;
+						// line number positioning (just slightly to the left)
+						Rect linesRect = new Rect(bodyRect);
+						linesRect.x -= lineDigits * 12;
+						// draw the line numbers
+						GUI.Label(linesRect, numberChunks[x], highlightOverlay);
+					
+						// undo support: move back keyboard cursor (caret) to undo point... minor quality of life that's actually kind of major
 						if ( moveCursorUndoID == id && moveCursorUndoIndex >= 0 && te != null && GUIUtility.keyboardControl == te.controlID )
 						{
 							te.cursorIndex = moveCursorUndoIndex;
 							te.selectIndex = moveCursorUndoIndex;
-							// moveCursorUndo* will get blanked out after the foreach loop
+							// moveCursorUndo* will get blanked out after the foreach node loop
 						}
 						
-						// detect whether to increment the undo group
+						// detect whether to increment the undo group based on typing whitespace / word breaks
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
 						{
 							var e = Event.current;
@@ -1053,7 +1070,7 @@ namespace Merino
 								Undo.IncrementCurrentGroup();
 								spaceWillIncrementUndo = false;
 							}
-
+							// if user presses something other than SPACE, then let whitespace increment undo again
 							if (!spaceWillIncrementUndo && e.isKey && e.keyCode != KeyCode.Space)
 							{
 								spaceWillIncrementUndo = true;
@@ -1066,11 +1083,15 @@ namespace Merino
 						lastRect.y += 1f;
 						lastRect.width -= 6;
 						lastRect.height -= 1;
-						string syntaxHighlight = DoSyntaxMarch(newBody);
-
+						highlightOverlay.normal.textColor *= 2;
+						string syntaxHighlight = DoSyntaxMarch(newBodies[x]);
 						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
-					}
+					} // end of textAreas
+					
+					// combine all bodies into a single string for saving
+					var newBody = string.Join("\n", newBodies);
 
+					// playtest preview button at bottom of node
 					if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
 					{
 						idToPreview = id;
@@ -1084,9 +1105,10 @@ namespace Merino
 					// did user edit something?
 					if (EditorGUI.EndChangeCheck() )
 					{
-						// undo stuff
+						// undo begin
 						Undo.RecordObject(treeData, "Merino > " + newName );
 						
+						// actually commit the data now
 						m_TreeView.treeModel.Find(id).name = newName;
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
 						treeData.editedID = id;
@@ -1095,6 +1117,7 @@ namespace Merino
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
 						
+						// save after commit if we're autosaving
 						if (currentFile != null && useAutosave)
 						{
 							SaveDataToFile();

@@ -508,8 +508,17 @@ namespace Merino
 			// gather data
 			ValidateNodeTitles();
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
+			
 			// grab nodes based on visible order in the hierarchy tree view (sorting)
+			
+			// first, in order to properly export, we need to expand everything
+			var previousExpanded = treeView.GetExpanded();
+			treeView.ExpandAll();
+			// then grab the nodes
 			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// then set the expanded nodes back to what they were
+			treeView.SetExpanded(previousExpanded);
+			
 			// save data to string
 			foreach (var item in treeNodes)
 			{

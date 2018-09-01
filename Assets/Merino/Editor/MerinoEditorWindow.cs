@@ -439,14 +439,44 @@ namespace Merino
 			SaveDataToFile();
 		}
 
-		void DeleteNode(int id)
+		//suppress should be true if attempting to delete multiple nodes and multiple dialogs/saves aren't ideal
+		void DeleteNode(int id, bool suppress = false)
 		{
+			if (!suppress && !EditorUtility.DisplayDialog("Delete Node?",
+				    "Are you sure you want to delete " + m_TreeView.treeModel.Find(id).name + "?", "Delete", "Cancel"))
+			{
+				return;
+			}
+				
 			m_TreeView.treeModel.RemoveElements( new List<int>() {id});
 			if (viewState.selectedIDs.Contains(id))
 			{
 				viewState.selectedIDs.Remove(id);
 			}
-			SaveDataToFile();
+
+			if (!suppress)
+			{
+				SaveDataToFile();
+			}
+		}
+
+		public void DeleteNode(IList<int> ids)
+		{
+			if (ids.Count == 1)
+			{
+				DeleteNode(ids[0]);
+				return;
+			}
+			
+			if (EditorUtility.DisplayDialog("Delete Nodes?",
+				"Are you sure you want to delete " + ids.Count + " nodes?", "Delete", "Cancel"))
+			{
+				for (int i = 0; i < ids.Count; i++)
+				{
+					DeleteNode(ids[i], true);
+				}
+				SaveDataToFile();
+			}
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -787,7 +817,6 @@ namespace Merino
 			}
 			GUILayout.EndHorizontal();
 
-			int idToDelete = -1;
 //			bool forceSave = false;
 			int idToPreview = -1;
 			if (viewState.selectedIDs.Count > 0)
@@ -818,7 +847,7 @@ namespace Merino
 					// delete button
 					if (GUILayout.Button("Delete Node", GUILayout.Width(100)))
 					{
-						idToDelete = id;
+						DeleteNode(id);
 					}
 					EditorGUILayout.EndHorizontal();
 					
@@ -925,12 +954,6 @@ namespace Merino
 						// repaint tree view so names get updated
 						m_TreeView.Reload();
 					}
-				}
-
-				// delete the node with this ID
-				if (idToDelete > -1)
-				{
-					DeleteNode(idToDelete);
 				}
 
 				moveCursorUndoID = -1;

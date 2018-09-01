@@ -98,6 +98,9 @@ namespace Merino
 		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
 		bool spaceWillIncrementUndo = false; // used just in Main Pane
 		
+		// error checking
+		[SerializeField] List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
+		
 		// Yarn Spinner running stuff
 		[NonSerialized] bool isDialogueRunning;
 		MerinoVariableStorage varStorage;
@@ -117,7 +120,7 @@ namespace Merino
 						Debug.Log (message);
 					};
 					_dialogue.LogErrorMessage = delegate (string message) {
-						Debug.LogError (message);
+						PlaytestErrorLog (message);
 					};
 				}
 				return _dialogue;
@@ -257,6 +260,7 @@ namespace Merino
 
 			Undo.undoRedoPerformed += OnUndo;
 			undoData.Clear();
+			errorLog.Clear();
 			
 			// default highlight colors		
 			LoadEditorPrefs();
@@ -630,9 +634,18 @@ namespace Merino
 		{
 			if (reset)
 			{
+				errorLog.Clear();
 				dialogue.UnloadAll();
 				varStorage.ResetToDefaults();
-				dialogue.LoadString(SaveNodesAsString());
+				try
+				{
+					dialogue.LoadString(SaveNodesAsString());
+				}
+				catch (Exception ex)
+				{
+					PlaytestErrorLog(ex.Message);
+				}
+				
 			}
 			this.StopAllCoroutines();
 
@@ -649,6 +662,52 @@ namespace Merino
 			}
 
 			this.StopAllCoroutines();
+		}
+
+		// logs errors from the playtest engine and Yarn Loader
+		public void PlaytestErrorLog(string message)
+		{
+			string fileName = "unknown";
+			string nodeName = "unknown";
+			int lineNumber = -1;
+			
+			// detect file name
+			if (currentFile != null)
+			{
+				fileName = currentFile.name;
+			} 
+			else if (message.Contains("file"))
+			{
+				fileName = message.Split(new string[] {"file"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+			}
+			
+			// detect node name
+			if (message.Contains("node"))
+			{
+				nodeName = message.Split(new string[] {"node"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+				
+				// detect line numbers, if any, by grabbing the first digit after nodeName
+				string numberLog = "";
+				for( int index = message.IndexOf(nodeName); index < message.Length; index++)
+				{
+					if (Char.IsDigit(message[index]))
+					{
+						numberLog += message[index];
+					}
+					else if ( numberLog.Length > 0) // did we hit a non-number, after already hitting numbers? then stop
+					{
+						break;
+					}
+				}
+
+				int.TryParse(numberLog, out lineNumber);
+			}
+			
+			// also output to Unity console
+			Debug.LogError(message);
+			// Debug.LogFormat("{0} {1} {2}", fileName, nodeName, lineNumber);
+			var nodeRef = treeData.treeElements.Where(x => x.name == nodeName).ToArray();
+			errorLog.Add( new MerinoErrorLine(message, fileName, nodeRef.Length > 0 ? nodeRef[0].id : -1, Mathf.Max(0, lineNumber)));
 		}
 
 		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
@@ -1010,21 +1069,20 @@ namespace Merino
 					
 					// stuff for manual keyboard tab support
 //					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
-					var te = typeof(EditorGUI)
-						.GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic)
-						.GetValue(null) as TextEditor;
+					var te = typeof(EditorGUI).GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as TextEditor;
 					
 					// start preparing to draw the body
 					int lineDigits = -1;
-					var lineNumbers = AddLineNumbers(passage, out lineDigits);
+					int totalLineCount = -1;
+					var lineNumbers = AddLineNumbers(passage, out lineDigits, out totalLineCount);
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
 					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 					
-					// at around 250-300+ lines, Merino will start giving error messages and line numbers will break: "String too long for TextMeshGenerator. Cutting off characters."
-					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines?)
+					// at around 250-300+ lines, Merino was giving error messages and line numbers broke: "String too long for TextMeshGenerator. Cutting off characters."
+					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines, just to be safe)
 					const int chunkSize = 200;
-					// chop passage and line numbers into 200 lines
+					// split passage and lineNumbers into lines
 					var linebreak = new string[] {"\n"};
 					string[] passageLines = passage.Split(linebreak, StringSplitOptions.None);
 					string[] numberLines = lineNumbers.Split(linebreak, StringSplitOptions.None);
@@ -1053,7 +1111,7 @@ namespace Merino
 						// line number style
 						GUIStyle highlightOverlay = new GUIStyle();
 						highlightOverlay.font = monoFont;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.4f;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.45f;
 						highlightOverlay.richText = true;
 						highlightOverlay.wordWrap = true;
 						// line number positioning (just slightly to the left)
@@ -1092,9 +1150,32 @@ namespace Merino
 						lastRect.y += 1f;
 						lastRect.width -= 6;
 						lastRect.height -= 1;
-						highlightOverlay.normal.textColor *= 2;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
 						string syntaxHighlight = DoSyntaxMarch(newBodies[x]);
 						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
+						
+						// display any error bubbles
+						int chunkStart = x * chunkSize;
+						int chunkEnd = (x + 1) * chunkSize;
+						var errors = errorLog.Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd);
+						foreach (var error in errors)
+						{
+							// clamp error bubble based on lines actually displayed?...
+							int lineNumber = Mathf.Clamp(error.lineNumber, 0, totalLineCount);
+							
+							// place error bubble near line number
+							// TODO: oh shit... because of word wrap, this doesn't actually work???...
+							// TODO: I'm going to have to use TextEditor, find the index, move cursor to it, then use GUIStyle.GetCursorPixelPosition to get proper Rect position
+							// TODO: maybe create a batched utility function that will do all this... given an array of indices, return Vector2s for each?
+							var errorHeightPercent = 1f * (lineNumber - chunkStart) / (Mathf.Min(totalLineCount, chunkEnd) - chunkStart);
+							Rect errorRect = new Rect(bodyRect.x-8, bodyRect.y + errorHeightPercent * bodyRect.height, 24, 24);
+
+							if (GUI.Button(errorRect, new GUIContent("!", error.message), GUI.skin.button))
+							{
+								errorLog.Remove(error);
+							}
+						}
+						
 					} // end of textAreas
 					
 					// combine all bodies into a single string for saving
@@ -1226,16 +1307,17 @@ namespace Merino
 		}
 
 		// given a long string with line breaks, it will tranpose line numbers to them all (and hide the actual text with rich text Color)
-		string AddLineNumbers(string input, out int digits)
+		string AddLineNumbers(string input, out int digits, out int totalLineCount)
 		{
 			var lines = input.Split(new string[] {"\n"}, StringSplitOptions.None );
+			totalLineCount = lines.Length;
 			digits = Mathf.CeilToInt(1f * lines.Length / 10).ToString().Length + 1;
 			string invisibleBegin = "<color=#00000000>";
 			string invisibleEnd = "</color>";
-			for (int i = 0; i < lines.Length; i++)
+			for (int i = 0; i < lines.Length; i++) 
 			{
 				// generate line numbers
-				string lineDisplay = i.ToString();
+				string lineDisplay = (i+1).ToString(); // line numbers start from 1
 				lineDisplay = lineDisplay.PadLeft(digits);
 				
 				// make sure the line will be long enough
@@ -1339,6 +1421,21 @@ namespace Merino
 				this.id = id;
 				this.time = time;
 				this.bodyText = bodyText;
+			}
+		}
+
+		[SerializeField]
+		public struct MerinoErrorLine
+		{
+			public string fileName, message;
+			public int lineNumber, nodeID;
+
+			public MerinoErrorLine(string message, string fileName, int nodeID, int lineNumber=-1)
+			{
+				this.message = message;
+				this.fileName = fileName;
+				this.nodeID = nodeID;
+				this.lineNumber = lineNumber;
 			}
 		}
 		#endregion

@@ -6,7 +6,6 @@ using System.Text;
 using System.IO;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using Yarn;
@@ -32,41 +31,61 @@ namespace Merino
 		}
 		// double lastTabTime = 0.0; // this is a really bad hack
 		
-		// UI settings
-		[SerializeField] bool stopOnDialogueEnd = true;
-		[SerializeField] bool autoAdvance = false;
+		// preferences
+		static bool prefsLoaded = false;
 		
-		[SerializeField] bool useAutosave = false;
-		bool doubleClickOpensFile = true;
+		static string newFileTemplatePath = "NewFileTemplate.yarn";
+		static string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
+		
+		static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
+		static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
+		static Color highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
+		static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
+		// public static Color highlightVariables;
+		
+		// UI settings, will still get saved by Hidden EditorPrefs
+		static bool stopOnDialogueEnd = true;
+		static bool useAutoAdvance = false;
+		static bool useAutosave = true;
+		static float sidebarWidth = 180f;
+
+		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
-		[NonSerialized] float sidebarWidth = 180f;
+		bool resizingSidebar = false;
+		
 		float playPreviewHeight {
 			get { return isDialogueRunning ? 180f : 0f; }
 		}
-		Rect multiColumnTreeViewRect
+		
+		Rect sidebarSearchRect
 		{
-			get { return new Rect(10, 30, sidebarWidth, position.height-40); }
+			get { return new Rect (margin, margin, sidebarWidth, margin*2); }
+		}
+		
+		Rect sidebarRect
+		{
+			get { return new Rect(margin, 30, sidebarWidth, position.height-40); }
 		}
 
-		Rect toolbarRect
+		Rect sidebarResizeRect
 		{
-			get { return new Rect (10f, 10f, sidebarWidth, 20f); }
+			get { return new Rect(margin + sidebarWidth, 0, 5, position.height); }
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+15f, 10, position.width-sidebarWidth-20, position.height-20-playPreviewHeight);} // was height-30
+			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth+15f, position.height-10-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-10);}
+			get { return new Rect( sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-margin);}
 		}
 
-		Rect bottomToolbarRect
-		{
-			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
-		}
+//		Rect bottomToolbarRect
+//		{
+//			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
+//		}
 
 		// misc resources
 		Texture helpIcon;
@@ -78,6 +97,9 @@ namespace Merino
 		int moveCursorUndoID, moveCursorUndoIndex;
 		[SerializeField] List<MerinoUndoLog> undoData = new List<MerinoUndoLog>();
 		bool spaceWillIncrementUndo = false; // used just in Main Pane
+		
+		// error checking
+		[SerializeField] List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
 		// Yarn Spinner running stuff
 		[NonSerialized] bool isDialogueRunning;
@@ -98,7 +120,7 @@ namespace Merino
 						Debug.Log (message);
 					};
 					_dialogue.LogErrorMessage = delegate (string message) {
-						Debug.LogError (message);
+						PlaytestErrorLog (message);
 					};
 				}
 				return _dialogue;
@@ -106,7 +128,7 @@ namespace Merino
 		}
 
 		#region EditorWindowStuff
-		
+
 		[MenuItem("Window/Merino (Yarn Editor)")]
 		public static MerinoEditorWindow GetWindow ()
 		{
@@ -116,6 +138,89 @@ namespace Merino
 			window.Repaint();
 			return window;
 		}
+
+		static void ResetEditorPrefsAll()
+		{
+			newFileTemplatePath = "NewFileTemplate.yarn";
+			
+			highlightComments = new Color(0.3f, 0.6f, 0.25f);
+			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
+			highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
+			highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
+			
+			SaveEditorPrefs();
+
+			stopOnDialogueEnd = true;
+			useAutoAdvance = false;
+			useAutosave = true;
+			sidebarWidth = 180f;
+			
+			SaveHiddenEditorPrefs();
+		}
+
+		public static void LoadEditorPrefs()
+		{
+			if (EditorPrefs.HasKey("MerinoFirstRun") == false)
+			{
+				SaveEditorPrefs();
+				EditorPrefs.SetBool("MerinoFirstRun", true);
+			}
+			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
+
+			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
+			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
+			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightNodeOptions"), out highlightNodeOptions);
+			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightShortcutOptions"), out highlightShortcutOptions);
+		}
+
+		public static void SaveEditorPrefs()
+		{
+			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
+			
+			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
+			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );
+			EditorPrefs.SetString("MerinoHighlightNodeOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightNodeOptions) );
+			EditorPrefs.SetString("MerinoHighlightShortcutOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightShortcutOptions) );
+
+		}
+		
+		[PreferenceItem("Merino (Yarn)")]
+		public static void MerinoPreferencesGUI()
+		{
+			// Load the preferences
+			if (!prefsLoaded)
+			{
+				LoadEditorPrefs();
+				prefsLoaded = true;
+			}
+
+
+			// Reset button
+			if (GUILayout.Button("Reset Merino to default settings"))
+			{
+				ResetEditorPrefsAll();
+				SaveEditorPrefs();
+			}
+			
+			// Preferences GUI
+			GUILayout.Label("File Handling", EditorStyles.boldLabel);
+			EditorGUILayout.Space();
+			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
+			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
+
+			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
+			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
+			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
+			highlightNodeOptions = EditorGUILayout.ColorField("[[NodeOptions]]", highlightNodeOptions);
+			highlightShortcutOptions = EditorGUILayout.ColorField("-> ShortcutOptions", highlightShortcutOptions);
+
+			// Save the preferences
+			if (GUI.changed)
+			{
+				SaveEditorPrefs();
+			}
+
+		}
 		
 		void ResetMerino()
 		{
@@ -123,9 +228,30 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
+			AssetDatabase.DeleteAsset(tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			InitIfNeeded(true);
+		}
+
+		static void LoadHiddenEditorPrefs()
+		{
+			if (EditorPrefs.HasKey("MerinoStopOn") == false)
+			{
+				SaveHiddenEditorPrefs(); // save defaults if not found
+			}
+			stopOnDialogueEnd = EditorPrefs.GetBool("MerinoStopOn");
+			useAutoAdvance = EditorPrefs.GetBool("MerinoAutoAdvance");
+			useAutosave = EditorPrefs.GetBool("MerinoAutosave");
+			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
+		}
+
+		static void SaveHiddenEditorPrefs()
+		{
+			EditorPrefs.SetBool("MerinoStopOn", stopOnDialogueEnd);
+			EditorPrefs.SetBool("MerinoAutoAdvance", useAutoAdvance);
+			EditorPrefs.SetBool("MerinoAutosave", useAutosave);
+			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
 		}
 		
 		void InitIfNeeded (bool ignoreSelection=false)
@@ -133,6 +259,12 @@ namespace Merino
 			if (m_Initialized) return;
 
 			Undo.undoRedoPerformed += OnUndo;
+			undoData.Clear();
+			errorLog.Clear();
+			
+			// default highlight colors		
+			LoadEditorPrefs();
+			LoadHiddenEditorPrefs();
 			
 			// load font
 			if (monoFont == null)
@@ -151,21 +283,31 @@ namespace Merino
 				viewState = new TreeViewState();
 
 			bool firstInit = m_MultiColumnHeaderState == null;
-			var headerState = MerinoTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
+			var headerState = MerinoTreeView.CreateDefaultMultiColumnHeaderState(sidebarRect.width);
 			if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
 				MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
 			m_MultiColumnHeaderState = headerState;
 				
-			var multiColumnHeader = new MyMultiColumnHeader(headerState);
+			var multiColumnHeader = new MerinoMultiColumnHeader(headerState);
 			if (firstInit)
 				multiColumnHeader.ResizeToFit ();
 
-			treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-			undoData.Clear();
-			var treeModel = new TreeModel<MerinoTreeElement>(GetData());
-				
-			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
+			// detect temp data (e.g. when going into play mode and back)
+			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(tempDataPath);
+			if (possibleTempData == null)
+			{
+				treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
+				AssetDatabase.CreateAsset(treeData, tempDataPath);
+				AssetDatabase.SaveAssets();
+			}
+			else
+			{
+				treeData = possibleTempData;
+			}
 
+			// generate sidebar data structures
+			var treeModel = new TreeModel<MerinoTreeElement>(GetData(null, true));
+			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
 			m_SearchField = new SearchField();
 			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
 
@@ -177,6 +319,7 @@ namespace Merino
 			}
 		}
 		
+		// called when something get selected in Project tab
 		void OnSelectionChange ()
 		{
 			if (!m_Initialized)
@@ -200,18 +343,6 @@ namespace Merino
 			}
 		}
 		
-		[OnOpenAsset]
-		public static bool OnOpenAsset (int instanceID, int line)
-		{
-			var myTextAsset = EditorUtility.InstanceIDToObject(instanceID) as TextAsset;
-			if (myTextAsset != null)
-			{
-				var window = GetWindow ();
-				return window.SetTreeAsset(myTextAsset);
-			}
-			return false; // we did not handle the open
-		}
-		
 		// This gets called many times a second
 		public void Update()
 		{
@@ -222,7 +353,7 @@ namespace Merino
 				lastSaveTime = EditorApplication.timeSinceStartup + 9999; // don't save again until SaveDataToFile resets the variable
 			}
 			
-			if (isDialogueRunning)
+			if (isDialogueRunning || resizingSidebar)
 			{
 				// MASSIVELY improves framerate, wow, amazing
 				Repaint();
@@ -240,7 +371,6 @@ namespace Merino
 			Undo.undoRedoPerformed -= OnUndo;
 			Undo.ClearUndo(treeData);
 			
-			DestroyImmediate(treeData,true);
 			undoData.Clear();
 			
 			ForceStopDialogue();
@@ -259,7 +389,7 @@ namespace Merino
 			for( int i=undoData.Count-1; i>0 && treeData.timestamp < undoData[i].time; i-- )
 			{
 				var recent = undoData[i];
-				var treeDataNode = treeData.treeElements.Where(x => x.id == recent.id).First();
+				var treeDataNode = treeData.treeElements.First(x => x.id == recent.id);
 				
 				moveCursorUndoID = recent.id;
 				
@@ -282,20 +412,6 @@ namespace Merino
 		
 		
 		#region LoadingAndSaving
-
-		bool SetTreeAsset (TextAsset myTextAsset)
-		{
-			if (doubleClickOpensFile && IsProbablyYarnFile(myTextAsset))
-			{
-				currentFile = myTextAsset;
-				m_Initialized = false;
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
 		
 		bool IsProbablyYarnFile(TextAsset textAsset)
 		{
@@ -309,21 +425,27 @@ namespace Merino
 			}
 		}
 		
-		IList<MerinoTreeElement> GetData (TextAsset source=null)
+		IList<MerinoTreeElement> GetData (TextAsset source=null, bool isFromInit=false)
 		{
 			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
 			treeElements.Add(root);
 			
-			// extract data from the text file
-			if (source == null && currentFile != null)
+			// extract data from the text file, but only if it's not about entering playmode
+			if (source == null && currentFile != null )
 			{
 				source = currentFile;
+			}
+			
+			// hack hack hack: if we're calling GetData from init, then ignore playmode currentFile
+			if (isFromInit && EditorApplication.isPlayingOrWillChangePlaymode)
+			{
+				source = null;
 			}
 
 			if (source != null) {
 				AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source));
-				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile));
+				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
 				var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
 				foreach (var node in nodes)
 				{
@@ -332,7 +454,7 @@ namespace Merino
 					string cleanBody = CleanYarnField(node.body);
 					string cleanTags = CleanYarnField(node.tags, true);
 					// write data to the objects
-					var newItem = new MerinoTreeElement( cleanName ,0,treeElements.Count);
+					var newItem = new MerinoTreeElement( cleanName, 0, treeElements.Count);
 					newItem.nodeBody = cleanBody;
 					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
 					newItem.nodeTags = cleanTags;
@@ -341,15 +463,21 @@ namespace Merino
 			}
 			else 
 			{ 
-				// load default data
-				var defaultData = Resources.Load<TextAsset>("NewFileTemplate.yarn");
+				// see if we can load temp data
+				if (treeData != null && treeData.treeElements != null && treeData.treeElements.Count > 0)
+				{
+					return treeData.treeElements;
+				}
+				
+				// otherwise, load default data from template
+				var defaultData = Resources.Load<TextAsset>(newFileTemplatePath);
 				if (defaultData != null)
 				{
 					return GetData(defaultData);
 				}
 				else
-				{
-					Debug.LogError("Merino couldn't load default NewFileTemplate.yarn.txt... by default, it is in Assets/Merino/Editor/Resources/");
+				{ // oops, couldn't find the new file template!
+					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", newFileTemplatePath);
 					return null;
 				}
 				
@@ -384,7 +512,17 @@ namespace Merino
 			// gather data
 			ValidateNodeTitles();
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			
+			// grab nodes based on visible order in the hierarchy tree view (sorting)
+			
+			// first, in order to properly export, we need to expand everything
+			var previousExpanded = treeView.GetExpanded();
+			treeView.ExpandAll();
+			// then grab the nodes
+			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// then set the expanded nodes back to what they were
+			treeView.SetExpanded(previousExpanded);
+			
 			// save data to string
 			foreach (var item in treeNodes)
 			{
@@ -526,9 +664,18 @@ namespace Merino
 		{
 			if (reset)
 			{
+				errorLog.Clear();
 				dialogue.UnloadAll();
 				varStorage.ResetToDefaults();
-				dialogue.LoadString(SaveNodesAsString());
+				try
+				{
+					dialogue.LoadString(SaveNodesAsString());
+				}
+				catch (Exception ex)
+				{
+					PlaytestErrorLog(ex.Message);
+				}
+				
 			}
 			this.StopAllCoroutines();
 
@@ -545,6 +692,52 @@ namespace Merino
 			}
 
 			this.StopAllCoroutines();
+		}
+
+		// logs errors from the playtest engine and Yarn Loader
+		public void PlaytestErrorLog(string message)
+		{
+			string fileName = "unknown";
+			string nodeName = "unknown";
+			int lineNumber = -1;
+			
+			// detect file name
+			if (currentFile != null)
+			{
+				fileName = currentFile.name;
+			} 
+			else if (message.Contains("file"))
+			{
+				fileName = message.Split(new string[] {"file"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+			}
+			
+			// detect node name
+			if (message.Contains("node"))
+			{
+				nodeName = message.Split(new string[] {"node"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+				
+				// detect line numbers, if any, by grabbing the first digit after nodeName
+				string numberLog = "";
+				for( int index = message.IndexOf(nodeName); index < message.Length; index++)
+				{
+					if (Char.IsDigit(message[index]))
+					{
+						numberLog += message[index];
+					}
+					else if ( numberLog.Length > 0) // did we hit a non-number, after already hitting numbers? then stop
+					{
+						break;
+					}
+				}
+
+				int.TryParse(numberLog, out lineNumber);
+			}
+			
+			// also output to Unity console
+			Debug.LogError(message);
+			// Debug.LogFormat("{0} {1} {2}", fileName, nodeName, lineNumber);
+			var nodeRef = treeData.treeElements.Where(x => x.name == nodeName).ToArray();
+			errorLog.Add( new MerinoErrorLine(message, fileName, nodeRef.Length > 0 ? nodeRef[0].id : -1, Mathf.Max(0, lineNumber)));
 		}
 
 		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
@@ -566,7 +759,7 @@ namespace Merino
 
                     // Wait for line to finish displaying
                     var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, autoAdvance));
+	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, useAutoAdvance));
 //	                while (dialogueUI.inputContinue == false)
 //	                {
 //		                yield return new WaitForSeconds(0.01f);
@@ -591,7 +784,7 @@ namespace Merino
 //                    if (DispatchCommand(commandResult.command.text) == true) {
 //                        // command was dispatched
 //                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, autoAdvance));
+	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, useAutoAdvance));
 //                    }
 
 
@@ -625,8 +818,9 @@ namespace Merino
 		{
 			InitIfNeeded();
 
-			SearchBar (toolbarRect);
-			DoTreeView (multiColumnTreeViewRect);
+			DrawSidebarSearch (sidebarSearchRect);
+			DrawSidebar (sidebarRect);
+			ResizeSidebar();
 
 			if (viewState != null)
 			{
@@ -635,7 +829,7 @@ namespace Merino
 
 			if (dialogueUI != null && isDialogueRunning)
 			{
-				PreviewToolbar(playPreviewRect);
+				DrawPlaytestToolbar(playPreviewRect);
 				// if not pressed, then show the normal play preview
 				dialogueUI.OnGUI(playPreviewRect);
 			}
@@ -643,7 +837,33 @@ namespace Merino
 		//	BottomToolBar (bottomToolbarRect);
 		}
 
-		void PreviewToolbar(Rect rect)
+		const int sidebarWidthClamp = 50;
+		
+		// from https://answers.unity.com/questions/546686/editorguilayout-split-view-resizable-scroll-view.html
+		private void ResizeSidebar(){
+			EditorGUIUtility.AddCursorRect( sidebarResizeRect,MouseCursor.SplitResizeLeftRight);
+         
+			// start resizing
+			if( Event.current.type == EventType.MouseDown && sidebarResizeRect.Contains(Event.current.mousePosition))
+			{
+				resizingSidebar = true;
+			}
+			
+			// do resize
+			if(resizingSidebar){
+				sidebarWidth = Mathf.Clamp(Event.current.mousePosition.x - 10, sidebarWidthClamp, position.width-sidebarWidth);
+			//	cursorChangeRect.Set(cursorChangeRect.x,currentScrollViewHeight,cursorChangeRect.width,cursorChangeRect.height);
+			}
+
+			// stop resizing
+			if (Event.current.rawType == EventType.MouseUp)
+			{
+				resizingSidebar = false;
+				SaveHiddenEditorPrefs();
+			}
+		}
+
+		void DrawPlaytestToolbar(Rect rect)
 		{
 			// toolbar
 			GUILayout.BeginArea(rect);
@@ -692,7 +912,9 @@ namespace Merino
 			GUI.enabled = true;
 
 			GUILayout.FlexibleSpace();
-			// stop on dialogue end
+			
+			// begin some settings
+			EditorGUI.BeginChangeCheck();
 			var smallToggleStyle = new GUIStyle();
 			smallToggleStyle.fontSize = 10;
 			smallToggleStyle.alignment = TextAnchor.MiddleLeft;
@@ -701,10 +923,16 @@ namespace Merino
 				smallToggleStyle.normal.textColor = Color.gray;
 				
 			}
-			autoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), autoAdvance, smallToggleStyle, GUILayout.Width(100));
+			// auto advance button
+			useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), useAutoAdvance, smallToggleStyle, GUILayout.Width(100));
 			GUILayout.FlexibleSpace();
-			// stop on dialogue end
+			// stop on dialogue end button
 			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
+			if (EditorGUI.EndChangeCheck())
+			{
+				SaveHiddenEditorPrefs(); // remember new settings
+			}
+			
 			// stop button
 			var backupColor = GUI.backgroundColor;
 			GUI.backgroundColor = Color.red;
@@ -712,18 +940,19 @@ namespace Merino
 			{
 				ForceStopDialogue();
 			}
-
 			GUI.backgroundColor = backupColor;
+			
+			// close out toolbar
 			EditorGUILayout.EndHorizontal();
 			GUILayout.EndArea();
 		}
 		
-		void SearchBar (Rect rect)
+		void DrawSidebarSearch (Rect rect)
 		{
 			treeView.searchString = m_SearchField.OnGUI (rect, treeView.searchString);
 		}
 
-		void DoTreeView (Rect rect)
+		void DrawSidebar (Rect rect)
 		{
 			float BUTTON_HEIGHT = 20;
 			var buttonRect = rect;
@@ -750,16 +979,25 @@ namespace Merino
 			GUILayout.BeginArea(rect);
 			
 			GUILayout.BeginHorizontal();
+			
+			// autosave / save button
 			if (currentFile != null)
 			{
+				EditorGUI.BeginChangeCheck();
 				useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), useAutosave, GUILayout.Width(16));
 				GUILayout.Label(new GUIContent("AutoSave?   ", "if enabled, will automatically save every change"), GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
+				if (EditorGUI.EndChangeCheck())
+				{
+					SaveHiddenEditorPrefs();
+				}
 				if (!useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
 				{
 					SaveDataToFile();
 					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
 				}
 			}
+			
+			// save as button
 			if (GUILayout.Button( new GUIContent("Save As...", "save all changes as a new .yarn.txt file"), GUILayout.MaxWidth(80)))
 			{
 				string defaultPath = Application.dataPath + "/";
@@ -810,8 +1048,9 @@ namespace Merino
 				}
 			}
 			GUILayout.FlexibleSpace();
-			// help and documentation
-			if (GUILayout.Button(new GUIContent(helpIcon, "click to open Merino help / documentation in web browser"), EditorStyles.label, GUILayout.Width(24)) )
+			// help and documentation, with short and long buttons
+			if ( (position.width <= 800 && GUILayout.Button(new GUIContent(helpIcon, "click to open Merino help page / documentation in web browser"), EditorStyles.label, GUILayout.Width(24)) )
+				|| (position.width > 800 && GUILayout.Button(new GUIContent(" Help & Documentation", helpIcon, "click to open Merino help page / documentation in web browser"), GUILayout.Width(160))) )
 			{
 				Help.BrowseURL("https://github.com/radiatoryang/merino/wiki");
 			}
@@ -854,42 +1093,71 @@ namespace Merino
 					
 					// NODE BODY
 					var backupContentColor = GUI.contentColor;
-					GUI.contentColor = GUI.enabled==false ? backupContentColor : new Color ( 0f, 0f, 0f, 0.16f );
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
 					// stuff for manual keyboard tab support
 //					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
-					var te = typeof(EditorGUI)
-						.GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic)
-						.GetValue(null) as TextEditor;
-					GUI.SetNextControlName ( "TextArea" + newName );
+					var te = typeof(EditorGUI).GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as TextEditor;
 					
-					// draw the body
+					// start preparing to draw the body
+					int lineDigits = -1;
+					int totalLineCount = -1;
+					var lineNumbers = AddLineNumbers(passage, out lineDigits, out totalLineCount);
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
-					string newBody = EditorGUILayout.TextArea(passage, bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
-					GUI.contentColor = backupContentColor;
+					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 					
-					// only run the fancier stuff if we're not in playtesting mode
-					if (GUI.enabled)
+					// at around 250-300+ lines, Merino was giving error messages and line numbers broke: "String too long for TextMeshGenerator. Cutting off characters."
+					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines, just to be safe)
+					const int chunkSize = 200;
+					// split passage and lineNumbers into lines
+					var linebreak = new string[] {"\n"};
+					string[] passageLines = passage.Split(linebreak, StringSplitOptions.None);
+					string[] numberLines = lineNumbers.Split(linebreak, StringSplitOptions.None);
+					
+					// recombine into lines chunks of 200 lines
+					int chunkCount = Mathf.CeilToInt(1f * passageLines.Length / chunkSize);
+					string[] passageChunks = new string[chunkCount];
+					string[] numberChunks = new string[chunkCount];
+					for (int i = 0; i < passageLines.Length; i+=chunkSize)
 					{
-						// manual tab support for GUILayout.TextArea... no longer needed for EditorGUILayout.TextArea
-//						string oldBody = newBody;
-//						newBody = KeyboardTabSupport(newBody, te);
-//						if (oldBody.Length != newBody.Length)
-//						{
-//							forceSave = true;
-//						}
-
+						int chunkIndex = Mathf.CeilToInt(1f * i / chunkSize);
+						passageChunks[chunkIndex] = string.Join( linebreak[0], passageLines.Skip(i).Take(chunkSize).ToArray() );
+						numberChunks[chunkIndex] = string.Join( linebreak[0], numberLines.Skip(i).Take(chunkSize).ToArray() );
+					}
+					
+					// draw chunks as TextAreas, each with their own highlighting and line number overlays
+					var newBodies = new string[chunkCount];
+					for( int x=0; x<passageChunks.Length; x++) {
+						GUI.contentColor = new Color ( 0f, 0f, 0f, 0.16f ); // the text you type is actually invisible
+						GUI.SetNextControlName ( "TextArea" + newName + x.ToString() );
+						// draw text area
+						newBodies[x] = EditorGUILayout.TextArea(passageChunks[x], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+						GUI.contentColor = backupContentColor;
+						var bodyRect = GUILayoutUtility.GetLastRect(); // we need the TextArea rect for the line number and syntax highlight overlays
+						
+						// line number style
+						GUIStyle highlightOverlay = new GUIStyle();
+						highlightOverlay.font = monoFont;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.45f;
+						highlightOverlay.richText = true;
+						highlightOverlay.wordWrap = true;
+						// line number positioning (just slightly to the left)
+						Rect linesRect = new Rect(bodyRect);
+						linesRect.x -= lineDigits * 12;
+						// draw the line numbers
+						GUI.Label(linesRect, numberChunks[x], highlightOverlay);
+					
+						// undo support: move back keyboard cursor (caret) to undo point... minor quality of life that's actually kind of major
 						if ( moveCursorUndoID == id && moveCursorUndoIndex >= 0 && te != null && GUIUtility.keyboardControl == te.controlID )
 						{
 							te.cursorIndex = moveCursorUndoIndex;
 							te.selectIndex = moveCursorUndoIndex;
-							// moveCursorUndo* will get blanked out after the foreach loop
+							// moveCursorUndo* will get blanked out after the foreach node loop
 						}
 						
-						// detect whether to increment the undo group
+						// detect whether to increment the undo group based on typing whitespace / word breaks
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
 						{
 							var e = Event.current;
@@ -898,7 +1166,7 @@ namespace Merino
 								Undo.IncrementCurrentGroup();
 								spaceWillIncrementUndo = false;
 							}
-
+							// if user presses something other than SPACE, then let whitespace increment undo again
 							if (!spaceWillIncrementUndo && e.isKey && e.keyCode != KeyCode.Space)
 							{
 								spaceWillIncrementUndo = true;
@@ -906,22 +1174,43 @@ namespace Merino
 						}
 
 						// syntax highlight via label overlay
-						Rect lastRect = GUILayoutUtility.GetLastRect();
+						Rect lastRect = new Rect(bodyRect);
 						lastRect.x += 2;
 						lastRect.y += 1f;
 						lastRect.width -= 6;
 						lastRect.height -= 1;
-						string syntaxHighlight = DoSyntaxMarch(newBody);
-
-						GUIStyle highlightOverlay = new GUIStyle();
-						highlightOverlay.font = monoFont;
 						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
-						highlightOverlay.richText = true;
-						highlightOverlay.wordWrap = true;
-						
+						string syntaxHighlight = DoSyntaxMarch(newBodies[x]);
 						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
-					}
+						
+						// display any error bubbles
+						int chunkStart = x * chunkSize;
+						int chunkEnd = (x + 1) * chunkSize;
+						var errors = errorLog.Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd);
+						foreach (var error in errors)
+						{
+							// clamp error bubble based on lines actually displayed?...
+							int lineNumber = Mathf.Clamp(error.lineNumber, 0, totalLineCount);
+							
+							// place error bubble near line number
+							// TODO: oh shit... because of word wrap, this doesn't actually work???...
+							// TODO: I'm going to have to use TextEditor, find the index, move cursor to it, then use GUIStyle.GetCursorPixelPosition to get proper Rect position
+							// TODO: maybe create a batched utility function that will do all this... given an array of indices, return Vector2s for each?
+							var errorHeightPercent = 1f * (lineNumber - chunkStart) / (Mathf.Min(totalLineCount, chunkEnd) - chunkStart);
+							Rect errorRect = new Rect(bodyRect.x-8, bodyRect.y + errorHeightPercent * bodyRect.height, 24, 24);
 
+							if (GUI.Button(errorRect, new GUIContent("!", error.message), GUI.skin.button))
+							{
+								errorLog.Remove(error);
+							}
+						}
+						
+					} // end of textAreas
+					
+					// combine all bodies into a single string for saving
+					var newBody = string.Join("\n", newBodies);
+
+					// playtest preview button at bottom of node
 					if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
 					{
 						idToPreview = id;
@@ -935,9 +1224,10 @@ namespace Merino
 					// did user edit something?
 					if (EditorGUI.EndChangeCheck() )
 					{
-						// undo stuff
+						// undo begin
 						Undo.RecordObject(treeData, "Merino > " + newName );
 						
+						// actually commit the data now
 						m_TreeView.treeModel.Find(id).name = newName;
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
 						treeData.editedID = id;
@@ -946,6 +1236,7 @@ namespace Merino
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
 						
+						// save after commit if we're autosaving
 						if (currentFile != null && useAutosave)
 						{
 							SaveDataToFile();
@@ -977,7 +1268,7 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 		
-		#region Utility
+		#region MainPaneUtility
 
 		// I can't believe I finally got this to work, wow
 		// only needed for GUILayout.TextArea
@@ -1021,21 +1312,48 @@ namespace Merino
 			string newSyntax = syntax.Replace("\t", "").TrimEnd(' ').TrimStart(' '); // cleanup string
 			if ( newSyntax.StartsWith ( "//" ) )
 			{
-				return new Color(0.3f, 0.6f, 0.25f);
+				return highlightComments;
 			} else if (newSyntax.StartsWith("->") )
 			{
-				return new Color(0.8f, 0.5f, 0.1f);
+				return highlightShortcutOptions;
 			} else if (newSyntax.StartsWith("[["))
 			{
-				return new Color(0.8f, 0.4f, 0.6f);
+				return highlightNodeOptions;
 			}else if (newSyntax.StartsWith("<<"))
 			{
-				return new Color(0f, 0.6f, 0.7f);
+				return highlightShortcutOptions;
 			}
 			else
 			{
 				return Color.white;
 			}
+		}
+
+		// given a long string with line breaks, it will tranpose line numbers to them all (and hide the actual text with rich text Color)
+		string AddLineNumbers(string input, out int digits, out int totalLineCount)
+		{
+			var lines = input.Split(new string[] {"\n"}, StringSplitOptions.None );
+			totalLineCount = lines.Length;
+			digits = Mathf.CeilToInt(1f * lines.Length / 10).ToString().Length + 1;
+			string invisibleBegin = "<color=#00000000>";
+			string invisibleEnd = "</color>";
+			for (int i = 0; i < lines.Length; i++) 
+			{
+				// generate line numbers
+				string lineDisplay = (i+1).ToString(); // line numbers start from 1
+				lineDisplay = lineDisplay.PadLeft(digits);
+				
+				// make sure the line will be long enough
+				if (lines[i].Length < digits)
+				{
+					lines[i] = lines[i].PadRight(digits);
+				}
+				
+				// add line number to line
+				lines[i] = lineDisplay + invisibleBegin + lines[i].Remove(0, digits) + invisibleEnd;
+			}
+
+			return string.Join("\n", lines);
 		}
 
 /*		void BottomToolBar (Rect rect)
@@ -1126,6 +1444,21 @@ namespace Merino
 				this.id = id;
 				this.time = time;
 				this.bodyText = bodyText;
+			}
+		}
+
+		[SerializeField]
+		public struct MerinoErrorLine
+		{
+			public string fileName, message;
+			public int lineNumber, nodeID;
+
+			public MerinoErrorLine(string message, string fileName, int nodeID, int lineNumber=-1)
+			{
+				this.message = message;
+				this.fileName = fileName;
+				this.nodeID = nodeID;
+				this.lineNumber = lineNumber;
 			}
 		}
 		#endregion
@@ -1414,10 +1747,11 @@ namespace Merino
 	}
 
 
-	internal class MyMultiColumnHeader : MultiColumnHeader
+	internal class MerinoMultiColumnHeader : MultiColumnHeader
 	{
 		Mode m_Mode;
-
+		//Texture helpIcon = EditorGUIUtility.IconContent("_Help").image;
+		
 		public enum Mode
 		{
 			LargeHeader,
@@ -1425,7 +1759,7 @@ namespace Merino
 			MinimumHeaderWithoutSorting
 		}
 
-		public MyMultiColumnHeader(MultiColumnHeaderState state)
+		public MerinoMultiColumnHeader(MultiColumnHeaderState state)
 			: base(state)
 		{
 			mode = Mode.DefaultHeader;
@@ -1448,7 +1782,7 @@ namespace Merino
 						break;
 					case Mode.DefaultHeader:
 						canSort = true;
-						height = DefaultGUI.defaultHeight;
+						height = DefaultGUI.minimumHeight;
 						break;
 					case Mode.MinimumHeaderWithoutSorting:
 						canSort = false;
@@ -1456,6 +1790,23 @@ namespace Merino
 						break;
 				}
 			}
+		}
+		
+		public override void OnGUI(Rect rect, float xScroll)
+		{
+			// add extra "clear sorting" button if sorting is active
+			var clearSortRect = new Rect(rect);
+			clearSortRect.width = 18;
+			clearSortRect.height = clearSortRect.width;
+			rect.x += clearSortRect.width;
+			rect.width -= clearSortRect.width;
+			if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+			{
+				state.sortedColumnIndex = -1;
+			}
+			
+			// draw rest of the header
+			base.OnGUI(rect, xScroll);
 		}
 
 		protected override void ColumnHeaderGUI (MultiColumnHeaderState.Column column, Rect headerRect, int columnIndex)

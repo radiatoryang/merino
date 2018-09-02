@@ -101,6 +101,9 @@ namespace Merino
 		// error checking
 		[SerializeField] List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
+		// node management
+		private List<int> DeleteList = new List<int>();
+		
 		// Yarn Spinner running stuff
 		[NonSerialized] bool isDialogueRunning;
 		MerinoVariableStorage varStorage;
@@ -409,8 +412,6 @@ namespace Merino
 		}
 		#endregion
 		
-		
-		
 		#region LoadingAndSaving
 		
 		bool IsProbablyYarnFile(TextAsset textAsset)
@@ -562,8 +563,6 @@ namespace Merino
 		}
 		#endregion
 		
-		
-
 		#region NodeManagement
 
 		void AddNewNode()
@@ -620,6 +619,7 @@ namespace Merino
 			}
 		
 			SaveDataToFile();
+			DeleteList.Clear();
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -661,8 +661,6 @@ namespace Merino
 			}
 		}
 		#endregion
-
-
 		
 		#region PlaytestPreview
 		void PlaytestFrom(string startPassageName, bool reset=true)
@@ -816,8 +814,6 @@ namespace Merino
 	        Repaint();
         }
 		#endregion
-		
-		
 		
 		void OnGUI ()
 		{
@@ -978,9 +974,7 @@ namespace Merino
 			rect.height -= BUTTON_HEIGHT;
 			m_TreeView.OnGUI(rect);
 		}
-		
-		private List<int> DeleteList = new List<int>();
-		
+				
 		void DrawMainPane(Rect rect)
 		{
 			GUILayout.BeginArea(rect);

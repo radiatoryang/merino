@@ -577,44 +577,49 @@ namespace Merino
 			SaveDataToFile();
 		}
 
-		//suppress should be true if attempting to delete multiple nodes and multiple dialogs/saves aren't ideal
-		void DeleteNode(int id, bool suppress = false)
+		public void AddNodeToDelete(int id)
 		{
-			if (!suppress && !EditorUtility.DisplayDialog("Delete Node?",
-				    "Are you sure you want to delete " + m_TreeView.treeModel.Find(id).name + "?", "Delete", "Cancel"))
+			if (!EditorUtility.DisplayDialog("Delete Node?",
+				"Are you sure you want to delete " + m_TreeView.treeModel.Find(id).name + "?", "Delete", "Cancel"))
 			{
 				return;
 			}
-				
-			m_TreeView.treeModel.RemoveElements( new List<int>() {id});
-			if (viewState.selectedIDs.Contains(id))
-			{
-				viewState.selectedIDs.Remove(id);
-			}
 
-			if (!suppress)
-			{
-				SaveDataToFile();
-			}
+			DeleteList.Add(id);
 		}
 
-		public void DeleteNode(IList<int> ids)
+		public void AddNodeToDelete(IList<int> ids)
 		{
 			if (ids.Count == 1)
 			{
-				DeleteNode(ids[0]);
+				AddNodeToDelete(ids[0]);
 				return;
 			}
 			
 			if (EditorUtility.DisplayDialog("Delete Nodes?",
 				"Are you sure you want to delete " + ids.Count + " nodes?", "Delete", "Cancel"))
 			{
-				for (int i = 0; i < ids.Count; i++)
-				{
-					DeleteNode(ids[i], true);
-				}
-				SaveDataToFile();
+				DeleteList.AddRange(ids);
 			}
+		}
+
+		public void DeleteNodes()
+		{
+			if (DeleteList.Count <= 0)
+			{
+				return;
+			}
+
+			m_TreeView.treeModel.RemoveElements(DeleteList);
+			foreach (var id in DeleteList)
+			{
+				if (viewState.selectedIDs.Contains(id))
+				{
+					viewState.selectedIDs.Remove(id);
+				}
+			}
+		
+			SaveDataToFile();
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -974,6 +979,8 @@ namespace Merino
 			m_TreeView.OnGUI(rect);
 		}
 		
+		private List<int> DeleteList = new List<int>();
+		
 		void DrawMainPane(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
@@ -1086,7 +1093,7 @@ namespace Merino
 					// delete button
 					if (GUILayout.Button("Delete Node", GUILayout.Width(100)))
 					{
-						DeleteNode(id);
+						AddNodeToDelete(id);
 					}
 					EditorGUILayout.EndHorizontal();
 					
@@ -1247,6 +1254,7 @@ namespace Merino
 					}
 				}
 
+				DeleteNodes();
 				moveCursorUndoID = -1;
 				moveCursorUndoIndex = -1;
 				

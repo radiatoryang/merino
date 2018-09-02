@@ -331,7 +331,7 @@ namespace Merino
 
 		void DeleteSelectedNodes()
 		{
-			MerinoEditorWindow.GetWindow().DeleteNode(GetSelection());
+			MerinoEditorWindow.GetWindow().AddNodeToDelete(GetSelection());
 		}
 
 		#endregion
@@ -352,11 +352,6 @@ namespace Merino
 		}
 
 		#region Misc
-			
-		protected override bool CanStartDrag(CanStartDragArgs args)
-		{
-			return false;
-		}
 
 		protected override bool CanMultiSelect (TreeViewItem item)
 		{

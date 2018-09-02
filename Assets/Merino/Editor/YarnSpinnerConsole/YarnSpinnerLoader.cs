@@ -46,17 +46,17 @@ using System.Linq;
 
 namespace Yarn {
 
-	public enum NodeFormat
-	{
-		Unknown, // an unknown type
-
-		SingleNodeText, // a plain text file containing a single node with no metadata
-
-		JSON, // a JSON file containing multiple nodes with metadata
-
-		Text, //  a text file containing multiple nodes with metadata
-
-	}
+//	public enum NodeFormat
+//	{
+//		Unknown, // an unknown type
+//
+//		SingleNodeText, // a plain text file containing a single node with no metadata
+//
+//		JSON, // a JSON file containing multiple nodes with metadata
+//
+//		Text, //  a text file containing multiple nodes with metadata
+//
+//	}
 
 	public class YarnSpinnerLoader {
 

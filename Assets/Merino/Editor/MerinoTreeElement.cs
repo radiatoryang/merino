@@ -10,7 +10,7 @@ namespace Merino
 	{
 	//	public float floatValue1, floatValue2, floatValue3;
 	//	public Material material;
-		public Color nodeColor;
+	//	public Color nodeColor;
 		public Vector2Int nodePosition;
 		//public string nodeTitle = "";
 		public string nodeTags = "";

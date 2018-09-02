@@ -761,7 +761,7 @@ namespace Merino
                 } else if(step is Yarn.Dialogue.NodeCompleteResult) {
 
                     // Wait for post-node action
-                    var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
+                    // var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
                     // yield return this.StartCoroutine (this.dialogueUI.NodeComplete (nodeResult.nextNode));
                 }
             }
@@ -934,10 +934,10 @@ namespace Merino
 			if (EditorGUI.EndChangeCheck())
 			{
 //				Undo.RecordObject(treeData, "Merino: add new node");
-//				if (addNewNode)
-//				{
+				if (addNewNode)
+				{
 					AddNewNode();
-//				}
+				}
 			}
 			rect.y += BUTTON_HEIGHT;
 			rect.height -= BUTTON_HEIGHT;

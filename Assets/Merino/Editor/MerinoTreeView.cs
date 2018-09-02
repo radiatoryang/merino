@@ -274,9 +274,8 @@ namespace Merino
 //					break;
 			}
 		}
-
-		// Rename
-		//--------
+		
+		#region Rename
 
 		protected override bool CanRename(TreeViewItem item)
 		{
@@ -303,8 +302,56 @@ namespace Merino
 			return base.GetRenameRect (cellRect, row, item);
 		}
 
-		// Misc
-		//--------
+		#endregion
+	
+		#region Context Menu
+
+		protected override void ContextClickedItem(int id)
+		{
+			ShowContextMenu();
+		}
+			
+		void ShowContextMenu()
+		{
+			bool showDelete = HasSelection();
+
+			GenericMenu commandMenu = new GenericMenu();
+
+			if (showDelete)
+			{
+				commandMenu.AddItem(new GUIContent("Delete"), false, DeleteSelectedNodes);
+			}
+			else
+			{
+				commandMenu.AddDisabledItem(new GUIContent("Delete"));
+			}
+	        
+			commandMenu.ShowAsContext();
+		}
+
+		void DeleteSelectedNodes()
+		{
+			MerinoEditorWindow.GetWindow().AddNodeToDelete(GetSelection());
+		}
+
+		#endregion
+
+		protected override void KeyEvent()
+		{
+			if (Event.current.type == EventType.KeyDown)
+			{
+				if (Event.current.keyCode == KeyCode.Delete)
+				{
+					//delete selected nodes
+					if (HasSelection())
+						DeleteSelectedNodes();
+				
+					Event.current.Use();
+				}
+			}
+		}
+
+		#region Misc
 
 		protected override bool CanMultiSelect (TreeViewItem item)
 		{
@@ -390,6 +437,8 @@ namespace Merino
 			var state =  new MultiColumnHeaderState(columns);
 			return state;
 		}
+
+		#endregion
 	}
 
 	static class MyExtensionMethods

@@ -101,6 +101,9 @@ namespace Merino
 		// error checking
 		[SerializeField] List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
+		// node management
+		private List<int> DeleteList = new List<int>();
+		
 		// Yarn Spinner running stuff
 		[NonSerialized] bool isDialogueRunning;
 		MerinoVariableStorage varStorage;
@@ -409,8 +412,6 @@ namespace Merino
 		}
 		#endregion
 		
-		
-		
 		#region LoadingAndSaving
 		
 		bool IsProbablyYarnFile(TextAsset textAsset)
@@ -562,8 +563,6 @@ namespace Merino
 		}
 		#endregion
 		
-		
-
 		#region NodeManagement
 
 		void AddNewNode()
@@ -577,14 +576,50 @@ namespace Merino
 			SaveDataToFile();
 		}
 
-		void DeleteNode(int id)
+		public void AddNodeToDelete(int id)
 		{
-			m_TreeView.treeModel.RemoveElements( new List<int>() {id});
-			if (viewState.selectedIDs.Contains(id))
+			if (!EditorUtility.DisplayDialog("Delete Node?",
+				"Are you sure you want to delete " + m_TreeView.treeModel.Find(id).name + "?", "Delete", "Cancel"))
 			{
-				viewState.selectedIDs.Remove(id);
+				return;
 			}
+
+			DeleteList.Add(id);
+		}
+
+		public void AddNodeToDelete(IList<int> ids)
+		{
+			if (ids.Count == 1)
+			{
+				AddNodeToDelete(ids[0]);
+				return;
+			}
+			
+			if (EditorUtility.DisplayDialog("Delete Nodes?",
+				"Are you sure you want to delete " + ids.Count + " nodes?", "Delete", "Cancel"))
+			{
+				DeleteList.AddRange(ids);
+			}
+		}
+
+		public void DeleteNodes()
+		{
+			if (DeleteList.Count <= 0)
+			{
+				return;
+			}
+
+			m_TreeView.treeModel.RemoveElements(DeleteList);
+			foreach (var id in DeleteList)
+			{
+				if (viewState.selectedIDs.Contains(id))
+				{
+					viewState.selectedIDs.Remove(id);
+				}
+			}
+		
 			SaveDataToFile();
+			DeleteList.Clear();
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -626,8 +661,6 @@ namespace Merino
 			}
 		}
 		#endregion
-
-
 		
 		#region PlaytestPreview
 		void PlaytestFrom(string startPassageName, bool reset=true)
@@ -781,8 +814,6 @@ namespace Merino
 	        Repaint();
         }
 		#endregion
-		
-		
 		
 		void OnGUI ()
 		{
@@ -943,7 +974,7 @@ namespace Merino
 			rect.height -= BUTTON_HEIGHT;
 			m_TreeView.OnGUI(rect);
 		}
-		
+				
 		void DrawMainPane(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
@@ -1026,7 +1057,6 @@ namespace Merino
 			}
 			GUILayout.EndHorizontal();
 
-			int idToDelete = -1;
 //			bool forceSave = false;
 			int idToPreview = -1;
 			if (viewState.selectedIDs.Count > 0)
@@ -1057,7 +1087,7 @@ namespace Merino
 					// delete button
 					if (GUILayout.Button("Delete Node", GUILayout.Width(100)))
 					{
-						idToDelete = id;
+						AddNodeToDelete(id);
 					}
 					EditorGUILayout.EndHorizontal();
 					
@@ -1218,12 +1248,7 @@ namespace Merino
 					}
 				}
 
-				// delete the node with this ID
-				if (idToDelete > -1)
-				{
-					DeleteNode(idToDelete);
-				}
-
+				DeleteNodes();
 				moveCursorUndoID = -1;
 				moveCursorUndoIndex = -1;
 				

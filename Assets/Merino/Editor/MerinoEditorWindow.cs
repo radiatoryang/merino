@@ -51,6 +51,12 @@ namespace Merino
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
+		
+		
+		int zoomID = -1, zoomToLineNumber = -1, lastZoomToLineNumber = -1;
+		double zoomToLineNumberTimestamp;
+		const double zoomLineFadeTime = 1.0;
+		
 		bool resizingSidebar = false;
 		
 		float playPreviewHeight {
@@ -64,7 +70,7 @@ namespace Merino
 		
 		Rect sidebarRect
 		{
-			get { return new Rect(margin, 30, sidebarWidth, position.height-40); }
+			get { return new Rect(margin, margin*3, sidebarWidth, position.height-margin*5.5f); }
 		}
 
 		Rect sidebarResizeRect
@@ -74,7 +80,7 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
+			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*3.5f-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
@@ -82,13 +88,13 @@ namespace Merino
 			get { return new Rect( sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-margin);}
 		}
 
-//		Rect bottomToolbarRect
-//		{
-//			get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
-//		}
+		Rect bottomToolbarRect
+		{
+			get { return new Rect(margin, position.height - margin*2.5f, position.width - margin*2, margin*2.5f); }
+		}
 
 		// misc resources
-		Texture helpIcon;
+		Texture helpIcon, errorIcon;
 		TextAsset currentFile;
 		Font monoFont;
 		
@@ -99,10 +105,11 @@ namespace Merino
 		bool spaceWillIncrementUndo = false; // used just in Main Pane
 		
 		// error checking
-		[SerializeField] List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
+		List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
 		// node management
 		private List<int> DeleteList = new List<int>();
+		int currentNodeIDEditing;
 		
 		// Yarn Spinner running stuff
 		[NonSerialized] bool isDialogueRunning;
@@ -115,6 +122,7 @@ namespace Merino
 					// Create the main Dialogue runner, and pass our variableStorage to it
 					varStorage = new MerinoVariableStorage();
 					_dialogue = new Yarn.Dialogue ( varStorage );
+					_dialogue.experimentalMode = false;
 					dialogueUI = new MerinoDialogueUI();
 					dialogueUI.consolasFont = monoFont;
 					
@@ -129,6 +137,10 @@ namespace Merino
 				return _dialogue;
 			}
 		}
+		
+		// some help strings
+		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
+		
 
 		#region EditorWindowStuff
 
@@ -261,6 +273,7 @@ namespace Merino
 		{
 			if (m_Initialized) return;
 
+			currentNodeIDEditing = -1;
 			Undo.undoRedoPerformed += OnUndo;
 			undoData.Clear();
 			errorLog.Clear();
@@ -279,6 +292,12 @@ namespace Merino
 			if (helpIcon == null)
 			{
 				helpIcon = EditorGUIUtility.IconContent("_Help").image;
+			}
+			
+			// load error icon
+			if (errorIcon == null)
+			{
+				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
 			}
 			
 			// Check if it already exists (deserialized from window layout file or scriptable object)
@@ -356,7 +375,7 @@ namespace Merino
 				lastSaveTime = EditorApplication.timeSinceStartup + 9999; // don't save again until SaveDataToFile resets the variable
 			}
 			
-			if (isDialogueRunning || resizingSidebar)
+			if (isDialogueRunning || resizingSidebar || zoomToLineNumber > -1 || lastZoomToLineNumber > -1)
 			{
 				// MASSIVELY improves framerate, wow, amazing
 				Repaint();
@@ -402,6 +421,8 @@ namespace Merino
 					moveCursorUndoIndex = newIndex;
 				}
 			}
+			
+			// TODO: on undo, select the undone node (if not already selected) and frame the undone part / line? (use SelectNodeAndScrollToLine() )
 			
 			// repaint tree view so names get updated
 			m_TreeView.Reload();
@@ -672,11 +693,16 @@ namespace Merino
 				varStorage.ResetToDefaults();
 				try
 				{
-					dialogue.LoadString(SaveNodesAsString());
+					var program = SaveNodesAsString();
+					if (!string.IsNullOrEmpty(program))
+					{
+						dialogue.LoadString(program);
+					}
 				}
 				catch (Exception ex)
 				{
 					PlaytestErrorLog(ex.Message);
+					return;
 				}
 				
 			}
@@ -743,6 +769,29 @@ namespace Merino
 			errorLog.Add( new MerinoErrorLine(message, fileName, nodeRef.Length > 0 ? nodeRef[0].id : -1, Mathf.Max(0, lineNumber)));
 		}
 
+		// used by the playtest toolbar View Node Source button
+		int GuessLineNumber(int nodeID, string lineText)
+		{
+			var node = treeView.treeModel.Find(nodeID);
+			// this is a really bad way of doing it, but Yarn Spinner DialogueRunner doesn't offer any access to line numbers
+			if (node != null && node.nodeBody.Contains(lineText))
+			{
+				var lines = node.nodeBody.Split('\n');
+				for (int i = 0; i < lines.Length; i++)
+				{
+					if (lines[i].Contains(lineText))
+					{
+						return i+1;
+					}
+				}
+				return -1;
+			}
+			else
+			{
+				return -1;
+			}
+		}
+
 		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
 		IEnumerator RunDialogue (string startNode = "Start")
         {        
@@ -750,7 +799,7 @@ namespace Merino
             isDialogueRunning = true;
 
             // Signal that we're starting up.
-           //  yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
+            //  yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
 
             // Get lines, options and commands from the Dialogue object,
             // one at a time.
@@ -835,7 +884,7 @@ namespace Merino
 				dialogueUI.OnGUI(playPreviewRect);
 			}
 
-		//	BottomToolBar (bottomToolbarRect);
+			DrawBottomToolBar (bottomToolbarRect);
 		}
 
 		const int sidebarWidthClamp = 50;
@@ -889,7 +938,7 @@ namespace Merino
 					x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)
 				).ToArray(), 
 				EditorStyles.toolbarPopup, 
-				GUILayout.Width(120)
+				GUILayout.Width(160)
 			);
 			if (currentJumpIndex != newJumpIndex)
 			{
@@ -901,13 +950,12 @@ namespace Merino
 			
 			// current node button
 			GUI.enabled = !dialogueEnded;
-			if (GUILayout.Button(new GUIContent("View Node Source", "click to see Yarn script for this node"), EditorStyles.toolbarButton))
+			if (GUILayout.Button(new GUIContent("View Node Source", string.Format("click to see Yarn script code for this node")), EditorStyles.toolbarButton))
 			{
 				var matchingNode = treeData.treeElements.Find(x => x.name == dialogue.currentNode);
 				if (matchingNode != null)
 				{
-					viewState.selectedIDs.Clear();
-					viewState.selectedIDs.Add(matchingNode.id);
+					SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, dialogueUI.displayStringFull) );
 				}
 			}
 			GUI.enabled = true;
@@ -1022,8 +1070,12 @@ namespace Merino
 			// NEW FILE BUTTON
 			if (GUILayout.Button(new GUIContent("New File", "will throw away any unsaved changes, and reset Merino to a new blank file"), GUILayout.MaxWidth(80)))
 			{
-				ResetMerino();
-				return;
+				if (EditorUtility.DisplayDialog("Merino: New File?",
+					"Are you sure you want to create a new file? All unsaved work will be lost.", "Create New File", "Cancel"))
+				{
+					ResetMerino();
+					return;
+				}
 			}
 			GUILayout.Space(10);
 
@@ -1062,7 +1114,6 @@ namespace Merino
 			if (viewState.selectedIDs.Count > 0)
 			{
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
-				// GUI.enabled = !isDialogueRunning; // if dialogue is running, don't let them edit anything
 				
 				foreach (var id in viewState.selectedIDs)
 				{
@@ -1070,13 +1121,15 @@ namespace Merino
 					EditorGUI.BeginChangeCheck();
 					EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 					
-					// NODE HEADER
+					// NODE HEADER ======================================================================
 					EditorGUILayout.BeginHorizontal();
+					
 					// add "Play" button
 					if (GUILayout.Button(new GUIContent("▶", "click to playtest this node"), GUILayout.Width(24) ) )
 					{
 						idToPreview = id;
 					}
+					
 					// node title
 					var nameStyle = new GUIStyle( EditorStyles.textField );
 					nameStyle.font = monoFont;
@@ -1084,27 +1137,25 @@ namespace Merino
 					nameStyle.fixedHeight = 20f;
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, nameStyle);
 					GUILayout.FlexibleSpace();
+					
 					// delete button
 					if (GUILayout.Button("Delete Node", GUILayout.Width(100)))
 					{
 						AddNodeToDelete(id);
 					}
 					EditorGUILayout.EndHorizontal();
+
 					
-					
-					// NODE BODY
+					// NODE BODY ======================================================================
 					var backupContentColor = GUI.contentColor;
 					string passage = m_TreeView.treeModel.Find(id).nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
-					// stuff for manual keyboard tab support
-//					var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
-					var te = typeof(EditorGUI).GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as TextEditor;
-					
 					// start preparing to draw the body
 					int lineDigits = -1;
 					int totalLineCount = -1;
-					var lineNumbers = AddLineNumbers(passage, out lineDigits, out totalLineCount);
+					int[] lineToCharIndex; // used to save charIndex for the start of each line number, so we can later calculate rects for these line numbers if we have to
+					string lineNumbers = AddLineNumbers(passage, out lineToCharIndex, out lineDigits, out totalLineCount);
 					var bodyStyle = new GUIStyle( EditorStyles.textArea );
 					bodyStyle.font = monoFont;
 					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
@@ -1130,16 +1181,37 @@ namespace Merino
 					
 					// draw chunks as TextAreas, each with their own highlighting and line number overlays
 					var newBodies = new string[chunkCount];
-					for( int x=0; x<passageChunks.Length; x++) {
+					for( int chunkIndex=0; chunkIndex<passageChunks.Length; chunkIndex++) {
+						int chunkStart = chunkIndex * chunkSize; // line number this chunk starts at
+						int chunkEnd = (chunkIndex + 1) * chunkSize; // line number this chunk ends at
+						
 						GUI.contentColor = new Color ( 0f, 0f, 0f, 0.16f ); // the text you type is actually invisible
-						GUI.SetNextControlName ( "TextArea" + newName + x.ToString() );
+						string controlName = "TextArea" + newName + chunkIndex.ToString();
+						GUI.SetNextControlName ( controlName );
+						
 						// draw text area
-						newBodies[x] = EditorGUILayout.TextArea(passageChunks[x], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+						int nextControlID = GUIUtility.GetControlID(FocusType.Passive) + 1;
+						newBodies[chunkIndex] = EditorGUILayout.TextArea(passageChunks[chunkIndex], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 						GUI.contentColor = backupContentColor;
 						var bodyRect = GUILayoutUtility.GetLastRect(); // we need the TextArea rect for the line number and syntax highlight overlays
 						
+						// stuff for manual keyboard tab support, but also any per-word or per-line features
+//						var te = (TextEditor)GUIUtility.GetStateObject( typeof (TextEditor), GUIUtility.keyboardControl );
+						// we have to use reflection to access TextEditors for EditorGUI TextAreas, but it's worth it
+						var te = typeof(EditorGUI).GetField("activeEditor", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as TextEditor;
+						
+						if (zoomID == id && zoomToLineNumber > chunkStart && zoomToLineNumber < chunkEnd)
+						{
+							// focus control on this TextArea, so that we can use TextEditor to zoom to a line number
+							GUI.FocusControl(controlName);
+							EditorGUI.FocusTextInControl(controlName);
+							GUIUtility.keyboardControl = nextControlID;
+						}
+						
 						// line number style
 						GUIStyle highlightOverlay = new GUIStyle();
+						highlightOverlay.border = bodyStyle.border;
+						highlightOverlay.padding = bodyStyle.padding;
 						highlightOverlay.font = monoFont;
 						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.45f;
 						highlightOverlay.richText = true;
@@ -1148,67 +1220,121 @@ namespace Merino
 						Rect linesRect = new Rect(bodyRect);
 						linesRect.x -= lineDigits * 12;
 						// draw the line numbers
-						GUI.Label(linesRect, numberChunks[x], highlightOverlay);
-					
-						// undo support: move back keyboard cursor (caret) to undo point... minor quality of life that's actually kind of major
-						if ( moveCursorUndoID == id && moveCursorUndoIndex >= 0 && te != null && GUIUtility.keyboardControl == te.controlID )
-						{
-							te.cursorIndex = moveCursorUndoIndex;
-							te.selectIndex = moveCursorUndoIndex;
-							// moveCursorUndo* will get blanked out after the foreach node loop
-						}
+						GUI.Label(linesRect, numberChunks[chunkIndex], highlightOverlay);
 						
-						// detect whether to increment the undo group based on typing whitespace / word breaks
+						// syntax highlight via label overlay
+						Rect lastRect = new Rect(bodyRect);
+//						lastRect.x += 2;
+//						lastRect.y += 1f;
+//						lastRect.width -= 6;
+//						lastRect.height -= 1;
+						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
+						string syntaxHighlight = DoSyntaxMarch(newBodies[chunkIndex]); // inserts richtext <color> tags to do highlighting
+						GUI.Label(lastRect, syntaxHighlight, highlightOverlay); // drawn on top of actual TextArea
+					
+						// special functions that rely on TextEditor: undo spacing and character-based positioning (error bubbles, inline syntax highlights)
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
 						{
-							var e = Event.current;
-							if (spaceWillIncrementUndo && e.isKey && (e.keyCode == KeyCode.Space || e.keyCode == KeyCode.Tab || e.keyCode == KeyCode.Return))
+							currentNodeIDEditing = id;
+							
+							// undo support: move back keyboard cursor (caret) to undo point... minor quality of life that's actually kind of major
+							if (moveCursorUndoID == id && moveCursorUndoIndex >= 0)
+							{
+								te.cursorIndex = moveCursorUndoIndex;
+								te.selectIndex = moveCursorUndoIndex;
+								// moveCursorUndo* will get blanked out after the foreach node loop
+							}
+
+							// detect whether to increment the undo group based on typing whitespace / word breaks
+							var eventCurrent = Event.current;
+							if (spaceWillIncrementUndo && eventCurrent.isKey && (eventCurrent.keyCode == KeyCode.Space || eventCurrent.keyCode == KeyCode.Tab || eventCurrent.keyCode == KeyCode.Return))
 							{
 								Undo.IncrementCurrentGroup();
 								spaceWillIncrementUndo = false;
 							}
+
 							// if user presses something other than SPACE, then let whitespace increment undo again
-							if (!spaceWillIncrementUndo && e.isKey && e.keyCode != KeyCode.Space)
+							if (!spaceWillIncrementUndo && eventCurrent.isKey && eventCurrent.keyCode != KeyCode.Space)
 							{
 								spaceWillIncrementUndo = true;
 							}
-						}
 
-						// syntax highlight via label overlay
-						Rect lastRect = new Rect(bodyRect);
-						lastRect.x += 2;
-						lastRect.y += 1f;
-						lastRect.width -= 6;
-						lastRect.height -= 1;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
-						string syntaxHighlight = DoSyntaxMarch(newBodies[x]);
-						GUI.Label(lastRect, syntaxHighlight, highlightOverlay);
-						
-						// display any error bubbles
-						int chunkStart = x * chunkSize;
-						int chunkEnd = (x + 1) * chunkSize;
-						var errors = errorLog.Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd);
-						foreach (var error in errors)
-						{
-							// clamp error bubble based on lines actually displayed?...
-							int lineNumber = Mathf.Clamp(error.lineNumber, 0, totalLineCount);
+							// now, anything that has to do with counting lines or word-level alignment
 							
-							// place error bubble near line number
-							// TODO: oh shit... because of word wrap, this doesn't actually work???...
-							// TODO: I'm going to have to use TextEditor, find the index, move cursor to it, then use GUIStyle.GetCursorPixelPosition to get proper Rect position
-							// TODO: maybe create a batched utility function that will do all this... given an array of indices, return Vector2s for each?
-							var errorHeightPercent = 1f * (lineNumber - chunkStart) / (Mathf.Min(totalLineCount, chunkEnd) - chunkStart);
-							Rect errorRect = new Rect(bodyRect.x-8, bodyRect.y + errorHeightPercent * bodyRect.height, 24, 24);
+							// first, display any error bubbles associated with line numbers for this node chunk
+							// ... which is surprisingly complicated
 
-							if (GUI.Button(errorRect, new GUIContent("!", error.message), GUI.skin.button))
+							// important: have to clamp the error's line number here! e.g. error might say line 201 even though only 199 lines total displayed
+							// also must clamp now before the Where(), because that chunk range check needs to account for the clamp
+							var errors = errorLog.Select(e => {
+								e.lineNumber = Mathf.Clamp(e.lineNumber, 0, lineToCharIndex.Length-1);
+								return e;
+							}).Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd).ToArray(); // grab errors only for this nodeID && in this chunk
+
+							// ok, um, because we're chunking the textBody into multiple textAreas, the original lineToCharIndex doesn't go to the proper offset
+							// (lineToCharIndex used passage, not passageChunks[]... unless we subtract all previous chunk char lengths too... thus, accounting for all previous chunks)
+							int chunkCharOffset = 0;
+							for (int c = 0; c < chunkIndex; c++)
 							{
-								errorLog.Remove(error);
+								chunkCharOffset += newBodies[c].Length + 1; // add +1 for "\n" between the chunks
 							}
-						}
-						
+
+							// prep the rest of our data for drawing error bubbles on line numbers...
+							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber-1] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
+							var indicesToRects = CalculateTextEditorIndexToRect(te, bodyStyle, errorLinesToIndices); // change errors' string index to rect
+							for (int i = 0; i < errors.Length; i++)
+							{
+								// place error bubble near line number
+								Rect errorRect = new Rect(bodyRect.x - 20, indicesToRects[i].y+2, bodyRect.width + 20, 22);
+								var backupBGColor = GUI.backgroundColor;
+								GUI.backgroundColor = new Color(0.9f, 0.3f, 0.25f, 0.62f);
+								GUI.Box( errorRect, "", EditorStyles.helpBox); // shaded line bg highlight
+								errorRect = new Rect(bodyRect.x - 20, indicesToRects[i].y+4, 32, 32);
+								EditorGUIUtility.AddCursorRect( errorRect,MouseCursor.Zoom);
+								// user can press the button to dismiss the error
+								if (GUI.Button(errorRect, new GUIContent(errorIcon, string.Format(compileErrorHoverString, errors[i].message)), EditorStyles.label))
+								{
+									errorLog.Remove(errorLog.First(e => e.message == errors[i].message)); // have to use LINQ to find the original ErrorLine object
+								}
+
+								GUI.backgroundColor = backupBGColor;
+							}
+							
+							// lastly, if we're zooming to a line number, then let's scroll to it
+							if (lastZoomToLineNumber > -1 && zoomID == id )
+							{
+								// double-check we should be rendering it in this chunk though
+								int clampedZoomLine = Mathf.Clamp(lastZoomToLineNumber-1, 0, lineToCharIndex.Length - 1);
+								int charCursorIndex = lineToCharIndex[clampedZoomLine] - chunkCharOffset;
+								if (clampedZoomLine > chunkStart && clampedZoomLine < chunkEnd)
+								{
+									var zoomRect = CalculateTextEditorIndexToRect(te, bodyStyle, new int[] {charCursorIndex});
+
+									// if we haven't scrolled to the currect line yet, then do it
+									if (zoomToLineNumber > -1)
+									{
+										te.cursorIndex = charCursorIndex;
+										te.selectIndex = charCursorIndex;
+										scrollPos = new Vector2(0f, zoomRect[0].y - nodeEditRect.height * 0.5f); // center line in middle of rect, if possible
+										zoomToLineNumber = -1;
+									}
+									
+									// highlight the line we zoomed to, and fade out slowly
+									if (lastZoomToLineNumber > -1 && EditorApplication.timeSinceStartup - zoomToLineNumberTimestamp < zoomLineFadeTime)
+									{
+										var backupColor = GUI.color;
+										GUI.color = new Color(0.9f, 0.45f, 0.3f, 1f - (float)((EditorApplication.timeSinceStartup - zoomToLineNumberTimestamp)/ zoomLineFadeTime) );
+										GUI.DrawTexture( new Rect(bodyRect.x, zoomRect[0].y, bodyRect.width, 22), EditorGUIUtility.whiteTexture );
+										GUI.color = backupColor;
+									}
+								}
+								
+							}
+
+						} // end of if( TextEditor != null )
 					} // end of textAreas
 					
-					// combine all bodies into a single string for saving
+					// combine all body texts into a single string for saving
 					var newBody = string.Join("\n", newBodies);
 
 					// playtest preview button at bottom of node
@@ -1246,14 +1372,27 @@ namespace Merino
 						// repaint tree view so names get updated
 						m_TreeView.Reload();
 					}
-				}
+				} // end foreach selected node ID
 
 				DeleteNodes();
 				moveCursorUndoID = -1;
 				moveCursorUndoIndex = -1;
 				
+				// fail-safe, just in case something goes wrong with the zoomToLineNumber thing
+				if (EditorApplication.timeSinceStartup - zoomToLineNumberTimestamp > zoomLineFadeTime)
+				{
+					zoomToLineNumber = -1;
+					lastZoomToLineNumber = -1;
+				}
+				
 				GUI.enabled = true;
 				EditorGUILayout.EndScrollView();
+				
+				// if we only have one node selected, then let's just say that's the node we're working with
+				if (viewState.selectedIDs.Count == 1)
+				{
+					currentNodeIDEditing = viewState.selectedIDs[0];
+				}
 				
 				// detect if we need to do play preview
 				if (idToPreview > -1)
@@ -1263,7 +1402,7 @@ namespace Merino
 			}
 			else
 			{
-				if ( currentFile == null ) { EditorGUILayout.HelpBox(" To edit a Yarn.txt file, select it in your Project tab OR use the TextAsset object picker above.\n ... or, just work with the blank default template here, and then click [Save As].", MessageType.Info);}
+				if ( currentFile == null ) { EditorGUILayout.HelpBox(" To edit a Yarn.txt file, select it in your Project tab OR use the TextAsset object picker above.\n ... or, just work with the default template here, and then click [Save As].", MessageType.Info);}
 				EditorGUILayout.HelpBox(" Select node(s) from the sidebar on the left.\n - Left-Click:  select\n - Left-Click + Shift:  select multiple\n - Left-Click + Ctrl / Left-Click + Command:  add / remove from selection", MessageType.Info);
 			}
 
@@ -1331,16 +1470,29 @@ namespace Merino
 			}
 		}
 
-		// given a long string with line breaks, it will tranpose line numbers to them all (and hide the actual text with rich text Color)
-		string AddLineNumbers(string input, out int digits, out int totalLineCount)
+		// given a long string with line breaks, it will tranpose line numbers to the start of each line (and hide the rest of the body text with invisible rich text Color)
+		string AddLineNumbers(string input, out int[] charIndices, out int digits, out int totalLineCount)
 		{
 			var lines = input.Split(new string[] {"\n"}, StringSplitOptions.None );
 			totalLineCount = lines.Length;
-			digits = Mathf.CeilToInt(1f * lines.Length / 10).ToString().Length + 1;
+			digits = Mathf.CeilToInt(1f * lines.Length / 10).ToString().Length + 1; // significant digits, so we know how much space to pad
+			
+			// all the body after the line number is hidden with invisible richtext color tags, ensuring that wordwrapping still works the same
 			string invisibleBegin = "<color=#00000000>";
 			string invisibleEnd = "</color>";
-			for (int i = 0; i < lines.Length; i++) 
+			
+			// to mark lines with GUI elements later, we need to remember the character index offset for each line (applies to original input string, not input+lineNumbers)... see CalculateTextEditorIndexToRect()
+			charIndices = new int[totalLineCount];
+			int totalCharLengthWithoutNumbers = 0; 
+			
+			// ok begin processing each line now...
+			for (int i = 0; i < lines.Length; i++)
 			{
+				// save caret cursor offset for this line... IMPORTANT: tabs and line breaks are 1 cursor space, NOT 2
+				charIndices[i] = totalCharLengthWithoutNumbers;
+				string lineFixedForCaret = lines[i].Replace("\t", " ");
+				totalCharLengthWithoutNumbers += lineFixedForCaret.Length + 1; // +2 is for the "\n"
+				
 				// generate line numbers
 				string lineDisplay = (i+1).ToString(); // line numbers start from 1
 				lineDisplay = lineDisplay.PadLeft(digits);
@@ -1357,15 +1509,46 @@ namespace Merino
 
 			return string.Join("\n", lines);
 		}
+		
+		// given a TextEditor and indices, find the GUI Vector2 screen positions for each character index (or word)
+		Rect[] CalculateTextEditorIndexToRect(TextEditor te, GUIStyle textFieldStyle, int[] textIndex, bool selectWholeWord = false)
+		{
+			// backup TextEditor caret position, because we're about to move it a lot
+			var backupCursor = te.cursorIndex;
+			var backupSelect = te.selectIndex;
 
-/*		void BottomToolBar (Rect rect)
+			// move TextEditor caret to each index in [text], and construct Rect for it
+			var rects = new Rect[textIndex.Length];
+			for (int i = 0; i < textIndex.Length; i++)
+			{
+				te.cursorIndex = textIndex[i];
+				te.selectIndex = textIndex[i];
+				if (selectWholeWord)
+				{
+					te.SelectCurrentWord();
+				}
+
+				Vector2 cursorPixelPos = textFieldStyle.GetCursorPixelPosition(te.position, new GUIContent(te.text), te.cursorIndex);
+				Vector2 selectPixelPos = textFieldStyle.GetCursorPixelPosition(te.position, new GUIContent(te.text), te.selectIndex);
+				rects[i] = new Rect(selectPixelPos.x - textFieldStyle.border.left - 2f, selectPixelPos.y - textFieldStyle.border.top, cursorPixelPos.x, cursorPixelPos.y);
+			}
+
+			// revert to backups
+			te.cursorIndex = backupCursor;
+			te.selectIndex = backupSelect;
+
+			return rects;
+		}
+
+		void DrawBottomToolBar (Rect rect)
 		{
 			GUILayout.BeginArea (rect);
 
 			using (new EditorGUILayout.HorizontalScope ())
 			{
 
-				var style = "miniButton";
+				var style = GUI.skin.button; //EditorStyles.miniButton;
+				
 				if (GUILayout.Button("Expand All", style))
 				{
 					treeView.ExpandAll ();
@@ -1378,45 +1561,47 @@ namespace Merino
 
 				GUILayout.FlexibleSpace();
 
-				GUILayout.Label (currentFile != null ? AssetDatabase.GetAssetPath (currentFile) : string.Empty);
+				if (errorLog != null && errorLog.Count > 0)
+				{
+					var error = errorLog[errorLog.Count - 1];
+					var node = treeView.treeModel.Find(error.nodeID);
+					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? "" : string.Format("{2}\n\nclick to open node {0} at line {1}", node.name, error.lineNumber, error.message )), style, GUILayout.MaxWidth(position.width * 0.31f) ))
+					{
+						SelectNodeAndZoomToLine(error.nodeID, error.lineNumber);
+					}
+				}
 
 				GUILayout.FlexibleSpace ();
-
-				if (GUILayout.Button("Set sorting", style))
-				{
-					var myColumnHeader = (MyMultiColumnHeader)treeView.multiColumnHeader;
-					myColumnHeader.SetSortingColumns (new int[] {4, 3, 2}, new[] {true, false, true});
-					myColumnHeader.mode = MyMultiColumnHeader.Mode.LargeHeader;
-				}
-
-
-				GUILayout.Label ("Header: ", "minilabel");
-				if (GUILayout.Button("Large", style))
-				{
-					var myColumnHeader = (MyMultiColumnHeader) treeView.multiColumnHeader;
-					myColumnHeader.mode = MyMultiColumnHeader.Mode.LargeHeader;
-				}
-				if (GUILayout.Button("Default", style))
-				{
-					var myColumnHeader = (MyMultiColumnHeader)treeView.multiColumnHeader;
-					myColumnHeader.mode = MyMultiColumnHeader.Mode.DefaultHeader;
-				}
-				if (GUILayout.Button("No sort", style))
-				{
-					var myColumnHeader = (MyMultiColumnHeader)treeView.multiColumnHeader;
-					myColumnHeader.mode = MyMultiColumnHeader.Mode.MinimumHeaderWithoutSorting;
-				}
-
-				GUILayout.Space (10);
 				
-				if (GUILayout.Button("values <-> controls", style))
+				// playtest button, based on the last node you touched
+				if ( !isDialogueRunning && currentNodeIDEditing > -1 && treeView.treeModel.Find(currentNodeIDEditing) != null && GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style))
 				{
-					treeView.showControls = !treeView.showControls;
+					PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
 				}
 			}
 
 			GUILayout.EndArea();
-		}*/
+		}
+
+		// a lot of the logic for this is handled in OnGUI > DrawMainPane, this just sets variables to get read elsewhere
+		void SelectNodeAndZoomToLine(int nodeID, int lineNumber)
+		{
+			viewState.selectedIDs.Clear();
+			viewState.selectedIDs.Add(nodeID);
+			// treeView.SetSelection(new List<int>() { nodeID });
+			
+			// grab the node, count the lines, and guess the line number
+			var node = treeView.treeModel.Find(nodeID);
+			if (node == null) return;
+
+			zoomID = nodeID;
+			zoomToLineNumber = lineNumber;
+			lastZoomToLineNumber = lineNumber;
+			zoomToLineNumberTimestamp = EditorApplication.timeSinceStartup;
+			
+			// very important! we need to deselect any text fields before we zoom
+			GUI.FocusControl(null);
+		}
 		
 		/// <summary>
 		/// Compare two strings and return the index of the first difference.  Return -1 if the strings are equal.
@@ -1475,6 +1660,7 @@ namespace Merino
 
 		public string currentNode;
 		string displayString;
+		public string displayStringFull;
 		bool showContinuePrompt = false;
 		string[] optionStrings = new string[0];
 		Yarn.OptionChooser optionChooser;
@@ -1484,6 +1670,7 @@ namespace Merino
 
 		public IEnumerator RunLine(Yarn.Line line, bool autoAdvance)
 		{
+			displayStringFull = line.text;
 			optionStrings = new string[0];
 			// display dialog
             if (textSpeed > 0.0f) {

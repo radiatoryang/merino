@@ -30,24 +30,6 @@ namespace Merino
 			get { return m_TreeView; }
 		}
 		// double lastTabTime = 0.0; // this is a really bad hack
-		
-		// preferences
-		static bool prefsLoaded = false;
-		
-		static string newFileTemplatePath = "NewFileTemplate.yarn";
-		static string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
-		
-		static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
-		static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
-		static Color highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
-		static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
-		// public static Color highlightVariables;
-		
-		// UI settings, will still get saved by Hidden EditorPrefs
-		static bool stopOnDialogueEnd = true;
-		static bool useAutoAdvance = false;
-		static bool useAutosave = true;
-		static float sidebarWidth = 180f;
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
@@ -59,27 +41,27 @@ namespace Merino
 		
 		Rect sidebarSearchRect
 		{
-			get { return new Rect (margin, margin, sidebarWidth, margin*2); }
+			get { return new Rect (margin, margin, MerinoPrefs.sidebarWidth, margin*2); }
 		}
 		
 		Rect sidebarRect
 		{
-			get { return new Rect(margin, 30, sidebarWidth, position.height-40); }
+			get { return new Rect(margin, 30, MerinoPrefs.sidebarWidth, position.height-40); }
 		}
 
 		Rect sidebarResizeRect
 		{
-			get { return new Rect(margin + sidebarWidth, 0, 5, position.height); }
+			get { return new Rect(margin + MerinoPrefs.sidebarWidth, 0, 5, position.height); }
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-margin);}
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-MerinoPrefs.sidebarWidth-15, playPreviewHeight-margin);}
 		}
 
 //		Rect bottomToolbarRect
@@ -141,89 +123,6 @@ namespace Merino
 			window.Repaint();
 			return window;
 		}
-
-		static void ResetEditorPrefsAll()
-		{
-			newFileTemplatePath = "NewFileTemplate.yarn";
-			
-			highlightComments = new Color(0.3f, 0.6f, 0.25f);
-			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
-			highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
-			highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
-			
-			SaveEditorPrefs();
-
-			stopOnDialogueEnd = true;
-			useAutoAdvance = false;
-			useAutosave = true;
-			sidebarWidth = 180f;
-			
-			SaveHiddenEditorPrefs();
-		}
-
-		public static void LoadEditorPrefs()
-		{
-			if (EditorPrefs.HasKey("MerinoFirstRun") == false)
-			{
-				SaveEditorPrefs();
-				EditorPrefs.SetBool("MerinoFirstRun", true);
-			}
-			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
-
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightNodeOptions"), out highlightNodeOptions);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightShortcutOptions"), out highlightShortcutOptions);
-		}
-
-		public static void SaveEditorPrefs()
-		{
-			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
-			
-			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
-			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );
-			EditorPrefs.SetString("MerinoHighlightNodeOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightNodeOptions) );
-			EditorPrefs.SetString("MerinoHighlightShortcutOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightShortcutOptions) );
-
-		}
-		
-		[PreferenceItem("Merino (Yarn)")]
-		public static void MerinoPreferencesGUI()
-		{
-			// Load the preferences
-			if (!prefsLoaded)
-			{
-				LoadEditorPrefs();
-				prefsLoaded = true;
-			}
-
-
-			// Reset button
-			if (GUILayout.Button("Reset Merino to default settings"))
-			{
-				ResetEditorPrefsAll();
-				SaveEditorPrefs();
-			}
-			
-			// Preferences GUI
-			GUILayout.Label("File Handling", EditorStyles.boldLabel);
-			EditorGUILayout.Space();
-			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
-			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
-
-			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
-			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
-			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
-			highlightNodeOptions = EditorGUILayout.ColorField("[[NodeOptions]]", highlightNodeOptions);
-			highlightShortcutOptions = EditorGUILayout.ColorField("-> ShortcutOptions", highlightShortcutOptions);
-
-			// Save the preferences
-			if (GUI.changed)
-			{
-				SaveEditorPrefs();
-			}
-
-		}
 		
 		void ResetMerino()
 		{
@@ -231,30 +130,10 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
-			AssetDatabase.DeleteAsset(tempDataPath); // delete tempdata, or else it will just get reloaded again
+			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			InitIfNeeded(true);
-		}
-
-		static void LoadHiddenEditorPrefs()
-		{
-			if (EditorPrefs.HasKey("MerinoStopOn") == false)
-			{
-				SaveHiddenEditorPrefs(); // save defaults if not found
-			}
-			stopOnDialogueEnd = EditorPrefs.GetBool("MerinoStopOn");
-			useAutoAdvance = EditorPrefs.GetBool("MerinoAutoAdvance");
-			useAutosave = EditorPrefs.GetBool("MerinoAutosave");
-			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
-		}
-
-		static void SaveHiddenEditorPrefs()
-		{
-			EditorPrefs.SetBool("MerinoStopOn", stopOnDialogueEnd);
-			EditorPrefs.SetBool("MerinoAutoAdvance", useAutoAdvance);
-			EditorPrefs.SetBool("MerinoAutosave", useAutosave);
-			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
 		}
 		
 		void InitIfNeeded (bool ignoreSelection=false)
@@ -264,10 +143,6 @@ namespace Merino
 			Undo.undoRedoPerformed += OnUndo;
 			undoData.Clear();
 			errorLog.Clear();
-			
-			// default highlight colors		
-			LoadEditorPrefs();
-			LoadHiddenEditorPrefs();
 			
 			// load font
 			if (monoFont == null)
@@ -296,11 +171,11 @@ namespace Merino
 				multiColumnHeader.ResizeToFit ();
 
 			// detect temp data (e.g. when going into play mode and back)
-			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(tempDataPath);
+			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
 			if (possibleTempData == null)
 			{
 				treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-				AssetDatabase.CreateAsset(treeData, tempDataPath);
+				AssetDatabase.CreateAsset(treeData, MerinoPrefs.tempDataPath);
 				AssetDatabase.SaveAssets();
 			}
 			else
@@ -405,7 +280,7 @@ namespace Merino
 			
 			// repaint tree view so names get updated
 			m_TreeView.Reload();
-			if (currentFile != null && useAutosave)
+			if (currentFile != null && MerinoPrefs.useAutosave)
 			{
 				SaveDataToFile();
 			}
@@ -471,14 +346,14 @@ namespace Merino
 				}
 				
 				// otherwise, load default data from template
-				var defaultData = Resources.Load<TextAsset>(newFileTemplatePath);
+				var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
 				if (defaultData != null)
 				{
 					return GetData(defaultData);
 				}
 				else
 				{ // oops, couldn't find the new file template!
-					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", newFileTemplatePath);
+					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", MerinoPrefs.newFileTemplatePath);
 					return null;
 				}
 				
@@ -762,7 +637,7 @@ namespace Merino
 
                     // Wait for line to finish displaying
                     var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, useAutoAdvance));
+	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, MerinoPrefs.useAutoAdvance));
 //	                while (dialogueUI.inputContinue == false)
 //	                {
 //		                yield return new WaitForSeconds(0.01f);
@@ -787,7 +662,7 @@ namespace Merino
 //                    if (DispatchCommand(commandResult.command.text) == true) {
 //                        // command was dispatched
 //                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, useAutoAdvance));
+	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, MerinoPrefs.useAutoAdvance));
 //                    }
 
 
@@ -802,7 +677,7 @@ namespace Merino
 	        
             // No more results! The dialogue is done.
             // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
-	        while (stopOnDialogueEnd==false)
+	        while (MerinoPrefs.stopOnDialogueEnd==false)
 	        {
 		        yield return new WaitForSeconds(0.01f);
 	        }
@@ -852,7 +727,7 @@ namespace Merino
 			
 			// do resize
 			if(resizingSidebar){
-				sidebarWidth = Mathf.Clamp(Event.current.mousePosition.x - 10, sidebarWidthClamp, position.width-sidebarWidth);
+				MerinoPrefs.sidebarWidth = Mathf.Clamp(Event.current.mousePosition.x - 10, sidebarWidthClamp, position.width-MerinoPrefs.sidebarWidth);
 			//	cursorChangeRect.Set(cursorChangeRect.x,currentScrollViewHeight,cursorChangeRect.width,cursorChangeRect.height);
 			}
 
@@ -860,7 +735,7 @@ namespace Merino
 			if (Event.current.rawType == EventType.MouseUp)
 			{
 				resizingSidebar = false;
-				SaveHiddenEditorPrefs();
+				MerinoPrefs.SaveHiddenPrefs();
 			}
 		}
 
@@ -925,13 +800,13 @@ namespace Merino
 				
 			}
 			// auto advance button
-			useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), useAutoAdvance, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), MerinoPrefs.useAutoAdvance, smallToggleStyle, GUILayout.Width(100));
 			GUILayout.FlexibleSpace();
 			// stop on dialogue end button
-			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), MerinoPrefs.stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
 			if (EditorGUI.EndChangeCheck())
 			{
-				SaveHiddenEditorPrefs(); // remember new settings
+				MerinoPrefs.SaveHiddenPrefs(); // remember new settings
 			}
 			
 			// stop button
@@ -985,13 +860,13 @@ namespace Merino
 			if (currentFile != null)
 			{
 				EditorGUI.BeginChangeCheck();
-				useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), useAutosave, GUILayout.Width(16));
+				MerinoPrefs.useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, GUILayout.Width(16));
 				GUILayout.Label(new GUIContent("AutoSave?   ", "if enabled, will automatically save every change"), GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
 				if (EditorGUI.EndChangeCheck())
 				{
-					SaveHiddenEditorPrefs();
+					MerinoPrefs.SaveHiddenPrefs();
 				}
-				if (!useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
+				if (!MerinoPrefs.useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
 				{
 					SaveDataToFile();
 					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
@@ -1238,7 +1113,7 @@ namespace Merino
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
 						
 						// save after commit if we're autosaving
-						if (currentFile != null && useAutosave)
+						if (currentFile != null && MerinoPrefs.useAutosave)
 						{
 							SaveDataToFile();
 						}
@@ -1314,16 +1189,16 @@ namespace Merino
 			string newSyntax = syntax.Replace("\t", "").TrimEnd(' ').TrimStart(' '); // cleanup string
 			if ( newSyntax.StartsWith ( "//" ) )
 			{
-				return highlightComments;
+				return MerinoPrefs.highlightComments;
 			} else if (newSyntax.StartsWith("->") )
 			{
-				return highlightShortcutOptions;
+				return MerinoPrefs.highlightShortcutOptions;
 			} else if (newSyntax.StartsWith("[["))
 			{
-				return highlightNodeOptions;
+				return MerinoPrefs.highlightNodeOptions;
 			}else if (newSyntax.StartsWith("<<"))
 			{
-				return highlightShortcutOptions;
+				return MerinoPrefs.highlightShortcutOptions;
 			}
 			else
 			{
@@ -1747,7 +1622,6 @@ namespace Merino
 		}
 			
 	}
-
 
 	internal class MerinoMultiColumnHeader : MultiColumnHeader
 	{

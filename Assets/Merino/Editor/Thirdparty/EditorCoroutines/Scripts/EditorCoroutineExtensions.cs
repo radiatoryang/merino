@@ -1,7 +1,7 @@
 ﻿using System.Collections;
 using UnityEditor;
 
-namespace EditorCoroutines
+namespace Merino.EditorCoroutines
 {
 	public static class EditorCoroutineExtensions
 	{

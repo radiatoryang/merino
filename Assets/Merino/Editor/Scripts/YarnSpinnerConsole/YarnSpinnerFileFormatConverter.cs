@@ -15,7 +15,7 @@ using UnityEngine;
 using Yarn;
 using Yarn.Unity;
 
-namespace Yarn
+namespace Merino
 {
 	public class YarnSpinnerFileFormatConverter
 	{

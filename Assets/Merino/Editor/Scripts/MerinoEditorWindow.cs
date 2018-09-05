@@ -10,7 +10,7 @@ using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using Yarn;
 using File = System.IO.File;
-using EditorCoroutines;
+using Merino.EditorCoroutines;
 using Random = System.Random;
 // wow that's a lot of usings
 

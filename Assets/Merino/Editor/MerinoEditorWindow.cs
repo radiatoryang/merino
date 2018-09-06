@@ -451,6 +451,7 @@ namespace Merino
 		{
 			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
+			root.children = new List<TreeElement>();
 			treeElements.Add(root);
 			
 			// extract data from the text file, but only if it's not about entering playmode
@@ -469,19 +470,50 @@ namespace Merino
 				AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source));
 				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
 				var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
+				var parents = new Dictionary<MerinoTreeElement, string>();
 				foreach (var node in nodes)
 				{
 					// clean some of the stuff to help prevent file corruption
 					string cleanName = CleanYarnField(node.title, true);
 					string cleanBody = CleanYarnField(node.body);
 					string cleanTags = CleanYarnField(node.tags, true);
+					string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : CleanYarnField(node.parent, true);
 					// write data to the objects
 					var newItem = new MerinoTreeElement( cleanName, 0, treeElements.Count);
 					newItem.nodeBody = cleanBody;
 					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
 					newItem.nodeTags = cleanTags;
+					if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
+					{
+						root.children.Add(newItem);
+					}
+					else
+					{
+						parents.Add(newItem, cleanParent); // have to assign parents in a second pass
+					}
 					treeElements.Add(newItem);
 				}
+				// second pass: now that all nodes have been created, we can finally assign parents
+				foreach (var kvp in parents )
+				{
+					var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
+					if (parent.Length == 0)
+					{
+						Debug.LogErrorFormat("Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
+					}
+					else
+					{
+						kvp.Key.parent = parent[0];
+						if (kvp.Key.parent.children == null)
+						{
+							kvp.Key.parent.children = new List<TreeElement>();
+						}
+						kvp.Key.parent.children.Add(kvp.Key);
+					}
+				}
+				// if there's already parent data then I don't really know what the depth value is used for (a cache to speed up GUI drawing?)
+				// but I think we're supposed to do this thing so let's do it
+				TreeElementUtility.UpdateDepthValues(root);
 			}
 			else 
 			{ 
@@ -564,6 +596,7 @@ namespace Merino
 				newPosition.x = itemCasted.nodePosition.x;
 				newPosition.y = itemCasted.nodePosition.y;
 				newNodeInfo.position = newPosition;
+				newNodeInfo.parent = itemCasted.parent.name;
 
 				nodeInfo.Add(newNodeInfo);
 			}
@@ -630,6 +663,38 @@ namespace Merino
 				return;
 			}
 
+			// orphans are children of deleted nodes; if you delete their parent without reparenting them, the orphans won't get saved
+			// because they no longer have a parent in the treeview (and the save data relies on what's visible in the tree view)
+			// ... so, let's reparent them to their nearest parent
+			var orphans = new List<TreeElement>(); 
+			foreach (var id in DeleteList)
+			{
+				var children = m_TreeView.treeModel.Find(id).children;
+				if (m_TreeView.treeModel.Find(id) != null && children != null)
+				{
+					orphans.AddRange(children);
+				}
+			}
+			foreach (var child in orphans)
+			{
+				var oldParent = child.parent;
+				
+				// keep searching for new parents
+				while (DeleteList.Contains(child.parent.id))
+				{
+					child.parent = child.parent.parent; // eventually, this will end up at root, which can never be deleted
+				}
+				// make sure the new parent knows about it too
+				oldParent.children.Remove(child);
+				if (child.parent.children == null)
+				{
+					child.parent.children = new List<TreeElement>();
+					
+				}
+				child.parent.children.Add( child );
+			}
+			
+			// ok now delete the nodes + remove any from the current selection
 			m_TreeView.treeModel.RemoveElements(DeleteList);
 			foreach (var id in DeleteList)
 			{
@@ -641,6 +706,7 @@ namespace Merino
 		
 			SaveDataToFile();
 			DeleteList.Clear();
+			TreeElementUtility.UpdateDepthValues(m_TreeView.treeModel.root);
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -781,13 +847,18 @@ namespace Merino
 				{
 					if (lines[i].Contains(lineText))
 					{
-						return i+1;
+						return i + 1;
 					}
 				}
 				return -1;
 			}
 			else
 			{
+				if (node == null)
+				{
+					Debug.LogWarning("Merino couldn't find node ID " + nodeID.ToString() + "... it might've been deleted or the Yarn file might be corrupted.");
+				}
+
 				return -1;
 			}
 		}
@@ -950,12 +1021,16 @@ namespace Merino
 			
 			// current node button
 			GUI.enabled = !dialogueEnded;
-			if (GUILayout.Button(new GUIContent("View Node Source", string.Format("click to see Yarn script code for this node")), EditorStyles.toolbarButton))
+			if (dialogue.currentNode != null && GUILayout.Button(new GUIContent("View Node Source", string.Format("click to see Yarn script code for this node")), EditorStyles.toolbarButton))
 			{
 				var matchingNode = treeData.treeElements.Find(x => x.name == dialogue.currentNode);
 				if (matchingNode != null)
 				{
 					SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, dialogueUI.displayStringFull) );
+				}
+				else if ( dialogue != null && dialogue.currentNode != null )
+				{
+					Debug.LogWarning("Marino couldn't find the node " + dialogue.currentNode + "... it might've been deleted or the Yarn file is corrupted.");
 				}
 			}
 			GUI.enabled = true;
@@ -1234,9 +1309,7 @@ namespace Merino
 					
 						// special functions that rely on TextEditor: undo spacing and character-based positioning (error bubbles, inline syntax highlights)
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
-						{
-							currentNodeIDEditing = id;
-							
+						{						
 							// undo support: move back keyboard cursor (caret) to undo point... minor quality of life that's actually kind of major
 							if (moveCursorUndoID == id && moveCursorUndoIndex >= 0)
 							{
@@ -1351,6 +1424,9 @@ namespace Merino
 					// did user edit something?
 					if (EditorGUI.EndChangeCheck() )
 					{
+						// remember last edited node, for the "playtest this" button in lower-right corner
+						currentNodeIDEditing = id;
+						
 						// undo begin
 						Undo.RecordObject(treeData, "Merino > " + newName );
 						

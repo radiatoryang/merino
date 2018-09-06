@@ -392,6 +392,9 @@ namespace Yarn {
 					return new List<string>(tags.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
 				}
 			}
+			
+			// 5 September 2018 -- this is just for Merino
+			public string parent { get; set; }
 
 		}
 

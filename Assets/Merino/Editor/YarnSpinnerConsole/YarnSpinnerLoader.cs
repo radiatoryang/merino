@@ -46,17 +46,17 @@ using System.Linq;
 
 namespace Yarn {
 
-	public enum NodeFormat
-	{
-		Unknown, // an unknown type
-
-		SingleNodeText, // a plain text file containing a single node with no metadata
-
-		JSON, // a JSON file containing multiple nodes with metadata
-
-		Text, //  a text file containing multiple nodes with metadata
-
-	}
+//	public enum NodeFormat
+//	{
+//		Unknown, // an unknown type
+//
+//		SingleNodeText, // a plain text file containing a single node with no metadata
+//
+//		JSON, // a JSON file containing multiple nodes with metadata
+//
+//		Text, //  a text file containing multiple nodes with metadata
+//
+//	}
 
 	public class YarnSpinnerLoader {
 
@@ -392,6 +392,9 @@ namespace Yarn {
 					return new List<string>(tags.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
 				}
 			}
+			
+			// 5 September 2018 -- this is just for Merino
+			public string parent { get; set; }
 
 		}
 

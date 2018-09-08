@@ -218,7 +218,7 @@ namespace Yarn
 
 		public static void ConvertNodesInFile(ConvertFormatOptions options, string file, string fileExtension, ConvertNodesToText convert)
 		{
-			var d = new Dialogue(null);
+		//	var d = new Dialogue(null);
 
 			var text = File.ReadAllText(file);
 

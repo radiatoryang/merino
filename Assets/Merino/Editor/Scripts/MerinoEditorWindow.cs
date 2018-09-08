@@ -72,7 +72,7 @@ namespace Merino
 
 		Rect bottomToolbarRect
 		{
-			get { return new Rect(margin, position.height - margin*2.5f, position.width - margin*2, margin*2.5f); }
+			get { return new Rect(0, position.height - margin*2.5f, position.width, margin*2.5f); }
 		}
 
 		// misc resources
@@ -1195,7 +1195,7 @@ namespace Merino
 							// important: have to clamp the error's line number here! e.g. error might say line 201 even though only 199 lines total displayed
 							// also must clamp now before the Where(), because that chunk range check needs to account for the clamp
 							var errors = errorLog.Select(e => {
-								e.lineNumber = Mathf.Clamp(e.lineNumber, 0, lineToCharIndex.Length-1);
+								e.lineNumber = Mathf.Clamp(e.lineNumber, 0, lineToCharIndex.Length-1); // (why length-1? clamp range is inclusive)
 								return e;
 							}).Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd).ToArray(); // grab errors only for this nodeID && in this chunk
 
@@ -1475,7 +1475,7 @@ namespace Merino
 		{
 			GUILayout.BeginArea (rect);
 
-			using (new EditorGUILayout.HorizontalScope ())
+			using (new EditorGUILayout.HorizontalScope (isDialogueRunning ? EditorStyles.label : EditorStyles.helpBox))
 			{
 				var style = GUI.skin.button; //EditorStyles.miniButton;
 				

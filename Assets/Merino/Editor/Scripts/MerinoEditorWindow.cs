@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -10,8 +9,7 @@ using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using Yarn;
 using File = System.IO.File;
-using EditorCoroutines;
-using Random = System.Random;
+using Merino.EditorCoroutines;
 // wow that's a lot of usings
 
 namespace Merino
@@ -19,6 +17,8 @@ namespace Merino
 
 	class MerinoEditorWindow : EditorWindow
 	{
+		static MerinoEditorWindow window;
+		
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
@@ -30,24 +30,6 @@ namespace Merino
 			get { return m_TreeView; }
 		}
 		// double lastTabTime = 0.0; // this is a really bad hack
-		
-		// preferences
-		static bool prefsLoaded = false;
-		
-		static string newFileTemplatePath = "NewFileTemplate.yarn";
-		static string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
-		
-		static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
-		static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
-		static Color highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
-		static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
-		// public static Color highlightVariables;
-		
-		// UI settings, will still get saved by Hidden EditorPrefs
-		static bool stopOnDialogueEnd = true;
-		static bool useAutoAdvance = false;
-		static bool useAutosave = true;
-		static float sidebarWidth = 180f;
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
@@ -65,27 +47,27 @@ namespace Merino
 		
 		Rect sidebarSearchRect
 		{
-			get { return new Rect (0, margin, sidebarWidth, margin*2); }
+			get { return new Rect (margin, margin, MerinoPrefs.sidebarWidth, margin*2); }
 		}
 		
 		Rect sidebarRect
 		{
-			get { return new Rect(0, margin*3, sidebarWidth, position.height-margin*5.5f); }
+			get { return new Rect(margin, 30, MerinoPrefs.sidebarWidth, position.height-40); }
 		}
 
 		Rect sidebarResizeRect
 		{
-			get { return new Rect(sidebarWidth, 0, 5, position.height); }
+			get { return new Rect(margin + MerinoPrefs.sidebarWidth, 0, 5, position.height); }
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth, margin, position.width-sidebarWidth, position.height-margin*3.5f-playPreviewHeight);} // was height-30
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth, position.height-margin-playPreviewHeight, position.width-sidebarWidth-0.5f, playPreviewHeight-margin);}
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-MerinoPrefs.sidebarWidth-15, playPreviewHeight-margin);}
 		}
 
 		Rect bottomToolbarRect
@@ -96,7 +78,6 @@ namespace Merino
 		// misc resources
 		Texture helpIcon, errorIcon;
 		TextAsset currentFile;
-		Font monoFont;
 		
 		// undo management
 		double lastUndoTime;
@@ -124,7 +105,6 @@ namespace Merino
 					_dialogue = new Yarn.Dialogue ( varStorage );
 					_dialogue.experimentalMode = false;
 					dialogueUI = new MerinoDialogueUI();
-					dialogueUI.consolasFont = monoFont;
 					
 					// Set up the logging system.
 					_dialogue.LogDebugMessage = delegate (string message) {
@@ -141,100 +121,28 @@ namespace Merino
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
 		
-
 		#region EditorWindowStuff
 
 		[MenuItem("Window/Merino (Yarn Editor)")]
-		public static MerinoEditorWindow GetWindow ()
+		static void MenuItem_GetWindow()
 		{
-			var window = GetWindow<MerinoEditorWindow>();
-			window.titleContent = new GUIContent("Merino (Yarn)");
-			window.Focus();
-			window.Repaint();
-			return window;
-		}
-
-		static void ResetEditorPrefsAll()
-		{
-			newFileTemplatePath = "NewFileTemplate.yarn";
-			
-			highlightComments = new Color(0.3f, 0.6f, 0.25f);
-			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
-			highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
-			highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
-			
-			SaveEditorPrefs();
-
-			stopOnDialogueEnd = true;
-			useAutoAdvance = false;
-			useAutosave = true;
-			sidebarWidth = 180f;
-			
-			SaveHiddenEditorPrefs();
-		}
-
-		public static void LoadEditorPrefs()
-		{
-			if (EditorPrefs.HasKey("MerinoFirstRun") == false)
-			{
-				SaveEditorPrefs();
-				EditorPrefs.SetBool("MerinoFirstRun", true);
-			}
-			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
-
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightNodeOptions"), out highlightNodeOptions);
-			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightShortcutOptions"), out highlightShortcutOptions);
-		}
-
-		public static void SaveEditorPrefs()
-		{
-			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
-			
-			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
-			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );
-			EditorPrefs.SetString("MerinoHighlightNodeOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightNodeOptions) );
-			EditorPrefs.SetString("MerinoHighlightShortcutOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightShortcutOptions) );
-
+			GetWindow(true);
 		}
 		
-		[PreferenceItem("Merino (Yarn)")]
-		public static void MerinoPreferencesGUI()
+		// this should be always be used over EditorWindow.GetWindow to get the current MerinoEditorWindow
+		public static MerinoEditorWindow GetWindow (bool focus = false)
 		{
-			// Load the preferences
-			if (!prefsLoaded)
+			if (window == null)
 			{
-				LoadEditorPrefs();
-				prefsLoaded = true;
-			}
-
-
-			// Reset button
-			if (GUILayout.Button("Reset Merino to default settings"))
-			{
-				ResetEditorPrefsAll();
-				SaveEditorPrefs();
+				window = GetWindow<MerinoEditorWindow>();
+				window.titleContent = new GUIContent("Merino (Yarn)");
 			}
 			
-			// Preferences GUI
-			GUILayout.Label("File Handling", EditorStyles.boldLabel);
-			EditorGUILayout.Space();
-			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
-			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
-
-			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
-			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
-			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
-			highlightNodeOptions = EditorGUILayout.ColorField("[[NodeOptions]]", highlightNodeOptions);
-			highlightShortcutOptions = EditorGUILayout.ColorField("-> ShortcutOptions", highlightShortcutOptions);
-
-			// Save the preferences
-			if (GUI.changed)
-			{
-				SaveEditorPrefs();
-			}
-
+			if (focus) // if window was previously null it will be focused either way.
+				window.Focus();
+			
+			window.Repaint();
+			return window;
 		}
 		
 		void ResetMerino()
@@ -243,30 +151,10 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
-			AssetDatabase.DeleteAsset(tempDataPath); // delete tempdata, or else it will just get reloaded again
+			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			InitIfNeeded(true);
-		}
-
-		static void LoadHiddenEditorPrefs()
-		{
-			if (EditorPrefs.HasKey("MerinoStopOn") == false)
-			{
-				SaveHiddenEditorPrefs(); // save defaults if not found
-			}
-			stopOnDialogueEnd = EditorPrefs.GetBool("MerinoStopOn");
-			useAutoAdvance = EditorPrefs.GetBool("MerinoAutoAdvance");
-			useAutosave = EditorPrefs.GetBool("MerinoAutosave");
-			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
-		}
-
-		static void SaveHiddenEditorPrefs()
-		{
-			EditorPrefs.SetBool("MerinoStopOn", stopOnDialogueEnd);
-			EditorPrefs.SetBool("MerinoAutoAdvance", useAutoAdvance);
-			EditorPrefs.SetBool("MerinoAutosave", useAutosave);
-			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
 		}
 		
 		void InitIfNeeded (bool ignoreSelection=false)
@@ -277,16 +165,6 @@ namespace Merino
 			Undo.undoRedoPerformed += OnUndo;
 			undoData.Clear();
 			errorLog.Clear();
-			
-			// default highlight colors		
-			LoadEditorPrefs();
-			LoadHiddenEditorPrefs();
-			
-			// load font
-			if (monoFont == null)
-			{
-				monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Editor/Fonts/Inconsolata-Regular.ttf");
-			}
 			
 			// load help icon
 			if (helpIcon == null)
@@ -315,11 +193,11 @@ namespace Merino
 				multiColumnHeader.ResizeToFit ();
 
 			// detect temp data (e.g. when going into play mode and back)
-			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(tempDataPath);
+			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
 			if (possibleTempData == null)
 			{
 				treeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-				AssetDatabase.CreateAsset(treeData, tempDataPath);
+				AssetDatabase.CreateAsset(treeData, MerinoPrefs.tempDataPath);
 				AssetDatabase.SaveAssets();
 			}
 			else
@@ -426,7 +304,7 @@ namespace Merino
 			
 			// repaint tree view so names get updated
 			m_TreeView.Reload();
-			if (currentFile != null && useAutosave)
+			if (currentFile != null && MerinoPrefs.useAutosave)
 			{
 				SaveDataToFile();
 			}
@@ -524,14 +402,14 @@ namespace Merino
 				}
 				
 				// otherwise, load default data from template
-				var defaultData = Resources.Load<TextAsset>(newFileTemplatePath);
+				var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
 				if (defaultData != null)
 				{
 					return GetData(defaultData);
 				}
 				else
 				{ // oops, couldn't find the new file template!
-					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", newFileTemplatePath);
+					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", MerinoPrefs.newFileTemplatePath);
 					return null;
 				}
 				
@@ -882,7 +760,7 @@ namespace Merino
 
                     // Wait for line to finish displaying
                     var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, useAutoAdvance));
+	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, MerinoPrefs.useAutoAdvance));
 //	                while (dialogueUI.inputContinue == false)
 //	                {
 //		                yield return new WaitForSeconds(0.01f);
@@ -907,7 +785,7 @@ namespace Merino
 //                    if (DispatchCommand(commandResult.command.text) == true) {
 //                        // command was dispatched
 //                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, useAutoAdvance));
+	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, MerinoPrefs.useAutoAdvance));
 //                    }
 
 
@@ -921,8 +799,8 @@ namespace Merino
 	        Debug.Log("Merino: reached the end of the dialogue.");
 	        
             // No more results! The dialogue is done.
-            this.dialogueUI.DialogueComplete ();
-	        while (stopOnDialogueEnd==false)
+            // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
+	        while (MerinoPrefs.stopOnDialogueEnd==false)
 	        {
 		        yield return new WaitForSeconds(0.01f);
 	        }
@@ -972,7 +850,7 @@ namespace Merino
 			
 			// do resize
 			if(resizingSidebar){
-				sidebarWidth = Mathf.Clamp(Event.current.mousePosition.x - 10, sidebarWidthClamp, position.width-sidebarWidth);
+				MerinoPrefs.sidebarWidth = Mathf.Clamp(Event.current.mousePosition.x - 10, sidebarWidthClamp, position.width-MerinoPrefs.sidebarWidth);
 			//	cursorChangeRect.Set(cursorChangeRect.x,currentScrollViewHeight,cursorChangeRect.width,cursorChangeRect.height);
 			}
 
@@ -980,7 +858,7 @@ namespace Merino
 			if (Event.current.rawType == EventType.MouseUp)
 			{
 				resizingSidebar = false;
-				SaveHiddenEditorPrefs();
+				MerinoPrefs.SaveHiddenPrefs();
 			}
 		}
 
@@ -988,9 +866,7 @@ namespace Merino
 		{
 			// toolbar
 			GUILayout.BeginArea(rect);
-			var toolbarStyle = new GUIStyle(EditorStyles.toolbar);
-			toolbarStyle.alignment = TextAnchor.MiddleCenter;
-			EditorGUILayout.BeginHorizontal(toolbarStyle, GUILayout.ExpandWidth(true));
+			EditorGUILayout.BeginHorizontal(MerinoStyles.ToolbarStyle, GUILayout.ExpandWidth(true));
 
 			// jump to node button, but only if dialogue is already running
 			var jumpOptions = dialogue.allNodes.ToList();
@@ -1039,22 +915,15 @@ namespace Merino
 			
 			// begin some settings
 			EditorGUI.BeginChangeCheck();
-			var smallToggleStyle = new GUIStyle();
-			smallToggleStyle.fontSize = 10;
-			smallToggleStyle.alignment = TextAnchor.MiddleLeft;
-			if (EditorGUIUtility.isProSkin)
-			{
-				smallToggleStyle.normal.textColor = Color.gray;
-				
-			}
+		
 			// auto advance button
-			useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), useAutoAdvance, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), MerinoPrefs.useAutoAdvance, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
 			GUILayout.FlexibleSpace();
 			// stop on dialogue end button
-			stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), MerinoPrefs.stopOnDialogueEnd, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
 			if (EditorGUI.EndChangeCheck())
 			{
-				SaveHiddenEditorPrefs(); // remember new settings
+				MerinoPrefs.SaveHiddenPrefs(); // remember new settings
 			}
 			
 			// stop button
@@ -1108,13 +977,13 @@ namespace Merino
 			if (currentFile != null)
 			{
 				EditorGUI.BeginChangeCheck();
-				useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), useAutosave, GUILayout.Width(16));
+				MerinoPrefs.useAutosave = EditorGUILayout.Toggle(new GUIContent("", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, GUILayout.Width(16));
 				GUILayout.Label(new GUIContent("AutoSave?   ", "if enabled, will automatically save every change"), GUILayout.Width(0), GUILayout.ExpandWidth(true), GUILayout.MaxWidth(80) );
 				if (EditorGUI.EndChangeCheck())
 				{
-					SaveHiddenEditorPrefs();
+					MerinoPrefs.SaveHiddenPrefs();
 				}
-				if (!useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
+				if (!MerinoPrefs.useAutosave && GUILayout.Button( new GUIContent("Save", "save all changes to the current .yarn.txt file"), GUILayout.MaxWidth(60)))
 				{
 					SaveDataToFile();
 					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(currentFile));
@@ -1206,11 +1075,7 @@ namespace Merino
 					}
 					
 					// node title
-					var nameStyle = new GUIStyle( EditorStyles.textField );
-					nameStyle.font = monoFont;
-					nameStyle.fontSize = 16;
-					nameStyle.fixedHeight = 20f;
-					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, nameStyle);
+					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
 					GUILayout.FlexibleSpace();
 					
 					// delete button
@@ -1231,9 +1096,6 @@ namespace Merino
 					int totalLineCount = -1;
 					int[] lineToCharIndex; // used to save charIndex for the start of each line number, so we can later calculate rects for these line numbers if we have to
 					string lineNumbers = AddLineNumbers(passage, out lineToCharIndex, out lineDigits, out totalLineCount);
-					var bodyStyle = new GUIStyle( EditorStyles.textArea );
-					bodyStyle.font = monoFont;
-					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 					
 					// at around 250-300+ lines, Merino was giving error messages and line numbers broke: "String too long for TextMeshGenerator. Cutting off characters."
 					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines, just to be safe)
@@ -1266,7 +1128,7 @@ namespace Merino
 						
 						// draw text area
 						int nextControlID = GUIUtility.GetControlID(FocusType.Passive) + 1;
-						newBodies[chunkIndex] = EditorGUILayout.TextArea(passageChunks[chunkIndex], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+						newBodies[chunkIndex] = EditorGUILayout.TextArea(passageChunks[chunkIndex], MerinoStyles.GetBodyStyle(lineDigits), GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 						GUI.contentColor = backupContentColor;
 						var bodyRect = GUILayoutUtility.GetLastRect(); // we need the TextArea rect for the line number and syntax highlight overlays
 						
@@ -1284,18 +1146,12 @@ namespace Merino
 						}
 						
 						// line number style
-						GUIStyle highlightOverlay = new GUIStyle();
-						highlightOverlay.border = bodyStyle.border;
-						highlightOverlay.padding = bodyStyle.padding;
-						highlightOverlay.font = monoFont;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.45f;
-						highlightOverlay.richText = true;
-						highlightOverlay.wordWrap = true;
+					
 						// line number positioning (just slightly to the left)
 						Rect linesRect = new Rect(bodyRect);
 						linesRect.x -= lineDigits * 12;
 						// draw the line numbers
-						GUI.Label(linesRect, numberChunks[chunkIndex], highlightOverlay);
+						GUI.Label(linesRect, numberChunks[chunkIndex], MerinoStyles.GetHighlightStyle(lineDigits, 0.45f));
 						
 						// syntax highlight via label overlay
 						Rect lastRect = new Rect(bodyRect);
@@ -1303,9 +1159,8 @@ namespace Merino
 //						lastRect.y += 1f;
 //						lastRect.width -= 6;
 //						lastRect.height -= 1;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
 						string syntaxHighlight = DoSyntaxMarch(newBodies[chunkIndex]); // inserts richtext <color> tags to do highlighting
-						GUI.Label(lastRect, syntaxHighlight, highlightOverlay); // drawn on top of actual TextArea
+						GUI.Label(lastRect, syntaxHighlight, MerinoStyles.GetHighlightStyle(lineDigits, 0.8f)); // drawn on top of actual TextArea
 					
 						// special functions that rely on TextEditor: undo spacing and character-based positioning (error bubbles, inline syntax highlights)
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
@@ -1353,8 +1208,8 @@ namespace Merino
 							}
 
 							// prep the rest of our data for drawing error bubbles on line numbers...
-							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
-							var indicesToRects = CalculateTextEditorIndexToRect(te, bodyStyle, errorLinesToIndices); // change errors' string index to rect
+							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber-1] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
+							var indicesToRects = CalculateTextEditorIndexToRect(te, MerinoStyles.GetBodyStyle(lineDigits), errorLinesToIndices); // change errors' string index to rect
 							for (int i = 0; i < errors.Length; i++)
 							{
 								// place error bubble near line number
@@ -1381,7 +1236,7 @@ namespace Merino
 								int charCursorIndex = lineToCharIndex[clampedZoomLine] - chunkCharOffset;
 								if (clampedZoomLine > chunkStart && clampedZoomLine < chunkEnd)
 								{
-									var zoomRect = CalculateTextEditorIndexToRect(te, bodyStyle, new int[] {charCursorIndex});
+									var zoomRect = CalculateTextEditorIndexToRect(te, MerinoStyles.GetBodyStyle(lineDigits), new int[] {charCursorIndex});
 
 									// if we haven't scrolled to the currect line yet, then do it
 									if (zoomToLineNumber > -1)
@@ -1440,7 +1295,7 @@ namespace Merino
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
 						
 						// save after commit if we're autosaving
-						if (currentFile != null && useAutosave)
+						if (currentFile != null && MerinoPrefs.useAutosave)
 						{
 							SaveDataToFile();
 						}
@@ -1529,16 +1384,16 @@ namespace Merino
 			string newSyntax = syntax.Replace("\t", "").TrimEnd(' ').TrimStart(' '); // cleanup string
 			if ( newSyntax.StartsWith ( "//" ) )
 			{
-				return highlightComments;
+				return MerinoPrefs.highlightComments;
 			} else if (newSyntax.StartsWith("->") )
 			{
-				return highlightShortcutOptions;
+				return MerinoPrefs.highlightShortcutOptions;
 			} else if (newSyntax.StartsWith("[["))
 			{
-				return highlightNodeOptions;
+				return MerinoPrefs.highlightNodeOptions;
 			}else if (newSyntax.StartsWith("<<"))
 			{
-				return highlightShortcutOptions;
+				return MerinoPrefs.highlightShortcutOptions;
 			}
 			else
 			{
@@ -1622,7 +1477,6 @@ namespace Merino
 
 			using (new EditorGUILayout.HorizontalScope (isDialogueRunning ? EditorStyles.label : EditorStyles.helpBox))
 			{
-
 				var style = GUI.skin.button; //EditorStyles.miniButton;
 				
 				if (GUILayout.Button("Expand All", style))
@@ -1726,375 +1580,4 @@ namespace Merino
 		}
 		#endregion
 	}
-
-	// based a bit on YarnSpinner/ExampleDialogueUI
-	public class MerinoDialogueUI
-	{
-		float textSpeed = 0.01f;
-		public bool inputContinue = false;
-		public int inputOption = -1;
-
-		public string currentNode;
-		string displayString;
-		public string displayStringFull;
-		bool showContinuePrompt = false;
-		string[] optionStrings = new string[0];
-		Yarn.OptionChooser optionChooser;
-		bool useConsolasFont = false;
-
-		public Font consolasFont;
-
-		public IEnumerator RunLine(Yarn.Line line, bool autoAdvance)
-		{
-			displayStringFull = line.text;
-			optionStrings = new string[0];
-			// display dialog
-            if (textSpeed > 0.0f) {
-                // Display the line one character at a time
-                var stringBuilder = new StringBuilder ();
-	            inputContinue = false;
-                foreach (char c in line.text) {
-                    float timeWaited = 0f;
-                    stringBuilder.Append (c);
-                    displayString = stringBuilder.ToString ();
-                    while ( timeWaited < textSpeed )
-                    {
-	                    timeWaited += textSpeed;
-                        // early out / skip ahead
-                        if ( inputContinue ) { break; }
-	                    yield return new WaitForSeconds(timeWaited);
-                    }
-                    if ( inputContinue ) { displayString = line.text; break; }
-                }
-            } else {
-              // Display the line immediately if textSpeed == 0
-                displayString = line.text;
-           }
-
-			inputContinue = false;
-
-            // Show the 'press any key' prompt when done, if we have one
-			showContinuePrompt = true;
-
-            // Wait for any user input
-            while (inputContinue == false && autoAdvance == false)
-            {
-	            yield return new WaitForSeconds(0.01f);
-            }
-
-            // Hide the text and prompt
-			showContinuePrompt = false;
-		}
-		
-		public IEnumerator RunCommand (Yarn.Command command, bool autoAdvance)
-		{
-			optionStrings = new string[0];
-			displayString = "(Yarn command: <<" + command.text + ">>)";
-			inputContinue = false;
-			useConsolasFont = true;
-			showContinuePrompt = true;
-			while (inputContinue == false && autoAdvance == false)
-			{
-				yield return new WaitForSeconds(0.01f);
-			}
-
-			showContinuePrompt = false;
-			useConsolasFont = false;
-		}
-		
-		public void RunOptions (Yarn.Options optionsCollection, Yarn.OptionChooser optionChooser)
-		{
-			// Display each option in a button, and make it visible
-			optionStrings = new string[optionsCollection.options.Count];
-			for(int i=0; i<optionStrings.Length; i++)
-			{
-				optionStrings[i] = optionsCollection.options[i];
-			}
-
-			inputOption = -1;
-			this.optionChooser = optionChooser;
-		}
-		
-//		public IEnumerator NodeComplete(string nextNode)
-//		{
-//			yield return new WaitForSeconds(0.1f);
-//		}
-//		
-		public void DialogueComplete()
-		{
-			displayString = "";
-		}
-		
-		public void OnGUI(Rect rect)
-		{
-			// background button for clicking to continue			
-			var newRect = new Rect(rect);
-			newRect.y += 20;
-			GUILayout.BeginArea( newRect, EditorStyles.helpBox);
-			// main stuff
-			GUI.enabled = optionStrings.Length == 0;
-			if (GUILayout.Button("", GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true)))
-			{
-				inputContinue = true;
-			}
-			GUILayout.EndArea();
-			GUI.enabled = true;
-			
-			// display Yarn line here
-			GUILayout.BeginArea( newRect );
-			var passageStyle = new GUIStyle(GUI.skin.box);
-			if (useConsolasFont)
-			{
-				passageStyle.font = consolasFont;
-			}
-			passageStyle.fontSize = 18;
-			passageStyle.normal.textColor = EditorStyles.boldLabel.normal.textColor;
-			passageStyle.padding = new RectOffset(8,8,8,8);
-			passageStyle.richText = true;
-			passageStyle.alignment = TextAnchor.UpperLeft;
-			float maxHeight = passageStyle.CalcHeight(new GUIContent(displayString), rect.width);
-			GUILayout.Label(displayString, passageStyle, GUILayout.Height(0), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(maxHeight), GUILayout.ExpandWidth(true));
-			
-			// show continue prompt
-			if (showContinuePrompt)
-			{
-				Rect promptRect = GUILayoutUtility.GetLastRect();
-				var bounce = Mathf.Sin((float)EditorApplication.timeSinceStartup * 6f) > 0;
-				promptRect.x += promptRect.width-24-(bounce ? 0 : 4);
-				promptRect.y += promptRect.height-24;
-				promptRect.width = 20;
-				promptRect.height = 20;
-				passageStyle.border = new RectOffset(0,0,0,0);
-				passageStyle.padding = new RectOffset(0,0,0,0);
-				passageStyle.alignment = TextAnchor.MiddleCenter;
-				passageStyle.wordWrap = false;
-				passageStyle.normal.background = null;
-				GUI.Box(promptRect, "▶", passageStyle);
-			}
-			
-			// show choices
-			var buttonStyle = new GUIStyle(GUI.skin.button);
-			buttonStyle.fontSize = 16;
-			for (int i = 0; i < optionStrings.Length; i++)
-			{
-				if (GUILayout.Button(optionStrings[i], buttonStyle))
-				{
-					inputOption = i;
-					optionChooser(inputOption);
-					optionStrings = new string[0];
-				}
-			}
-			GUILayout.EndArea();
-		}
-	}
-	
-
-	// this is pretty much just YarnSpinner/ExampleVariableStorage with all the MonoBehaviour stuff taken out
-	public class MerinoVariableStorage : VariableStorage
-	{
-		/// Where we actually keeping our variables
-		Dictionary<string, Yarn.Value> variables = new Dictionary<string, Yarn.Value> ();
-	
-		/// A default value to apply when the object wakes up, or
-		/// when ResetToDefaults is called
-		[System.Serializable]
-		public class DefaultVariable
-		{
-			/// Name of the variable
-			public string name;
-			/// Value of the variable
-			public string value;
-			/// Type of the variable
-			public Yarn.Value.Type type;
-		}
-	
-		/// Our list of default variables, for debugging.
-		DefaultVariable[] defaultVariables = new DefaultVariable[0];
-	
-		/// Reset to our default values when the game starts
-		public MerinoVariableStorage ()
-		{
-			ResetToDefaults ();
-		}
-	
-		/// Erase all variables and reset to default values
-		public void ResetToDefaults ()
-		{
-			Clear ();
-	
-			// For each default variable that's been defined, parse the string
-			// that the user typed in in Unity and store the variable
-			foreach (var variable in defaultVariables) {
-				
-				object value;
-	
-				switch (variable.type) {
-				case Yarn.Value.Type.Number:
-					float f = 0.0f;
-					float.TryParse(variable.value, out f);
-					value = f;
-					break;
-	
-				case Yarn.Value.Type.String:
-					value = variable.value;
-					break;
-	
-				case Yarn.Value.Type.Bool:
-					bool b = false;
-					bool.TryParse(variable.value, out b);
-					value = b;
-					break;
-	
-				case Yarn.Value.Type.Variable:
-					// We don't support assigning default variables from other variables
-					// yet
-					Debug.LogErrorFormat("Can't set variable {0} to {1}: You can't " +
-						"set a default variable to be another variable, because it " +
-						"may not have been initialised yet.", variable.name, variable.value);
-					continue;
-	
-				case Yarn.Value.Type.Null:
-					value = null;
-					break;
-	
-				default:
-					throw new System.ArgumentOutOfRangeException ();
-	
-				}
-	
-				var v = new Yarn.Value(value);
-	
-				SetValue ("$" + variable.name, v);
-			}
-		}
-			
-		/// Set a variable's value
-		public void SetNumber (string variableName, float value)
-		{
-			// Copy this value into our list
-			variables[variableName] = new Yarn.Value(value);
-		}
-	
-		/// Get a variable's value
-		public float GetNumber (string variableName)
-		{
-			// If we don't have a variable with this name, return the null value
-			if (variables.ContainsKey(variableName) == false)
-				return -1f;
-		
-			return variables [variableName].AsNumber;
-		}
-	
-		/// Set a variable's value
-		public void SetValue (string variableName, Yarn.Value value)
-		{
-			// Copy this value into our list
-			variables[variableName] = new Yarn.Value(value);
-		}
-	
-		/// Get a variable's value
-		public Yarn.Value GetValue (string variableName)
-		{
-			// If we don't have a variable with this name, return the null value
-			if (variables.ContainsKey(variableName) == false)
-				return Yarn.Value.NULL;
-			
-			return variables [variableName];
-		}
-	
-		/// Erase all variables
-		public void Clear ()
-		{
-			variables.Clear ();
-		}
-			
-	}
-
-
-	internal class MerinoMultiColumnHeader : MultiColumnHeader
-	{
-		Mode m_Mode;
-		//Texture helpIcon = EditorGUIUtility.IconContent("_Help").image;
-		
-		public enum Mode
-		{
-			LargeHeader,
-			DefaultHeader,
-			MinimumHeaderWithoutSorting
-		}
-
-		public MerinoMultiColumnHeader(MultiColumnHeaderState state)
-			: base(state)
-		{
-			mode = Mode.DefaultHeader;
-		}
-
-		public Mode mode
-		{
-			get
-			{
-				return m_Mode;
-			}
-			set
-			{
-				m_Mode = value;
-				switch (m_Mode)
-				{
-					case Mode.LargeHeader:
-						canSort = true;
-						height = 37f;
-						break;
-					case Mode.DefaultHeader:
-						canSort = true;
-						height = DefaultGUI.minimumHeight;
-						break;
-					case Mode.MinimumHeaderWithoutSorting:
-						canSort = false;
-						height = DefaultGUI.minimumHeight;
-						break;
-				}
-			}
-		}
-		
-		public override void OnGUI(Rect rect, float xScroll)
-		{
-			// add extra "clear sorting" button if sorting is active
-			if (state.sortedColumnIndex > -1)
-			{
-				var clearSortRect = new Rect(rect);
-				clearSortRect.width = 18;
-				clearSortRect.height = clearSortRect.width;
-				rect.x += clearSortRect.width;
-				rect.width -= clearSortRect.width;
-				if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
-				{
-					state.sortedColumnIndex = -1;
-				}
-			}
-
-			// draw rest of the header
-			base.OnGUI(rect, xScroll);
-		}
-
-		protected override void ColumnHeaderGUI (MultiColumnHeaderState.Column column, Rect headerRect, int columnIndex)
-		{
-			// Default column header gui
-			base.ColumnHeaderGUI(column, headerRect, columnIndex);
-
-			// Add additional info for large header
-			if (mode == Mode.LargeHeader)
-			{
-				// Show example overlay stuff on some of the columns
-				if (columnIndex > 2)
-				{
-					headerRect.xMax -= 3f;
-					var oldAlignment = EditorStyles.largeLabel.alignment;
-					EditorStyles.largeLabel.alignment = TextAnchor.UpperRight;
-					GUI.Label(headerRect, 36 + columnIndex + "%", EditorStyles.largeLabel);
-					EditorStyles.largeLabel.alignment = oldAlignment;
-				}
-			}
-		}
-	}
-
 }

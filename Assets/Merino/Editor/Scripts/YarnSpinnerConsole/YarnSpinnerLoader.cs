@@ -37,6 +37,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
+using Yarn;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
@@ -44,7 +45,7 @@ using System.Text;
 using System.IO;
 using System.Linq;
 
-namespace Yarn {
+namespace Merino {
 
 //	public enum NodeFormat
 //	{

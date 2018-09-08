@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System;
 using System.Reflection;
 
-namespace EditorCoroutines
+namespace Merino.EditorCoroutines
 {
 	public class EditorCoroutines
 	{

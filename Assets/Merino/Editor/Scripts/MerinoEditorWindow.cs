@@ -76,7 +76,6 @@ namespace Merino
 		// misc resources
 		Texture helpIcon, errorIcon;
 		TextAsset currentFile;
-		Font monoFont;
 		
 		// undo management
 		double lastUndoTime;
@@ -153,12 +152,6 @@ namespace Merino
 			Undo.undoRedoPerformed += OnUndo;
 			undoData.Clear();
 			errorLog.Clear();
-			
-			// load font
-			if (monoFont == null)
-			{
-				monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Editor/Fonts/Inconsolata-Regular.ttf");
-			}
 			
 			// load help icon
 			if (helpIcon == null)

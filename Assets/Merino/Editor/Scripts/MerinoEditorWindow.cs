@@ -52,11 +52,7 @@ namespace Merino
 		
 		Rect sidebarRect
 		{
-<<<<<<< HEAD:Assets/Merino/Editor/Scripts/MerinoEditorWindow.cs
 			get { return new Rect(margin, 30, MerinoPrefs.sidebarWidth, position.height-40); }
-=======
-			get { return new Rect(margin, margin*3, sidebarWidth, position.height-margin*5.5f); }
->>>>>>> upstream/develop:Assets/Merino/Editor/MerinoEditorWindow.cs
 		}
 
 		Rect sidebarResizeRect
@@ -66,11 +62,7 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-<<<<<<< HEAD:Assets/Merino/Editor/Scripts/MerinoEditorWindow.cs
 			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*2-playPreviewHeight);} // was height-30
-=======
-			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*3.5f-playPreviewHeight);} // was height-30
->>>>>>> upstream/develop:Assets/Merino/Editor/MerinoEditorWindow.cs
 		}
 		
 		Rect playPreviewRect

@@ -65,32 +65,32 @@ namespace Merino
 		
 		Rect sidebarSearchRect
 		{
-			get { return new Rect (margin, margin, sidebarWidth, margin*2); }
+			get { return new Rect (0, margin, sidebarWidth, margin*2); }
 		}
 		
 		Rect sidebarRect
 		{
-			get { return new Rect(margin, margin*3, sidebarWidth, position.height-margin*5.5f); }
+			get { return new Rect(0, margin*3, sidebarWidth, position.height-margin*5.5f); }
 		}
 
 		Rect sidebarResizeRect
 		{
-			get { return new Rect(margin + sidebarWidth, 0, 5, position.height); }
+			get { return new Rect(sidebarWidth, 0, 5, position.height); }
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( sidebarWidth+margin*2, margin, position.width-sidebarWidth-margin*3, position.height-margin*3.5f-playPreviewHeight);} // was height-30
+			get { return new Rect( sidebarWidth, margin, position.width-sidebarWidth, position.height-margin*3.5f-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
 		{
-			get { return new Rect( sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-sidebarWidth-15, playPreviewHeight-margin);}
+			get { return new Rect( sidebarWidth, position.height-margin-playPreviewHeight, position.width-sidebarWidth-0.5f, playPreviewHeight-margin);}
 		}
 
 		Rect bottomToolbarRect
 		{
-			get { return new Rect(margin, position.height - margin*2.5f, position.width - margin*2, margin*2.5f); }
+			get { return new Rect(0, position.height - margin*2.5f, position.width, margin*2.5f); }
 		}
 
 		// misc resources
@@ -921,7 +921,7 @@ namespace Merino
 	        Debug.Log("Merino: reached the end of the dialogue.");
 	        
             // No more results! The dialogue is done.
-            // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
+            this.dialogueUI.DialogueComplete ();
 	        while (stopOnDialogueEnd==false)
 	        {
 		        yield return new WaitForSeconds(0.01f);
@@ -1340,7 +1340,7 @@ namespace Merino
 							// important: have to clamp the error's line number here! e.g. error might say line 201 even though only 199 lines total displayed
 							// also must clamp now before the Where(), because that chunk range check needs to account for the clamp
 							var errors = errorLog.Select(e => {
-								e.lineNumber = Mathf.Clamp(e.lineNumber, 0, lineToCharIndex.Length-1);
+								e.lineNumber = Mathf.Clamp(e.lineNumber, 0, lineToCharIndex.Length-1); // (why length-1? clamp range is inclusive)
 								return e;
 							}).Where(e => e.nodeID == id && e.lineNumber > chunkStart && e.lineNumber < chunkEnd).ToArray(); // grab errors only for this nodeID && in this chunk
 
@@ -1353,7 +1353,7 @@ namespace Merino
 							}
 
 							// prep the rest of our data for drawing error bubbles on line numbers...
-							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber-1] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
+							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
 							var indicesToRects = CalculateTextEditorIndexToRect(te, bodyStyle, errorLinesToIndices); // change errors' string index to rect
 							for (int i = 0; i < errors.Length; i++)
 							{
@@ -1620,7 +1620,7 @@ namespace Merino
 		{
 			GUILayout.BeginArea (rect);
 
-			using (new EditorGUILayout.HorizontalScope ())
+			using (new EditorGUILayout.HorizontalScope (isDialogueRunning ? EditorStyles.label : EditorStyles.helpBox))
 			{
 
 				var style = GUI.skin.button; //EditorStyles.miniButton;
@@ -1820,11 +1820,10 @@ namespace Merino
 //			yield return new WaitForSeconds(0.1f);
 //		}
 //		
-//		public IEnumerator DialogueComplete()
-//		{
-//			yield return new WaitForSeconds(0.1f);
-//			displayString = "";
-//		}
+		public void DialogueComplete()
+		{
+			displayString = "";
+		}
 		
 		public void OnGUI(Rect rect)
 		{
@@ -2060,16 +2059,19 @@ namespace Merino
 		public override void OnGUI(Rect rect, float xScroll)
 		{
 			// add extra "clear sorting" button if sorting is active
-			var clearSortRect = new Rect(rect);
-			clearSortRect.width = 18;
-			clearSortRect.height = clearSortRect.width;
-			rect.x += clearSortRect.width;
-			rect.width -= clearSortRect.width;
-			if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+			if (state.sortedColumnIndex > -1)
 			{
-				state.sortedColumnIndex = -1;
+				var clearSortRect = new Rect(rect);
+				clearSortRect.width = 18;
+				clearSortRect.height = clearSortRect.width;
+				rect.x += clearSortRect.width;
+				rect.width -= clearSortRect.width;
+				if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+				{
+					state.sortedColumnIndex = -1;
+				}
 			}
-			
+
 			// draw rest of the header
 			base.OnGUI(rect, xScroll);
 		}

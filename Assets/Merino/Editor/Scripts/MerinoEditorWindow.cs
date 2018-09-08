@@ -17,6 +17,8 @@ namespace Merino
 
 	class MerinoEditorWindow : EditorWindow
 	{
+		static MerinoEditorWindow window;
+		
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
 		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
@@ -119,15 +121,26 @@ namespace Merino
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
 		
-
 		#region EditorWindowStuff
 
 		[MenuItem("Window/Merino (Yarn Editor)")]
-		public static MerinoEditorWindow GetWindow ()
+		static void MenuItem_GetWindow()
 		{
-			var window = GetWindow<MerinoEditorWindow>();
-			window.titleContent = new GUIContent("Merino (Yarn)");
-			window.Focus();
+			GetWindow(true);
+		}
+		
+		// this should be always be used over EditorWindow.GetWindow to get the current MerinoEditorWindow
+		public static MerinoEditorWindow GetWindow (bool focus = false)
+		{
+			if (window == null)
+			{
+				window = GetWindow<MerinoEditorWindow>();
+				window.titleContent = new GUIContent("Merino (Yarn)");
+			}
+			
+			if (focus) // if window was previously null it will be focused either way.
+				window.Focus();
+			
 			window.Repaint();
 			return window;
 		}

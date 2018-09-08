@@ -104,7 +104,6 @@ namespace Merino
 					_dialogue = new Yarn.Dialogue ( varStorage );
 					_dialogue.experimentalMode = false;
 					dialogueUI = new MerinoDialogueUI();
-					dialogueUI.consolasFont = monoFont;
 					
 					// Set up the logging system.
 					_dialogue.LogDebugMessage = delegate (string message) {
@@ -861,9 +860,7 @@ namespace Merino
 		{
 			// toolbar
 			GUILayout.BeginArea(rect);
-			var toolbarStyle = new GUIStyle(EditorStyles.toolbar);
-			toolbarStyle.alignment = TextAnchor.MiddleCenter;
-			EditorGUILayout.BeginHorizontal(toolbarStyle, GUILayout.ExpandWidth(true));
+			EditorGUILayout.BeginHorizontal(MerinoStyles.ToolbarStyle, GUILayout.ExpandWidth(true));
 
 			// jump to node button, but only if dialogue is already running
 			var jumpOptions = dialogue.allNodes.ToList();
@@ -912,19 +909,12 @@ namespace Merino
 			
 			// begin some settings
 			EditorGUI.BeginChangeCheck();
-			var smallToggleStyle = new GUIStyle();
-			smallToggleStyle.fontSize = 10;
-			smallToggleStyle.alignment = TextAnchor.MiddleLeft;
-			if (EditorGUIUtility.isProSkin)
-			{
-				smallToggleStyle.normal.textColor = Color.gray;
-				
-			}
+		
 			// auto advance button
-			MerinoPrefs.useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), MerinoPrefs.useAutoAdvance, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), MerinoPrefs.useAutoAdvance, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
 			GUILayout.FlexibleSpace();
 			// stop on dialogue end button
-			MerinoPrefs.stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), MerinoPrefs.stopOnDialogueEnd, smallToggleStyle, GUILayout.Width(100));
+			MerinoPrefs.stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), MerinoPrefs.stopOnDialogueEnd, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
 			if (EditorGUI.EndChangeCheck())
 			{
 				MerinoPrefs.SaveHiddenPrefs(); // remember new settings
@@ -1079,11 +1069,7 @@ namespace Merino
 					}
 					
 					// node title
-					var nameStyle = new GUIStyle( EditorStyles.textField );
-					nameStyle.font = monoFont;
-					nameStyle.fontSize = 16;
-					nameStyle.fixedHeight = 20f;
-					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, nameStyle);
+					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
 					GUILayout.FlexibleSpace();
 					
 					// delete button
@@ -1104,9 +1090,6 @@ namespace Merino
 					int totalLineCount = -1;
 					int[] lineToCharIndex; // used to save charIndex for the start of each line number, so we can later calculate rects for these line numbers if we have to
 					string lineNumbers = AddLineNumbers(passage, out lineToCharIndex, out lineDigits, out totalLineCount);
-					var bodyStyle = new GUIStyle( EditorStyles.textArea );
-					bodyStyle.font = monoFont;
-					bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 					
 					// at around 250-300+ lines, Merino was giving error messages and line numbers broke: "String too long for TextMeshGenerator. Cutting off characters."
 					// because Unity EditorGUI TextArea has a limit of 16382 characters, extra-long nodes must be chunked into multiple TextAreas (let's say, every 200 lines, just to be safe)
@@ -1139,7 +1122,7 @@ namespace Merino
 						
 						// draw text area
 						int nextControlID = GUIUtility.GetControlID(FocusType.Passive) + 1;
-						newBodies[chunkIndex] = EditorGUILayout.TextArea(passageChunks[chunkIndex], bodyStyle, GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
+						newBodies[chunkIndex] = EditorGUILayout.TextArea(passageChunks[chunkIndex], MerinoStyles.GetBodyStyle(lineDigits), GUILayout.Height(0f), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(height));
 						GUI.contentColor = backupContentColor;
 						var bodyRect = GUILayoutUtility.GetLastRect(); // we need the TextArea rect for the line number and syntax highlight overlays
 						
@@ -1157,18 +1140,12 @@ namespace Merino
 						}
 						
 						// line number style
-						GUIStyle highlightOverlay = new GUIStyle();
-						highlightOverlay.border = bodyStyle.border;
-						highlightOverlay.padding = bodyStyle.padding;
-						highlightOverlay.font = monoFont;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.45f;
-						highlightOverlay.richText = true;
-						highlightOverlay.wordWrap = true;
+					
 						// line number positioning (just slightly to the left)
 						Rect linesRect = new Rect(bodyRect);
 						linesRect.x -= lineDigits * 12;
 						// draw the line numbers
-						GUI.Label(linesRect, numberChunks[chunkIndex], highlightOverlay);
+						GUI.Label(linesRect, numberChunks[chunkIndex], MerinoStyles.GetHighlightStyle(lineDigits, 0.45f));
 						
 						// syntax highlight via label overlay
 						Rect lastRect = new Rect(bodyRect);
@@ -1176,9 +1153,8 @@ namespace Merino
 //						lastRect.y += 1f;
 //						lastRect.width -= 6;
 //						lastRect.height -= 1;
-						highlightOverlay.normal.textColor = (EditorGUIUtility.isProSkin ? Color.white : Color.black) * 0.8f;
 						string syntaxHighlight = DoSyntaxMarch(newBodies[chunkIndex]); // inserts richtext <color> tags to do highlighting
-						GUI.Label(lastRect, syntaxHighlight, highlightOverlay); // drawn on top of actual TextArea
+						GUI.Label(lastRect, syntaxHighlight, MerinoStyles.GetHighlightStyle(lineDigits, 0.8f)); // drawn on top of actual TextArea
 					
 						// special functions that rely on TextEditor: undo spacing and character-based positioning (error bubbles, inline syntax highlights)
 						if (te != null && GUIUtility.keyboardControl == te.controlID)
@@ -1227,7 +1203,7 @@ namespace Merino
 
 							// prep the rest of our data for drawing error bubbles on line numbers...
 							var errorLinesToIndices = errors.Select(e => lineToCharIndex[e.lineNumber-1] - chunkCharOffset).ToArray(); // change errors' line numbers into string index
-							var indicesToRects = CalculateTextEditorIndexToRect(te, bodyStyle, errorLinesToIndices); // change errors' string index to rect
+							var indicesToRects = CalculateTextEditorIndexToRect(te, MerinoStyles.GetBodyStyle(lineDigits), errorLinesToIndices); // change errors' string index to rect
 							for (int i = 0; i < errors.Length; i++)
 							{
 								// place error bubble near line number
@@ -1254,7 +1230,7 @@ namespace Merino
 								int charCursorIndex = lineToCharIndex[clampedZoomLine] - chunkCharOffset;
 								if (clampedZoomLine > chunkStart && clampedZoomLine < chunkEnd)
 								{
-									var zoomRect = CalculateTextEditorIndexToRect(te, bodyStyle, new int[] {charCursorIndex});
+									var zoomRect = CalculateTextEditorIndexToRect(te, MerinoStyles.GetBodyStyle(lineDigits), new int[] {charCursorIndex});
 
 									// if we haven't scrolled to the currect line yet, then do it
 									if (zoomToLineNumber > -1)
@@ -1495,7 +1471,6 @@ namespace Merino
 
 			using (new EditorGUILayout.HorizontalScope ())
 			{
-
 				var style = GUI.skin.button; //EditorStyles.miniButton;
 				
 				if (GUILayout.Button("Expand All", style))

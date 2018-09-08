@@ -21,8 +21,6 @@ namespace Merino
         Yarn.OptionChooser optionChooser;
         bool useConsolasFont = false;
 
-        public Font consolasFont;
-
         public IEnumerator RunLine(Yarn.Line line, bool autoAdvance)
         {
             displayStringFull = line.text;
@@ -122,16 +120,7 @@ namespace Merino
 			
             // display Yarn line here
             GUILayout.BeginArea( newRect );
-            var passageStyle = new GUIStyle(GUI.skin.box);
-            if (useConsolasFont)
-            {
-                passageStyle.font = consolasFont;
-            }
-            passageStyle.fontSize = 18;
-            passageStyle.normal.textColor = EditorStyles.boldLabel.normal.textColor;
-            passageStyle.padding = new RectOffset(8,8,8,8);
-            passageStyle.richText = true;
-            passageStyle.alignment = TextAnchor.UpperLeft;
+            var passageStyle = MerinoStyles.GetPassageStyle(useConsolasFont);
             float maxHeight = passageStyle.CalcHeight(new GUIContent(displayString), rect.width);
             GUILayout.Label(displayString, passageStyle, GUILayout.Height(0), GUILayout.ExpandHeight(true), GUILayout.MaxHeight(maxHeight), GUILayout.ExpandWidth(true));
 			
@@ -144,20 +133,13 @@ namespace Merino
                 promptRect.y += promptRect.height-24;
                 promptRect.width = 20;
                 promptRect.height = 20;
-                passageStyle.border = new RectOffset(0,0,0,0);
-                passageStyle.padding = new RectOffset(0,0,0,0);
-                passageStyle.alignment = TextAnchor.MiddleCenter;
-                passageStyle.wordWrap = false;
-                passageStyle.normal.background = null;
-                GUI.Box(promptRect, "▶", passageStyle);
+                GUI.Box(promptRect, "▶", MerinoStyles.GetPassageStyle(useConsolasFont, true));
             }
 			
             // show choices
-            var buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.fontSize = 16;
             for (int i = 0; i < optionStrings.Length; i++)
             {
-                if (GUILayout.Button(optionStrings[i], buttonStyle))
+                if (GUILayout.Button(optionStrings[i], MerinoStyles.ButtonStyle))
                 {
                     inputOption = i;
                     optionChooser(inputOption);

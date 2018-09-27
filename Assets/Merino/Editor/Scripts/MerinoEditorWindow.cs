@@ -1225,7 +1225,7 @@ namespace Merino
 									errorLog.Remove(errorLog.First(e => e.message == errors[i].message)); // have to use LINQ to find the original ErrorLine object
 								}
 
-								GUI.backgroundColor = backupBGColor;
+								GUI.backgroundColor = backupBGColor; 
 							}
 							
 							// lastly, if we're zooming to a line number, then let's scroll to it

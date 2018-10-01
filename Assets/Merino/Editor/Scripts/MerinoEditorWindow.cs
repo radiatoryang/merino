@@ -1155,10 +1155,6 @@ namespace Merino
 						
 						// syntax highlight via label overlay
 						Rect lastRect = new Rect(bodyRect);
-//						lastRect.x += 2;
-//						lastRect.y += 1f;
-//						lastRect.width -= 6;
-//						lastRect.height -= 1;
 						string syntaxHighlight = DoSyntaxMarch(newBodies[chunkIndex]); // inserts richtext <color> tags to do highlighting
 						GUI.Label(lastRect, syntaxHighlight, MerinoStyles.GetHighlightStyle(lineDigits, 0.8f)); // drawn on top of actual TextArea
 					
@@ -1370,9 +1366,15 @@ namespace Merino
 			for (int i = 0; i < textLines.Length; i++)
 			{
 				var newColor = CheckSyntax(textLines[i]);
+				string cleanTextLine = SanitizeRichText(textLines[i]);
 				if (newColor != Color.white)
 				{
-					textLines[i] = string.Format("<color=#{0}>{1}</color>", ColorUtility.ToHtmlStringRGB(newColor), textLines[i]);
+					string hexColor = ColorUtility.ToHtmlStringRGB(newColor);
+					textLines[i] = string.Format("<color=#{0}>{1}</color>", hexColor, cleanTextLine );
+				}
+				else
+				{
+					textLines[i] = cleanTextLine;
 				}
 			}
 
@@ -1399,6 +1401,12 @@ namespace Merino
 			{
 				return Color.white;
 			}
+		}
+
+		string SanitizeRichText(string lineText)
+		{
+			// look for user-generated rich text tags, and replace the "<" and ">" angle brackets with harmless look-alikes
+			return lineText.Replace('<', '‹').Replace('>', '›');
 		}
 
 		// given a long string with line breaks, it will tranpose line numbers to the start of each line (and hide the rest of the body text with invisible rich text Color)
@@ -1435,7 +1443,7 @@ namespace Merino
 				}
 				
 				// add line number to line
-				lines[i] = lineDisplay + invisibleBegin + lines[i].Remove(0, digits) + invisibleEnd;
+				lines[i] = lineDisplay + invisibleBegin + SanitizeRichText(lines[i].Remove(0, digits)) + invisibleEnd;
 			}
 
 			return string.Join("\n", lines);

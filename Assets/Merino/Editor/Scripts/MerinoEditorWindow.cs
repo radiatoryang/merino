@@ -523,15 +523,32 @@ namespace Merino
 			}
 		}
 
-		string SaveFileNodesAsString(int fileNodeID)
+		string SaveFileNodesAsString(int fileNodeID, bool includeParent=true)
 		{
 			// expand all leaf nodes for this file (which also accounts for sorting)
 			var previousExpanded = treeView.GetExpanded();
-			treeView.CollapseAll();
-			treeView.SetExpandedRecursive(fileNodeID, true);
+			treeView.ExpandAll();
+			
+			// expand all children manually, because SetExpandedRecursive doesn't seem to work properly?
+			var toTraverse = new List<int>() {fileNodeID};
+			var filterList = new List<int>();
+			//expandList.AddRange(treeView.GetExpanded());
+			while (toTraverse.Count > 0)
+			{
+				if (filterList.Contains(toTraverse[0]) == false)
+				{
+					filterList.Add(toTraverse[0]);
+					var node = treeView.treeModel.Find(toTraverse[0]);
+					if (node.hasChildren)
+					{
+						toTraverse.AddRange(node.children.Select(x => x.id));
+					}
+				}
+				toTraverse.RemoveAt(0);
+			}
 			
 			// export these leaf nodes
-			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray();
+			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where( x => filterList.Contains(x.id)).ToArray();
 			var nodeInfoList = new List<YarnSpinnerLoader.NodeInfo>();
 			
 			treeView.SetExpanded(previousExpanded);
@@ -548,14 +565,17 @@ namespace Merino
 				var itemCasted = (MerinoTreeElement) item;
 				var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
 
-				newNodeInfo.title = itemCasted.name;
-				newNodeInfo.body = itemCasted.nodeBody;
-				newNodeInfo.tags = itemCasted.nodeTags;
+				newNodeInfo.title = CleanYarnField(itemCasted.name, true);
+				newNodeInfo.body = CleanYarnField(itemCasted.nodeBody, true);
+				newNodeInfo.tags = CleanYarnField(itemCasted.nodeTags, true);
 				var newPosition = new YarnSpinnerLoader.NodeInfo.Position();
 				newPosition.x = itemCasted.nodePosition.x;
 				newPosition.y = itemCasted.nodePosition.y;
 				newNodeInfo.position = newPosition;
-				newNodeInfo.parent = itemCasted.parent.name;
+				if (includeParent)
+				{
+					newNodeInfo.parent = itemCasted.parent.name;
+				}
 
 				nodeInfoList.Add(newNodeInfo);
 			}
@@ -563,7 +583,7 @@ namespace Merino
 			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfoList);
 		}
 
-		// used internally for playtest preview, but also by SaveDataToFile
+		// used internally for playtest preview
 		string SaveAllNodesAsString()
 		{
 			if (treeData == null)
@@ -587,10 +607,10 @@ namespace Merino
 			string allNodeText = "";
 			foreach (var file in files)
 			{
-				allNodeText += SaveFileNodesAsString(file.id) + "\n";
+				Debug.Log(file.name);
+				allNodeText += SaveFileNodesAsString(file.id, false) + "\n";
 			}
 
-			Debug.Log(allNodeText);
 			return allNodeText;
 		}
 
@@ -758,20 +778,22 @@ namespace Merino
 			{
 				errorLog.Clear();
 				dialogue.UnloadAll();
+				dialogue.experimentalMode = true;
 				varStorage.ResetToDefaults();
-				try
-				{
+//				try
+//				{
 					var program = SaveAllNodesAsString();
 					if (!string.IsNullOrEmpty(program))
 					{
-						dialogue.LoadString(program);
+						Debug.Log(program);
+						dialogue.LoadString(program, "<input>", true, true);
 					}
-				}
-				catch (Exception ex)
-				{
-					PlaytestErrorLog(ex.Message);
-					return;
-				}
+//				}
+//				catch (Exception ex)
+//				{
+//					PlaytestErrorLog(ex.Message);
+//					return;
+//				}
 				
 			}
 			this.StopAllCoroutines();
@@ -1475,7 +1497,6 @@ namespace Merino
 				// detect if we need to do play preview
 				if (idToPreview > -1)
 				{
-					Debug.Log(m_TreeView.treeModel.Find(idToPreview).name);
 					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name, !isDialogueRunning);
 				}
 			}

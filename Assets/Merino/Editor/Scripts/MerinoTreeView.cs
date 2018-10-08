@@ -15,15 +15,13 @@ namespace Merino
 		const float kToggleWidth = 4f; // was 18
 		public bool showControls = false;
 
-//		static Texture2D[] s_TestIcons =
-//		{
-//			EditorGUIUtility.FindTexture ("Folder Icon"),
-//			EditorGUIUtility.FindTexture ("AudioSource Icon"),
-//			EditorGUIUtility.FindTexture ("Camera Icon"),
-//			EditorGUIUtility.FindTexture ("Windzone Icon"),
-//			EditorGUIUtility.FindTexture ("GameObject Icon")
-//
-//		};
+		// corresponds to MerinoTreeElement.leafType
+		static Texture2D[] MerinoIcons =
+		{
+			(Texture2D)EditorGUIUtility.IconContent ("tree_icon_leaf").image, // NODE
+			(Texture2D)EditorGUIUtility.IconContent ("TextAsset Icon").image, // FILE
+			EditorGUIUtility.FindTexture ("Folder Icon") // FOLDER
+		};
 
 		// All columns
 		enum MyColumns
@@ -190,10 +188,10 @@ namespace Merino
 			return myTypes.Order(l => l.data.name, ascending);
 		}
 
-//		int GetIcon1Index(TreeViewItem<MyTreeElement> item)
-//		{
-//			return (int)(Mathf.Min(0.99f, item.data.floatValue1) * s_TestIcons.Length);
-//		}
+		int GetIconIndex(TreeViewItem<MerinoTreeElement> item)
+		{
+			return Mathf.Clamp( (int)item.data.leafType, 0, MerinoIcons.Length);
+		}
 //
 //		int GetIcon2Index (TreeViewItem<MyTreeElement> item)
 //		{
@@ -230,14 +228,19 @@ namespace Merino
 
 				case MyColumns.Name:
 					{
-						// Do toggle
+						// Draw icon
 //						Rect toggleRect = cellRect;
-//						toggleRect.x += GetContentIndent(item);
+//						toggleRect.x += 16;
 //						toggleRect.width = kToggleWidth;
-//						if (toggleRect.xMax < cellRect.xMax)
-//							item.data.enabled = EditorGUI.Toggle(toggleRect, item.data.enabled); // hide when outside cell rect
+//						if (toggleRect.xMax < cellRect.xMax) // hide when outside cell rect
+//						{
+//							// sample code had toggles here, instead we'll draw an icon
+//						//	item.data.enabled = EditorGUI.Toggle(toggleRect, item.data.enabled); 
+//							GUI.DrawTexture(cellRect, s_TestIcons[GetIconIndex(item)], ScaleMode.ScaleToFit);
+//						}
 
 						// Default icon and label
+						args.item.icon = MerinoIcons[GetIconIndex(item)]; // different node icon based on leafType
 						args.rowRect = cellRect;
 						base.RowGUI(args);
 					}

@@ -17,6 +17,14 @@ namespace Merino
 		public string nodeBody = "";
 		public bool enabled;
 
+		public enum LeafType
+		{
+			Node,
+			File,
+			Folder
+		}
+		public LeafType leafType; // needed for file / folder support in Merino's hierarchy view
+
 		public MerinoTreeElement (string name, int depth, int id) : base (name, depth, id)
 		{
 			enabled = true;

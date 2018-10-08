@@ -77,7 +77,6 @@ namespace Merino
 
 		// misc resources
 		Texture helpIcon, errorIcon;
-		TextAsset currentFile;
 		
 		// undo management
 		double lastUndoTime;
@@ -89,6 +88,9 @@ namespace Merino
 		List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
 		// node management
+		TextAsset currentFile;
+
+		string currentPath;
 		private List<int> DeleteList = new List<int>();
 		int currentNodeIDEditing;
 		
@@ -206,7 +208,7 @@ namespace Merino
 			}
 
 			// generate sidebar data structures
-			var treeModel = new TreeModel<MerinoTreeElement>(GetData(null, true));
+			var treeModel = new TreeModel<MerinoTreeElement>( GetData(true, true) );
 			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
 			m_SearchField = new SearchField();
 			m_SearchField.downOrUpArrowKeyPressed += m_TreeView.SetFocusAndEnsureSelectedItem;
@@ -289,7 +291,7 @@ namespace Merino
 			for( int i=undoData.Count-1; i>0 && treeData.timestamp < undoData[i].time; i-- )
 			{
 				var recent = undoData[i];
-				var treeDataNode = treeData.treeElements.First(x => x.id == recent.id);
+				var treeDataNode = treeData.treeElements.First(x => x.id == recent.id && x.leafType == MerinoTreeElement.LeafType.Node);
 				
 				moveCursorUndoID = recent.id;
 				
@@ -312,108 +314,198 @@ namespace Merino
 		#endregion
 		
 		#region LoadingAndSaving
-		
-		bool IsProbablyYarnFile(TextAsset textAsset)
+
+		static bool IsProbablyYarnFile(TextAsset textAsset)
 		{
-			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
+			return AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:");
+		}
+
+		static TextAsset[] FindAllYarnFiles()
+		{
+			var guids = AssetDatabase.FindAssets("t:TextAsset");
+			return guids.Select(AssetDatabase.GUIDToAssetPath )
+				.Where( x => x.Contains("Editor")==false )
+				.Select( AssetDatabase.LoadAssetAtPath<TextAsset>)
+				.Where( IsProbablyYarnFile )
+				.ToArray();
+		}
+
+		IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1)
+		{
+			var treeElements = new List<MerinoTreeElement>();
+			AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
+			//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+			
+			// ROOT: create a root node for the file itself
+			var fileRoot = new MerinoTreeElement(source.name, 0, startID);
+			fileRoot.leafType = MerinoTreeElement.LeafType.File;
+			fileRoot.children = new List<TreeElement>();
+			treeElements.Add(fileRoot);
+			
+			// load nodes
+			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
+			var parents = new Dictionary<MerinoTreeElement, string>();
+			foreach (var node in nodes)
 			{
-				return true;
+				// clean some of the stuff to help prevent file corruption
+				string cleanName = CleanYarnField(node.title, true);
+				string cleanBody = CleanYarnField(node.body);
+				string cleanTags = CleanYarnField(node.tags, true);
+				string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : CleanYarnField(node.parent, true);
+				
+				// write data to the objects
+				var newItem = new MerinoTreeElement( cleanName, 0, startID + treeElements.Count);
+				newItem.nodeBody = cleanBody;
+				newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
+				newItem.nodeTags = cleanTags;
+				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
+				{
+					newItem.parent = fileRoot;
+					fileRoot.children.Add(newItem);
+				}
+				else
+				{
+					parents.Add(newItem, cleanParent); // we have to assign parents in a second pass later on, not right now
+				}
+				treeElements.Add(newItem);
 			}
-			else
+			
+			// second pass: now that all nodes have been created, we can finally assign parents
+			foreach (var kvp in parents )
 			{
-				return false;
+				var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
+				if (parent.Length == 0)
+				{
+					Debug.LogErrorFormat("Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
+				}
+				else
+				{
+					// tell child about it's parent
+					kvp.Key.parent = parent[0];
+					// tell parent about it's child
+					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
+					{
+						kvp.Key.parent.children = new List<TreeElement>();
+					}
+					kvp.Key.parent.children.Add(kvp.Key);
+				}
 			}
+			return treeElements;
 		}
 		
-		IList<MerinoTreeElement> GetData (TextAsset source=null, bool isFromInit=false)
+		IList<MerinoTreeElement> GetData (bool doFullRefresh=true, bool isFromInit=false)
 		{
+			// init variables, create global tree root
 			var treeElements = new List<MerinoTreeElement>();
 			var root = new MerinoTreeElement("Root", -1, 0);
 			root.children = new List<TreeElement>();
-			treeElements.Add(root);
+//			treeElements.Add(root);
 			
 			// extract data from the text file, but only if it's not about entering playmode
-			if (source == null && currentFile != null )
-			{
-				source = currentFile;
-			}
+//			if (source == null && currentFile != null )
+//			{
+//				source = currentFile;
+//			}
 			
 			// hack hack hack: if we're calling GetData from init, then ignore playmode currentFile
 			if (isFromInit && EditorApplication.isPlayingOrWillChangePlaymode)
 			{
-				source = null;
-			}
-
-			if (source != null) {
-				AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source));
-				//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
-				var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
-				var parents = new Dictionary<MerinoTreeElement, string>();
-				foreach (var node in nodes)
-				{
-					// clean some of the stuff to help prevent file corruption
-					string cleanName = CleanYarnField(node.title, true);
-					string cleanBody = CleanYarnField(node.body);
-					string cleanTags = CleanYarnField(node.tags, true);
-					string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : CleanYarnField(node.parent, true);
-					// write data to the objects
-					var newItem = new MerinoTreeElement( cleanName, 0, treeElements.Count);
-					newItem.nodeBody = cleanBody;
-					newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
-					newItem.nodeTags = cleanTags;
-					if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
-					{
-						root.children.Add(newItem);
-					}
-					else
-					{
-						parents.Add(newItem, cleanParent); // have to assign parents in a second pass
-					}
-					treeElements.Add(newItem);
-				}
-				// second pass: now that all nodes have been created, we can finally assign parents
-				foreach (var kvp in parents )
-				{
-					var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
-					if (parent.Length == 0)
-					{
-						Debug.LogErrorFormat("Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
-					}
-					else
-					{
-						kvp.Key.parent = parent[0];
-						if (kvp.Key.parent.children == null)
-						{
-							kvp.Key.parent.children = new List<TreeElement>();
-						}
-						kvp.Key.parent.children.Add(kvp.Key);
-					}
-				}
-				// if there's already parent data then I don't really know what the depth value is used for (a cache to speed up GUI drawing?)
-				// but I think we're supposed to do this thing so let's do it
-				TreeElementUtility.UpdateDepthValues(root);
-			}
-			else 
-			{ 
-				// see if we can load temp data
 				if (treeData != null && treeData.treeElements != null && treeData.treeElements.Count > 0)
 				{
 					return treeData.treeElements;
 				}
+			}
+
+			// ok, now let's load the data
+			if ( doFullRefresh ) {
+				// first, let's grab all Yarn files in the entire project
+				var allYarnFiles = FindAllYarnFiles();
 				
-				// otherwise, load default data from template
-				var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
-				if (defaultData != null)
+				// then go through each file and get nodes for it, adding folder nodes as appropriate
+				int nodeID = 1;
+				var folderDict = new Dictionary<string, MerinoTreeElement>();
+				folderDict.Add( "", root ); // for when the Yarn file is just in /Assets/
+				foreach (var yarnFile in allYarnFiles)
 				{
-					return GetData(defaultData);
+					// create nodes for all subfolders 
+					var folders = AssetDatabase.GetAssetPath(yarnFile).Split('/');
+					var fullFolderName = ""; // for now, we need fullFolderNames so that we can ensure unique folder names (we will shorten them later)
+					var previousFolderName = ""; // we need this to remember each folder's parent
+					
+					for (int pathIndex = 1; pathIndex < folders.Length - 1; pathIndex++) // skip first and last (that's /Assets/ and the [assetFileName])
+					{
+						fullFolderName += folders[pathIndex] + "/";
+						if (!folderDict.ContainsKey(fullFolderName)) // we check every subfolder level to see if it already exists in the dictionary
+						{
+							var folderNode = new MerinoTreeElement(fullFolderName, pathIndex-1, nodeID++);
+							folderNode.leafType = MerinoTreeElement.LeafType.Folder;
+							folderNode.children = new List<TreeElement>();
+							folderNode.parent = folderDict[previousFolderName];
+							
+							folderDict[previousFolderName].children.Add(folderNode);
+							folderDict.Add( fullFolderName, folderNode );
+						}
+						previousFolderName = fullFolderName;
+					}
+									
+					// all folders are now created, let's add the yarn data now
+					var yarnData = GetDataFromFile(yarnFile, nodeID);
+					// parent the new data's root to a folder node
+					yarnData[0].parent = folderDict[fullFolderName];
+					folderDict[fullFolderName].children.Add(yarnData[0]);
+					// add all data to tree elements
+					treeElements.AddRange( yarnData );
+					nodeID += yarnData.Count;
 				}
-				else
-				{ // oops, couldn't find the new file template!
-					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", MerinoPrefs.newFileTemplatePath);
-					return null;
+				
+				// lastly, clean up all folder node names, and then add all folder nodes to the big list
+				foreach (var folderKVP in folderDict)
+				{
+					var pathNames = folderKVP.Key.Split(new char[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+					if (pathNames != null && pathNames.Length > 0) // skip the empty root folder node
+					{
+						folderKVP.Value.name = pathNames.Last();
+					}
 				}
+				treeElements.AddRange( folderDict.Values );
 				
 			}
+			else 
+			{ 
+				// see if we can load temp data at least...
+				
+				// but first, if we already have a treeData loaded (e.g. this is a hot refresh from refreshing PlayMode) then don't do anything!
+//				if (treeData != null && treeData.treeElements != null && treeData.treeElements.Count > 0)
+//				{
+//					return treeData.treeElements;
+//				}
+				
+				// otherwise, try to load default data from template
+//				var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
+//				if (defaultData != null)
+//				{
+//					treeElements.AddRange(GetDataFromFile(defaultData));
+//				}
+//				else
+//				{ // oops, couldn't find the new file template!
+//					Debug.LogErrorFormat("Merino couldn't load default data for a new Yarn file! Looked for /Resources/{0}.txt ... by default, it is in Assets/Merino/Editor/Resources/NewFileTemplate.yarn.txt and the preference is set to [NewFileTemplate.yarn]", MerinoPrefs.newFileTemplatePath);
+//					return null;
+//				}
+				
+			}
+			
+			// IMPORTANT: sort the treeElements by id!!!
+			treeElements = treeElements.OrderBy(x => x.id).ToList();
+			
+			// if there's already parent data then I don't really know what the depth value is used for (a cache to speed up GUI drawing?)
+			// but I think we're supposed to do this thing so let's do it
+			TreeElementUtility.UpdateDepthValues( root );
+			
+			// DEBUG: dump tree data
+//			foreach (var node in treeElements)
+//			{
+//				Debug.LogFormat("{0}:{1}, parent:{2}, depth:{3}", node.id, node.name, node.parent != null ? node.parent.id.ToString() : "null", node.depth);
+//			}
 
 			treeData.treeElements = treeElements;
 			return treeData.treeElements;
@@ -430,6 +522,14 @@ namespace Merino
 				return inputString.Replace("===", " ").Replace("---", " ");
 			}
 		}
+
+//		string SaveNodesAsString2(int fileNodeID)
+//		{
+//			var previousExpanded = treeView.GetExpanded();
+//			treeView.CollapseAll();
+//			treeView.SetExpandedRecursive(fileNodeID, true);
+//			
+//		}
 
 		// used internally for playtest preview, but also by SaveDataToFile
 		string SaveNodesAsString()
@@ -450,8 +550,8 @@ namespace Merino
 			// first, in order to properly export, we need to expand everything
 			var previousExpanded = treeView.GetExpanded();
 			treeView.ExpandAll();
-			// then grab the nodes
-			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// then grab all files, and grab their nodes too
+			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where( x => x.leafType == MerinoTreeElement.LeafType.Node).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
 			// then set the expanded nodes back to what they were
 			treeView.SetExpanded(previousExpanded);
 			
@@ -593,13 +693,19 @@ namespace Merino
 			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
 			// validate data: ensure unique node names
 			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
+			var duplicateCount = new Dictionary<string, int>();
 			bool doRenaming = false;
 			for (int i=0;i<treeNodes.Count;i++)
 			{
 				// if there's a node already with that name, then append unique suffix
 				if (nodeTitles.Values.Contains(treeNodes[i].name))
 				{
-					nodeTitles.Add(i, treeNodes[i].name + "_" + Path.GetRandomFileName().Split('.')[0]);
+					// count duplicates
+					if (!duplicateCount.ContainsKey(treeNodes[i].name))
+					{
+						duplicateCount.Add(treeNodes[i].name, 2);
+					}
+					nodeTitles.Add(i, treeNodes[i].name + "_" + duplicateCount[treeNodes[i].name]++);
 					doRenaming = true;
 				}
 				else
@@ -1061,6 +1167,14 @@ namespace Merino
 				
 				foreach (var id in viewState.selectedIDs)
 				{
+					var treeNode = m_TreeView.treeModel.Find(id);
+					
+					// first, double-check the selectedID is a NODE... if it's a FILE or a FOLDER, then don't display it (because we can't edit it like a Yarn node!)
+					if (treeNode == null || treeNode.leafType != MerinoTreeElement.LeafType.Node)
+					{
+						continue;
+					}
+					
 					// start node container
 					EditorGUI.BeginChangeCheck();
 					EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -1075,7 +1189,7 @@ namespace Merino
 					}
 					
 					// node title
-					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
+					string newName = EditorGUILayout.TextField(treeNode.name, MerinoStyles.NameStyle);
 					GUILayout.FlexibleSpace();
 					
 					// delete button
@@ -1088,7 +1202,7 @@ namespace Merino
 					
 					// NODE BODY ======================================================================
 					var backupContentColor = GUI.contentColor;
-					string passage = m_TreeView.treeModel.Find(id).nodeBody;
+					string passage = treeNode.nodeBody;
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
 					// start preparing to draw the body
@@ -1282,8 +1396,8 @@ namespace Merino
 						Undo.RecordObject(treeData, "Merino > " + newName );
 						
 						// actually commit the data now
-						m_TreeView.treeModel.Find(id).name = newName;
-						m_TreeView.treeModel.Find(id).nodeBody = newBody;
+						treeNode.name = newName;
+						treeNode.nodeBody = newBody;
 						treeData.editedID = id;
 						treeData.timestamp = EditorApplication.timeSinceStartup;
 						

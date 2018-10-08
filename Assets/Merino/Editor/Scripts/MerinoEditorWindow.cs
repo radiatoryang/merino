@@ -320,9 +320,9 @@ namespace Merino
 			return AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:");
 		}
 
-		static TextAsset[] FindAllYarnFiles()
+		TextAsset[] FindAllYarnFiles()
 		{
-			var guids = AssetDatabase.FindAssets("t:TextAsset");
+			var guids = !string.IsNullOrEmpty(currentPath) ? AssetDatabase.FindAssets("t:TextAsset", new string[] {currentPath} ) : AssetDatabase.FindAssets("t:TextAsset");
 			return guids.Select(AssetDatabase.GUIDToAssetPath )
 				.Where( x => x.Contains("Editor")==false )
 				.Select( AssetDatabase.LoadAssetAtPath<TextAsset>)
@@ -523,43 +523,24 @@ namespace Merino
 			}
 		}
 
-//		string SaveNodesAsString2(int fileNodeID)
-//		{
-//			var previousExpanded = treeView.GetExpanded();
-//			treeView.CollapseAll();
-//			treeView.SetExpandedRecursive(fileNodeID, true);
-//			
-//		}
-
-		// used internally for playtest preview, but also by SaveDataToFile
-		string SaveNodesAsString()
+		string SaveFileNodesAsString(int fileNodeID)
 		{
-			if (treeData == null)
-			{
-				Debug.LogError("Merino TreeData got corrupted somehow! Trying to reinitialize... but if you can reproduce this, please file a bug report at https://github.com/radiatoryang/merino/issues");
-				m_Initialized = false;
-				InitIfNeeded();
-			}
-			
-			// gather data
-			ValidateNodeTitles();
-			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-			
-			// grab nodes based on visible order in the hierarchy tree view (sorting)
-			
-			// first, in order to properly export, we need to expand everything
+			// expand all leaf nodes for this file (which also accounts for sorting)
 			var previousExpanded = treeView.GetExpanded();
-			treeView.ExpandAll();
-			// then grab all files, and grab their nodes too
-			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where( x => x.leafType == MerinoTreeElement.LeafType.Node).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
-			// then set the expanded nodes back to what they were
+			treeView.CollapseAll();
+			treeView.SetExpandedRecursive(fileNodeID, true);
+			
+			// export these leaf nodes
+			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).ToArray();
+			var nodeInfoList = new List<YarnSpinnerLoader.NodeInfo>();
+			
 			treeView.SetExpanded(previousExpanded);
 			
 			// save data to string
 			foreach (var item in treeNodes)
 			{
-				// skip the root
-				if (item.depth == -1)
+				// skip the root, and skip any non-node nodes
+				if (item.depth == -1 || item.leafType != MerinoTreeElement.LeafType.Node)
 				{
 					continue;
 				}
@@ -576,10 +557,41 @@ namespace Merino
 				newNodeInfo.position = newPosition;
 				newNodeInfo.parent = itemCasted.parent.name;
 
-				nodeInfo.Add(newNodeInfo);
+				nodeInfoList.Add(newNodeInfo);
 			}
 
-			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfo);
+			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfoList);
+		}
+
+		// used internally for playtest preview, but also by SaveDataToFile
+		string SaveAllNodesAsString()
+		{
+			if (treeData == null)
+			{
+				Debug.LogError("Merino TreeData got corrupted somehow! Trying to reinitialize... but if you can reproduce this, please file a bug report at https://github.com/radiatoryang/merino/issues");
+				m_Initialized = false;
+				InitIfNeeded();
+			}
+			
+			ValidateNodeTitles(); // make sure there's no duplicate node names
+			
+			// grab nodes based on visible order in the hierarchy tree view (account for sorting)
+			var previousExpanded = treeView.GetExpanded();
+			treeView.ExpandAll();
+			// then grab all files
+			var files = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where( x => x.leafType == MerinoTreeElement.LeafType.File).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
+			// then set the expanded nodes back to what they were
+			treeView.SetExpanded(previousExpanded);
+			
+			// for each file, export nodes, and save them all together...
+			string allNodeText = "";
+			foreach (var file in files)
+			{
+				allNodeText += SaveFileNodesAsString(file.id) + "\n";
+			}
+
+			Debug.Log(allNodeText);
+			return allNodeText;
 		}
 
 		// writes data to the file
@@ -588,7 +600,7 @@ namespace Merino
 		{
 			if (currentFile != null)
 			{
-				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveNodesAsString() );
+				File.WriteAllText(AssetDatabase.GetAssetPath(currentFile), SaveAllNodesAsString() );
 				EditorUtility.SetDirty(currentFile);
 				lastSaveTime = EditorApplication.timeSinceStartup;
 			}
@@ -688,12 +700,18 @@ namespace Merino
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
-		void ValidateNodeTitles()
+		void ValidateNodeTitles(List<MerinoTreeElement> treeNodes = null)
 		{
-			var treeNodes = treeData.treeElements; // m_TreeView.treeModel.root.children;
+			if (treeNodes == null) // if null, then let's just use all currently loaded nodes
+			{
+				treeNodes = treeData.treeElements;
+			}
+			// make sure we're not doing this to any folder or file nodes, ONLY YARN NODES
+			treeNodes = treeNodes.Where(x => x.leafType == MerinoTreeElement.LeafType.Node).ToList();
+
 			// validate data: ensure unique node names
 			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
-			var duplicateCount = new Dictionary<string, int>();
+			var duplicateCount = new Dictionary<string, int>(); // increment counter for each duplicate name, and use for rename suffix
 			bool doRenaming = false;
 			for (int i=0;i<treeNodes.Count;i++)
 			{
@@ -705,17 +723,17 @@ namespace Merino
 					{
 						duplicateCount.Add(treeNodes[i].name, 2);
 					}
-					nodeTitles.Add(i, treeNodes[i].name + "_" + duplicateCount[treeNodes[i].name]++);
+					nodeTitles.Add(treeNodes[i].id, treeNodes[i].name + "_" + duplicateCount[treeNodes[i].name]++);
 					doRenaming = true;
 				}
 				else
 				{ // otherwise, business as usual
-					nodeTitles.Add(i, treeNodes[i].name);
+					nodeTitles.Add(treeNodes[i].id, treeNodes[i].name);
 				}
 			}
 			if (doRenaming)
 			{
-				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break some of your scripting, you can undo it. The following nodes were renamed: ";
+				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break node links, you can undo it. The following nodes were renamed: ";
 				Undo.RecordObject(treeData, "Merino: AutoRename");
 				foreach (var kvp in nodeTitles)
 				{
@@ -726,7 +744,7 @@ namespace Merino
 					}
 				}
 				EditorUtility.SetDirty(treeData);
-				Debug.LogWarning(renamedNodes + "\n\n");
+				Debug.LogWarning(renamedNodes);
 				// repaint tree view so names get updated
 				m_TreeView.Reload();
 			}
@@ -743,7 +761,7 @@ namespace Merino
 				varStorage.ResetToDefaults();
 				try
 				{
-					var program = SaveNodesAsString();
+					var program = SaveAllNodesAsString();
 					if (!string.IsNullOrEmpty(program))
 					{
 						dialogue.LoadString(program);
@@ -1096,6 +1114,25 @@ namespace Merino
 				}
 			}
 			
+			// load folder / set path button
+			if (!string.IsNullOrEmpty(currentPath))
+			{
+				EditorGUILayout.SelectableLabel(currentPath, EditorStyles.boldLabel);
+			}
+			// folder picker
+			if (GUILayout.Button("Open Folder..."))
+			{
+				currentPath = EditorUtility.OpenFolderPanel("Load Yarn.txt scripts in Assets folder...", string.IsNullOrEmpty(currentPath) ? Application.dataPath : Application.dataPath + currentPath, "");
+				if (!currentPath.StartsWith(Application.dataPath))
+				{
+					EditorUtility.DisplayDialog("Invalid folder", currentPath + " is not in your Unity project's Assets folder!", "Sorry");
+				}
+				// remove project folder path from selected path (+1 = trailing slash)
+				currentPath = "Assets/" + currentPath.Substring(Application.dataPath.Length+1);
+				m_TreeView.treeModel.SetData(GetData());
+				m_TreeView.Reload();
+			}
+			
 			// save as button
 			if (GUILayout.Button( new GUIContent("Save As...", "save all changes as a new .yarn.txt file"), GUILayout.MaxWidth(80)))
 			{
@@ -1438,6 +1475,7 @@ namespace Merino
 				// detect if we need to do play preview
 				if (idToPreview > -1)
 				{
+					Debug.Log(m_TreeView.treeModel.Find(idToPreview).name);
 					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name, !isDialogueRunning);
 				}
 			}

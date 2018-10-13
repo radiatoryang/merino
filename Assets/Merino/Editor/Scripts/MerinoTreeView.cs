@@ -278,6 +278,12 @@ namespace Merino
 
 		protected override bool CanRename(TreeViewItem item)
 		{
+			// for now, do not let the user rename files from the Merino tree view (reason: need to figure out a way to find the file node's corresponding TextAsset, then pass into RenameEnded)
+			if ( treeModel.Find(item.id).leafType == MerinoTreeElement.LeafType.File)
+			{
+				return false;
+			}
+			
 			// Only allow rename if we can show the rename overlay with a certain width (label might be clipped by other columns)
 			Rect renameRect = GetRenameRect (treeViewRect, 0, item);
 			return renameRect.width > 30;
@@ -351,6 +357,23 @@ namespace Merino
 		}
 
 		#region Misc
+
+		protected override bool CanStartDrag(CanStartDragArgs args)
+		{
+			return treeModel.Find(args.draggedItem.id).leafType != MerinoTreeElement.LeafType.File;
+		}
+
+		protected override DragAndDropVisualMode HandleDragAndDrop(DragAndDropArgs args)
+		{
+			if (args.parentItem == null || args.parentItem.depth == -1)
+			{
+				return DragAndDropVisualMode.Rejected;
+			}
+			else
+			{
+				return base.HandleDragAndDrop(args);
+			}
+		}
 
 		protected override bool CanMultiSelect (TreeViewItem item)
 		{

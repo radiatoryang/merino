@@ -53,16 +53,19 @@ namespace Merino
         public override void OnGUI(Rect rect, float xScroll)
         {
             // add extra "clear sorting" button if sorting is active
-            var clearSortRect = new Rect(rect);
-            clearSortRect.width = 18;
-            clearSortRect.height = clearSortRect.width;
-            rect.x += clearSortRect.width;
-            rect.width -= clearSortRect.width;
-            if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+            if (state.sortedColumnIndex != -1)
             {
-                state.sortedColumnIndex = -1;
+                var clearSortRect = new Rect(rect);
+                clearSortRect.width = 18;
+                clearSortRect.height = clearSortRect.width;
+                rect.x += clearSortRect.width;
+                rect.width -= clearSortRect.width;
+                if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
+                {
+                    state.sortedColumnIndex = -1;
+                }
             }
-			
+
             // draw rest of the header
             base.OnGUI(rect, xScroll);
         }

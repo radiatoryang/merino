@@ -13,6 +13,7 @@ namespace Merino
 		public static Color highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
 		public static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
 		// public static Color highlightVariables;
+		public static bool useYarnSpinnerExperimentalMode = false;
 
 		//hidden prefs
 		public static bool stopOnDialogueEnd = true;
@@ -49,6 +50,9 @@ namespace Merino
 			GUILayout.Label("File Handling", EditorStyles.boldLabel);
 			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
 			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
+			
+			// 14 Oct 2018: commented out experimental mode, it seems to have the same parser problem as before: can't read "---" sentinel, keeps looking for node header data  -RY
+			// useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
 
 			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
 			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
@@ -82,6 +86,7 @@ namespace Merino
 		static void ResetEditorPrefs()
 		{
 			newFileTemplatePath = "NewFileTemplate.yarn";
+			useYarnSpinnerExperimentalMode = false;
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -113,6 +118,7 @@ namespace Merino
 				EditorPrefs.SetBool("MerinoFirstRun", true);
 			}
 			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
+			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
@@ -139,6 +145,7 @@ namespace Merino
 		public static void SaveEditorPrefs()
 		{
 			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
+			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			
 			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
 			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );

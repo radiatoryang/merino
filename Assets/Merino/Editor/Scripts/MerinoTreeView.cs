@@ -15,15 +15,13 @@ namespace Merino
 		const float kToggleWidth = 4f; // was 18
 		public bool showControls = false;
 
-//		static Texture2D[] s_TestIcons =
-//		{
-//			EditorGUIUtility.FindTexture ("Folder Icon"),
-//			EditorGUIUtility.FindTexture ("AudioSource Icon"),
-//			EditorGUIUtility.FindTexture ("Camera Icon"),
-//			EditorGUIUtility.FindTexture ("Windzone Icon"),
-//			EditorGUIUtility.FindTexture ("GameObject Icon")
-//
-//		};
+		// corresponds to MerinoTreeElement.leafType
+		static Texture2D[] MerinoIcons =
+		{
+			(Texture2D)Resources.Load<Texture>("Merino_NodeIcon"),
+			(Texture2D)EditorGUIUtility.IconContent ("TextAsset Icon").image, // FILE
+			EditorGUIUtility.FindTexture ("Folder Icon") // FOLDER
+		};
 
 		// All columns
 		enum MyColumns
@@ -190,10 +188,10 @@ namespace Merino
 			return myTypes.Order(l => l.data.name, ascending);
 		}
 
-//		int GetIcon1Index(TreeViewItem<MyTreeElement> item)
-//		{
-//			return (int)(Mathf.Min(0.99f, item.data.floatValue1) * s_TestIcons.Length);
-//		}
+		int GetIconIndex(TreeViewItem<MerinoTreeElement> item)
+		{
+			return Mathf.Clamp( (int)item.data.leafType, 0, MerinoIcons.Length);
+		}
 //
 //		int GetIcon2Index (TreeViewItem<MyTreeElement> item)
 //		{
@@ -238,6 +236,7 @@ namespace Merino
 //							item.data.enabled = EditorGUI.Toggle(toggleRect, item.data.enabled); // hide when outside cell rect
 
 						// Default icon and label
+						args.item.icon = MerinoIcons[GetIconIndex(item)]; // different node icon based on leafType
 						args.rowRect = cellRect;
 						base.RowGUI(args);
 					}
@@ -279,6 +278,12 @@ namespace Merino
 
 		protected override bool CanRename(TreeViewItem item)
 		{
+			// for now, do not let the user rename files from the Merino tree view (reason: need to figure out a way to find the file node's corresponding TextAsset, then pass into RenameEnded)
+			if ( treeModel.Find(item.id).leafType == MerinoTreeElement.LeafType.File)
+			{
+				return false;
+			}
+			
 			// Only allow rename if we can show the rename overlay with a certain width (label might be clipped by other columns)
 			Rect renameRect = GetRenameRect (treeViewRect, 0, item);
 			return renameRect.width > 30;
@@ -313,20 +318,27 @@ namespace Merino
 			
 		void ShowContextMenu()
 		{
-			bool showDelete = HasSelection();
+			bool hasSelection = HasSelection();
 
 			GenericMenu commandMenu = new GenericMenu();
 
-			if (showDelete)
+			if (hasSelection)
 			{
+				commandMenu.AddItem(new GUIContent("Add New Node"), false, AddNewNode);
 				commandMenu.AddItem(new GUIContent("Delete"), false, DeleteSelectedNodes);
 			}
 			else
 			{
+				commandMenu.AddDisabledItem(new GUIContent("Add New Node"));
 				commandMenu.AddDisabledItem(new GUIContent("Delete"));
 			}
 	        
 			commandMenu.ShowAsContext();
+		}
+
+		void AddNewNode()
+		{
+			MerinoEditorWindow.GetWindow().AddNewNode( GetSelection() );
 		}
 
 		void DeleteSelectedNodes()
@@ -352,6 +364,23 @@ namespace Merino
 		}
 
 		#region Misc
+
+		protected override bool CanStartDrag(CanStartDragArgs args)
+		{
+			return treeModel.Find(args.draggedItem.id).leafType != MerinoTreeElement.LeafType.File;
+		}
+
+		protected override DragAndDropVisualMode HandleDragAndDrop(DragAndDropArgs args)
+		{
+			if (args.parentItem == null || args.parentItem.depth == -1)
+			{
+				return DragAndDropVisualMode.Rejected;
+			}
+			else
+			{
+				return base.HandleDragAndDrop(args);
+			}
+		}
 
 		protected override bool CanMultiSelect (TreeViewItem item)
 		{

@@ -34,5 +34,10 @@ sysinfo.txt
 # Builds
 *.apk
 *.unitypackage
+
+#Jetbrains
 .idea/
 Assets/Plugins/Editor/JetBrains*
+
+#Merino stuff
+/Assets/Merino/Editor/MerinoTempData*

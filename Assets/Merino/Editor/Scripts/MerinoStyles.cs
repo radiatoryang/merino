@@ -77,6 +77,7 @@ namespace Merino
 			
 			bodyStyle.font = monoFont;
 			bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
+			bodyStyle.richText = false;
 			
 			return bodyStyle;
 		}

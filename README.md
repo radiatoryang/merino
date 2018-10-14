@@ -9,21 +9,13 @@ download and install from the [Releases page](https://github.com/radiatoryang/me
 - "minimal" .unitypackage is just Merino folder
 
 ## usage / help / how-to / documentation
-read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support
+read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support... [changelog is here](https://github.com/radiatoryang/merino/wiki/Changelog)
 
 ### roadmap
-v0.4
-- line numbers, zoom to line number
-- catch Yarn.Loader parse exceptions, display in Merino window
-- refactor code and cleanup
-- user preferences: let user customize syntax highlighting colors, fonts / font sizes
-
-v0.5
+- edit Yarn node tags
 - auto-complete typing
-- detect characters, functions, nodes, variables for auto-complete + /Resources/Editor/MerinoAutocompleteList.txt ?
+- detect characters, functions, nodes, variables for auto-complete
 - inline syntax highlighting for variable names somehow
-
-v0.6
 - node map visualization
 
 ### uses other peoples code

@@ -18,7 +18,7 @@ namespace Merino
 		// corresponds to MerinoTreeElement.leafType
 		static Texture2D[] MerinoIcons =
 		{
-			(Texture2D)EditorGUIUtility.IconContent ("tree_icon_leaf").image, // NODE
+			(Texture2D)Resources.Load<Texture>("Merino_NodeIcon"),
 			(Texture2D)EditorGUIUtility.IconContent ("TextAsset Icon").image, // FILE
 			EditorGUIUtility.FindTexture ("Folder Icon") // FOLDER
 		};
@@ -318,20 +318,27 @@ namespace Merino
 			
 		void ShowContextMenu()
 		{
-			bool showDelete = HasSelection();
+			bool hasSelection = HasSelection();
 
 			GenericMenu commandMenu = new GenericMenu();
 
-			if (showDelete)
+			if (hasSelection)
 			{
+				commandMenu.AddItem(new GUIContent("Add New Node"), false, AddNewNode);
 				commandMenu.AddItem(new GUIContent("Delete"), false, DeleteSelectedNodes);
 			}
 			else
 			{
+				commandMenu.AddDisabledItem(new GUIContent("Add New Node"));
 				commandMenu.AddDisabledItem(new GUIContent("Delete"));
 			}
 	        
 			commandMenu.ShowAsContext();
+		}
+
+		void AddNewNode()
+		{
+			MerinoEditorWindow.GetWindow().AddNewNode( GetSelection() );
 		}
 
 		void DeleteSelectedNodes()

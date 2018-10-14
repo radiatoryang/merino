@@ -47,22 +47,27 @@ namespace Merino
 		
 		Rect sidebarSearchRect
 		{
-			get { return new Rect (margin, margin, MerinoPrefs.sidebarWidth, margin*2); }
+			get { return new Rect (0, 0, MerinoPrefs.sidebarWidth, 18); }
 		}
 		
 		Rect sidebarRect
 		{
-			get { return new Rect(margin, 30, MerinoPrefs.sidebarWidth, position.height-margin*6); }
+			get { return new Rect(margin/2, 20, MerinoPrefs.sidebarWidth, position.height-margin*5); }
 		}
 
 		Rect sidebarResizeRect
 		{
-			get { return new Rect(margin + MerinoPrefs.sidebarWidth, 0, 5, position.height); }
+			get { return new Rect(MerinoPrefs.sidebarWidth+3, 0, 5, position.height); }
+		}
+		
+		Rect toolbarRect
+		{
+			get { return new Rect(MerinoPrefs.sidebarWidth, 0, position.width - MerinoPrefs.sidebarWidth, 18); } // was height-30
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*4-playPreviewHeight);} // was height-30
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin, toolbarRect.height, position.width-MerinoPrefs.sidebarWidth-margin, position.height-toolbarRect.height-bottomToolbarRect.height-playPreviewHeight);} // was height-30
 		}
 		
 		Rect playPreviewRect
@@ -76,11 +81,12 @@ namespace Merino
 		}
 
 		// misc resources
-		Texture helpIcon, errorIcon, folderIcon, textIcon, nodeIcon, deleteIcon, resetIcon, saveIcon;
+		Texture helpIcon, errorIcon, folderIcon, textIcon, nodeIcon, newNodeIcon, deleteIcon, resetIcon, saveIcon, newFileIcon;
 		
 		// TextAsset currentFile; // deprecated, juse currentFiles instead
 		List<TextAsset> currentFiles = new List<TextAsset>();
 		Dictionary<TextAsset, int> fileToNodeID = new Dictionary<TextAsset, int>();
+		List<TextAsset> dirtyFiles = new List<TextAsset>();
 		
 		// undo management
 		double lastUndoTime;
@@ -106,7 +112,7 @@ namespace Merino
 					// Create the main Dialogue runner, and pass our variableStorage to it
 					varStorage = new MerinoVariableStorage();
 					_dialogue = new Yarn.Dialogue ( varStorage );
-					_dialogue.experimentalMode = false;
+					_dialogue.experimentalMode = MerinoPrefs.useYarnSpinnerExperimentalMode;
 					dialogueUI = new MerinoDialogueUI();
 					
 					// Set up the logging system.
@@ -152,6 +158,7 @@ namespace Merino
 		{
 			currentFiles.Clear();
 			fileToNodeID.Clear();
+			dirtyFiles.Clear();
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
@@ -187,10 +194,22 @@ namespace Merino
 				resetIcon = EditorGUIUtility.Load("icons/animation.prevkey.png") as Texture;
 			}
 			
-			if (saveIcon == null)
-			{
+			if (saveIcon == null) {
 				saveIcon = Resources.Load<Texture>("Merino_SaveIcon");
 			}
+			
+			if (newFileIcon == null) {
+				newFileIcon = Resources.Load<Texture>("Merino_PageIcon_New");
+			}
+			
+			if (nodeIcon == null) {
+				nodeIcon = Resources.Load<Texture>("Merino_NodeIcon");
+			}
+			
+			if (newNodeIcon == null) {
+				newNodeIcon = Resources.Load<Texture>("Merino_NodeIcon_Add");
+			}
+			
 		}
 		
 		void InitIfNeeded (bool ignoreSelection=false)
@@ -278,11 +297,33 @@ namespace Merino
 //			}
 		}
 
-		void CurrentFilesReimport()
+		void ReimportFiles(bool forceReimportAll=false)
 		{
-			foreach (var file in currentFiles)
+			if (forceReimportAll)
 			{
-				AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(file));
+				foreach (var file in currentFiles)
+				{
+					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
+				}
+			}
+			else if ( dirtyFiles.Count > 0 )
+			{
+//				Debug.Log("reimporting dirty files: " + string.Join(", ", dirtyFiles.Select( x => x.name)) );
+				foreach (var file in dirtyFiles)
+				{
+					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
+				}
+			}
+
+			dirtyFiles.Clear();
+		}
+
+		// TODO: eventually, add more data on what's dirty about it (what nodes modified? when it was last modified? etc)
+		void MarkFileDirty(TextAsset dirtyFile)
+		{
+			if (dirtyFiles.Contains(dirtyFile) == false)
+			{
+				dirtyFiles.Add(dirtyFile);
 			}
 		}
 
@@ -290,29 +331,30 @@ namespace Merino
 		public void OnInspectorUpdate()
 		{
 			// if there are no nodes selected, let's still process deleted nodes
-			if (viewState != null && viewState.selectedIDs != null || viewState.selectedIDs.Count == 0)
+			if (viewState != null && viewState.selectedIDs != null && viewState.selectedIDs.Count == 0)
 			{
 				DeleteNodes();
 			}
-		}
-
-		// This gets called many times a second
-		public void Update()
-		{
+			
 			// small delay before saving after OnTreeChanged
 			if (MerinoPrefs.useAutosave && currentFiles.Count > 0 && EditorApplication.timeSinceStartup > lastTreeChangeTime + 0.5)
 			{
 				SaveDataToFiles();
+				ReimportFiles(true); // we have no idea which node ID got changed, so we just have to reimport all files at this point
 				lastTreeChangeTime = EditorApplication.timeSinceStartup + 99999;
 			}
 			
 			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
 			if (EditorApplication.timeSinceStartup > lastSaveTime + 1.0 && currentFiles.Count > 0)
 			{
-				CurrentFilesReimport();
+				ReimportFiles();
 				lastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
 			}
-			
+		}
+
+		// This gets called many times a second, for real-time interaction / smoother animation / feel stuff
+		public void Update()
+		{
 			if (isDialogueRunning || resizingSidebar || zoomToLineNumber > -1 || lastZoomToLineNumber > -1)
 			{
 				// MASSIVELY improves framerate, wow, amazing
@@ -325,7 +367,7 @@ namespace Merino
 			// if destroyed, make sure the text file got refreshed at least
 			if (currentFiles.Count > 0)
 			{
-				CurrentFilesReimport();
+				ReimportFiles(true);
 			}
 			
 			Undo.undoRedoPerformed -= OnUndo;
@@ -374,10 +416,91 @@ namespace Merino
 		#region LoadingAndSaving
 
 		[MenuItem("Assets/Create/Yarn.txt Script")]
-		public static void MakeNewYarnFile()
+		public static void ProjectTabCreateNewYarnFile()
 		{
 			var defaultData = GetDefaultData();
 			ProjectWindowUtil.CreateAssetWithContent("NewYarnFile.yarn.txt", defaultData != null ? defaultData.text : "title: Start\n---\nWrite your story here.\n===");
+		}
+
+		void LoadFile()
+		{
+			string addFilePath = EditorUtility.OpenFilePanelWithFilters("Load a Yarn.txt script in Assets folder...", Application.dataPath, new string[] {"Yarn.txt scripts", "yarn.txt"});
+			if (!string.IsNullOrEmpty(addFilePath))
+			{
+				if (!addFilePath.StartsWith(Application.dataPath))
+				{
+					EditorUtility.DisplayDialog("Merino: invalid file", addFilePath + " is not in your Unity project's Assets folder! Cannot load it.", "Sorry");
+				}
+				else
+				{
+					// remove project folder path from selected path (+1 = trailing slash)
+					addFilePath = "Assets/" + addFilePath.Substring(Application.dataPath.Length + 1);
+					LoadYarnFileAtFullPath(addFilePath, true); // add all found files to currentFiles
+					m_TreeView.treeModel.SetData(GetData());
+					m_TreeView.Reload();
+				}
+			}
+		}
+
+		void LoadFolder()
+		{
+			string addPath = EditorUtility.OpenFolderPanel("Load Yarn.txt scripts in Assets folder...", Application.dataPath, "");
+			if (!string.IsNullOrEmpty(addPath))
+			{
+				if (!addPath.StartsWith(Application.dataPath))
+				{
+					EditorUtility.DisplayDialog("Merino: invalid folder", addPath + " is not in your Unity project's Assets folder! Cannot load it.", "Sorry");
+				}
+				else
+				{
+					// remove project folder path from selected path (+1 = trailing slash)
+					addPath = addPath == Application.dataPath ? "Assets" : "Assets/" + addPath.Substring( Application.dataPath.Length + 1);
+					LoadYarnFilesAtPath(addPath); // add all found files to currentFiles
+					m_TreeView.treeModel.SetData(GetData());
+					m_TreeView.Reload();
+				}
+			}
+		}
+		
+		void CreateNewYarnFile()
+		{
+			string defaultPath = Application.dataPath + "/";
+			string defaultName = "NewYarnFile";
+			if ( currentFiles.Count > 0)
+			{
+				var lastFile = currentFiles.Last();
+				defaultPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6) + AssetDatabase.GetAssetPath(lastFile );
+				defaultName = lastFile.name.Substring(0, lastFile.name.Length - 5); // -5 because ignore ".yarn" at end of file name
+			}
+			string fullFilePath = EditorUtility.SaveFilePanel("Merino: save yarn.txt in Assets folder...", Path.GetDirectoryName(defaultPath), defaultName, "yarn.txt");
+			if (fullFilePath.Length > 0)
+			{
+				if (!fullFilePath.StartsWith(Application.dataPath))
+				{
+					EditorUtility.DisplayDialog("Merino: invalid save location", "Cannot save new file at " + fullFilePath + " because it is not in your Unity project's Assets folder!", "Sorry");
+				}
+				else if (!fullFilePath.EndsWith(".yarn.txt"))
+				{
+					EditorUtility.DisplayDialog("Merino: invalid file extension", "Cannot save new file at " + fullFilePath + " must be saved with a .yarn.txt file extension.", "Sorry");
+				} 
+				else
+				{
+					var defaultData = GetDefaultData();
+					File.WriteAllText(fullFilePath, defaultData != null ? defaultData.text : "");
+					AssetDatabase.Refresh();
+					var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets" + fullFilePath.Substring(Application.dataPath.Length));
+					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(newFile));
+					LoadYarnFileAtFullPath(AssetDatabase.GetAssetPath(newFile), true);
+					m_TreeView.treeModel.SetData(GetData());
+					m_TreeView.Reload();
+
+					var fileID = fileToNodeID[newFile];
+					m_TreeView.FrameItem( fileID );
+					m_TreeView.SetExpanded(fileID, true);
+					m_TreeView.SetSelection(new List<int>() { fileID });
+					
+				}
+			}
 		}
 		
 		static TextAsset GetDefaultData()
@@ -385,7 +508,7 @@ namespace Merino
 			var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
 			if (defaultData == null)
 			{
-				Debug.LogWarning("Merino couldn't find the new file template at " + MerinoPrefs.newFileTemplatePath + "... you can set this path in EditorPrefs.");
+				Debug.LogWarning("Merino couldn't find the new file template at Resources/" + MerinoPrefs.newFileTemplatePath + ". Double-check the file exists there, or you can override this path in EditorPrefs.");
 				return null;
 			}
 			return defaultData;
@@ -434,6 +557,12 @@ namespace Merino
 					currentFiles.Add(file);
 				}
 			}
+
+			if (files.Length == 0)
+			{
+				EditorUtility.DisplayDialog("Merino: no Yarn.txt files found", "No valid Yarn.txt files were found at the path " + path, "Close");
+			}
+
 			return files;
 		}
 		
@@ -699,24 +828,49 @@ namespace Merino
 
 		void AddNewNode()
 		{
+			AddNewNode(null);
+		}
+
+		public void AddNewNode(IList<int> parents=null)
+		{
 			if (currentFiles.Count == 0)
 			{
 				return;
 			}
-			
-			var parent = currentNodeIDEditing > 0 && m_TreeView.treeModel.Find(currentNodeIDEditing) != null ? m_TreeView.treeModel.Find(currentNodeIDEditing) : m_TreeView.treeModel.Find(fileToNodeID[currentFiles[0] ]);
-			
-			while (parent.leafType == MerinoTreeElement.LeafType.Node)
+
+			if (parents == null || parents.Count == 0)
 			{
-				parent = (MerinoTreeElement)parent.parent;
+				var parentSearch = currentNodeIDEditing > 0 && m_TreeView.treeModel.Find(currentNodeIDEditing) != null
+					? m_TreeView.treeModel.Find(currentNodeIDEditing)
+					: m_TreeView.treeModel.Find(fileToNodeID[currentFiles[0]]);
+
+				while (parentSearch.leafType == MerinoTreeElement.LeafType.Node)
+				{
+					parentSearch = (MerinoTreeElement) parentSearch.parent;
+				}
+
+				parents = new List<int>() {parentSearch.id };
 			}
-	
-			var newID = m_TreeView.treeModel.GenerateUniqueID();
-			var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
-			newNode.nodeBody = "Write stuff here.";
-			m_TreeView.treeModel.AddElement(newNode, parent, 0);
-			m_TreeView.FrameItem(newID);
-			m_TreeView.SetSelection( new List<int>() {newID} );
+
+			int newID = -1;
+			foreach (var parentID in parents)
+			{
+				var parent = treeView.treeModel.Find(parentID);
+				
+				newID = m_TreeView.treeModel.GenerateUniqueID();
+				var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
+				newNode.nodeBody = "Write here.\n";
+				m_TreeView.treeModel.AddElement(newNode, parent, 0);
+				m_TreeView.FrameItem(newID);
+				m_TreeView.SetSelection(new List<int>() {newID});
+			}
+
+			// if creating only one node, then prompt user rename it (like Unity's Project tab)
+			if (parents.Count == 1)
+			{
+				var newViewItem = m_TreeView.GetRows().Where(x => x.id == newID).First();
+				m_TreeView.BeginRename(newViewItem);
+			}
 
 			if (MerinoPrefs.useAutosave)
 			{
@@ -786,17 +940,28 @@ namespace Merino
 					var fileToRemove = fileToNodeID.Where(x => x.Value == id).Select(x => x.Key).First();
 					fileToNodeID.Remove(fileToRemove);
 					currentFiles.Remove(fileToRemove);
-				}
+					dirtyFiles.Remove(fileToRemove);
+				} 
 			}
-		
-			SaveDataToFiles();
+
 			DeleteList.Clear();
 			TreeElementUtility.UpdateDepthValues(m_TreeView.treeModel.root);
+			
+			if (MerinoPrefs.useAutosave)
+			{
+				SaveDataToFiles();
+			}
 		}
 
 		MerinoTreeElement GetFileParent(MerinoTreeElement treeNode)
 		{
 			return treeNode.leafType == MerinoTreeElement.LeafType.Node ? m_TreeView.treeModel.GetAncestors(treeNode.id).Select( id => m_TreeView.treeModel.Find(id)).Where(x => x.leafType == MerinoTreeElement.LeafType.File).First() : treeNode;
+		}
+
+		TextAsset GetTextAssetForNode( MerinoTreeElement treeNode )
+		{
+			var fileParent = GetFileParent(treeNode);
+			return currentFiles.Where(x => fileToNodeID[x] == fileParent.id).First();
 		}
 		
 		// ensure unique node titles, very important for YarnSpinner
@@ -875,6 +1040,7 @@ namespace Merino
 			{
 				errorLog.Clear();
 				dialogue.UnloadAll();
+				dialogue.experimentalMode = MerinoPrefs.useYarnSpinnerExperimentalMode;
 				varStorage.ResetToDefaults();
 				try
 				{
@@ -1060,6 +1226,7 @@ namespace Merino
 
 			if (viewState != null)
 			{
+				DrawMainToolbar(toolbarRect);
 				DrawMainPane(nodeEditRect);
 			}
 
@@ -1179,109 +1346,80 @@ namespace Merino
 		
 		void DrawSidebarSearch (Rect rect)
 		{
+			GUILayout.BeginArea( rect, EditorStyles.toolbar );
+
+			// CREATE menu
+			bool showDropdown = EditorGUILayout.DropdownButton(new GUIContent(" Create", newFileIcon, "create new Yarn.txt files and new Yarn nodes"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.MaxWidth(67));
+			var dropdownRect = GUILayoutUtility.GetLastRect();
+
+			if (showDropdown)
+			{
+				var createMenu = new GenericMenu();
+				createMenu.AddItem(new GUIContent("Yarn.txt File"), false, CreateNewYarnFile);
+				if (currentFiles.Count > 0)
+				{
+					createMenu.AddItem(new GUIContent("New Yarn Node"), false, AddNewNode);
+				}
+				else
+				{
+					createMenu.AddDisabledItem( new GUIContent("New Yarn Node"), false);
+				}
+
+				var menuRect = new Rect(dropdownRect);
+				menuRect.y += 16;
+				createMenu.DropDown(menuRect);
+			}
+
+			// search bar
+			rect.x += dropdownRect.width+12;
+			rect.width -= dropdownRect.width+12;
 			treeView.searchString = m_SearchField.OnGUI (rect, treeView.searchString);
+			GUILayout.EndArea();
 		}
 
 		void DrawSidebar (Rect rect)
 		{
-			float BUTTON_HEIGHT = 20;
-			var buttonRect = rect;
-			buttonRect.height = BUTTON_HEIGHT;
-
-			if (currentFiles.Count > 0)
-			{
-				bool addNewNode = false;
-				EditorGUI.BeginChangeCheck();
-				addNewNode = GUI.Button(buttonRect, "+ New Node");
-				if (EditorGUI.EndChangeCheck())
-				{
-					if (addNewNode)
-					{
-						AddNewNode();
-					}
-				}
-			}
-
-			rect.y += BUTTON_HEIGHT;
-			rect.height -= BUTTON_HEIGHT;
+//			if (currentFiles.Count > 0)
+//			{
+//				float BUTTON_HEIGHT = 20;
+//				var buttonRect = rect;
+//				buttonRect.height = BUTTON_HEIGHT;
+//				bool addNewNode = false;
+//				EditorGUI.BeginChangeCheck();
+//				addNewNode = GUI.Button(buttonRect, "+ New Node");
+//				if (EditorGUI.EndChangeCheck())
+//				{
+//					if (addNewNode)
+//					{
+//						AddNewNode();
+//					}
+//				}
+//				rect.y += BUTTON_HEIGHT;
+//				rect.height -= BUTTON_HEIGHT;
+//			}
 			m_TreeView.OnGUI(rect);
 		}
-				
-		void DrawMainPane(Rect rect)
+
+		void DrawMainToolbar(Rect rect)
 		{
 			GUILayout.BeginArea(rect);
 			
-			GUILayout.BeginHorizontal();
+			GUILayout.BeginHorizontal( EditorStyles.toolbar );
 			
-			if ( FluidGUIButtonIcon(" Add Folder...", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino", GUI.skin.button, GUILayout.Height(18), GUILayout.MaxWidth(120) ))
+			if ( FluidGUIButtonIcon(" + Folder ", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70) ))
 			{
-				string addPath = EditorUtility.OpenFolderPanel("Load Yarn.txt scripts in Assets folder...", Application.dataPath, "");
-				if (!string.IsNullOrEmpty(addPath))
-				{
-					if (!addPath.StartsWith(Application.dataPath))
-					{
-						EditorUtility.DisplayDialog("Invalid folder", addPath + " is not in your Unity project's Assets folder!", "Sorry");
-					}
-					else
-					{
-						// remove project folder path from selected path (+1 = trailing slash)
-						addPath = "Assets/" + addPath.Substring(Application.dataPath.Length + 1);
-						LoadYarnFilesAtPath(addPath); // add all found files to currentFiles
-						m_TreeView.treeModel.SetData(GetData());
-						m_TreeView.Reload();
-					}
-				}
+				LoadFolder();
 			}
 
-			if ( FluidGUIButtonIcon(" Add File...", textIcon, "Load a single .yarn.txt file into Merino", GUI.skin.button, GUILayout.Height(18), GUILayout.MaxWidth(100) ))
+			if ( FluidGUIButtonIcon(" + File", textIcon, "Load a single .yarn.txt file into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(55) ))
 			{
-				string addFilePath = EditorUtility.OpenFilePanelWithFilters("Load Yarn.txt scripts in Assets folder...", Application.dataPath, new string[] {"Yarn.txt scripts", "yarn.txt"});
-				if (!string.IsNullOrEmpty(addFilePath))
-				{
-					if (!addFilePath.StartsWith(Application.dataPath))
-					{
-						EditorUtility.DisplayDialog("Invalid folder", addFilePath + " is not in your Unity project's Assets folder!", "Sorry");
-					}
-					else
-					{
-						// remove project folder path from selected path (+1 = trailing slash)
-						addFilePath = "Assets/" + addFilePath.Substring(Application.dataPath.Length + 1);
-						LoadYarnFileAtFullPath(addFilePath, true); // add all found files to currentFiles
-						m_TreeView.treeModel.SetData(GetData());
-						m_TreeView.Reload();
-					}
-				}
-			}
-			
-			if ( FluidGUIButtonIcon(" Create File", textIcon, "Create a new .yarn.txt file and load it into Merino", GUI.skin.button, GUILayout.Height(18), GUILayout.MaxWidth(100) ))
-			{
-				string defaultPath = Application.dataPath + "/";
-				string defaultName = "NewYarnFile";
-				if ( currentFiles.Count > 0)
-				{
-					var lastFile = currentFiles.Last();
-					defaultPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6) + AssetDatabase.GetAssetPath(lastFile );
-					defaultName = lastFile.name.Substring(0, lastFile.name.Length - 5); // -5 because ignore ".yarn" at end of file name
-				}
-				string fullFilePath = EditorUtility.SaveFilePanel("Merino: save yarn.txt", Path.GetDirectoryName(defaultPath), defaultName, "yarn.txt");
-				if (fullFilePath.Length > 0)
-				{
-					var defaultData = GetDefaultData();
-					
-					File.WriteAllText(fullFilePath, defaultData != null ? defaultData.text : "");
-					AssetDatabase.Refresh();
-					var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>( "Assets" + fullFilePath.Substring(Application.dataPath.Length));
-					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(newFile));
-					LoadYarnFileAtFullPath(AssetDatabase.GetAssetPath(newFile), true);
-					m_TreeView.treeModel.SetData(GetData());
-					m_TreeView.Reload();
-				}
+				LoadFile();
 			}
 			
 			if (currentFiles.Count > 0 )
 			{
 				// UNLOAD BUTTON, formerly known as the NEW FILE BUTTON
-				if ( FluidGUIButtonIcon("Unload All", resetIcon, "will unload all files, throw away any unsaved changes, and reset Merino to a new blank file", GUI.skin.button, GUILayout.Height(18), GUILayout.MaxWidth(90) ) )
+				if ( FluidGUIButtonIcon("Unload All", resetIcon, "will unload all files, throw away any unsaved changes, and reset Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(80) ) )
 				{
 					if (EditorUtility.DisplayDialog("Merino: Unload all files?",
 						"Are you sure you want to unload all files? All unsaved work will be lost.", "Unload all files", "Cancel"))
@@ -1291,17 +1429,17 @@ namespace Merino
 					}
 				}
 				
-				GUILayout.Space(10);
+				GUILayout.FlexibleSpace();
 				
 				// autosave / save button
-				if (!MerinoPrefs.useAutosave && FluidGUIButtonIcon( " Save All", saveIcon, "save all changes to all files", GUI.skin.button, GUILayout.Height(18), GUILayout.MaxWidth(90)))
+				if (!MerinoPrefs.useAutosave && FluidGUIButtonIcon( " Save All", saveIcon, "save all changes to all files", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70)))
 				{
 					SaveDataToFiles();
-					CurrentFilesReimport();
+					ReimportFiles(true);
 				}
 				GUILayout.Space(4);
 				EditorGUI.BeginChangeCheck();
-				MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("AutoSave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, GUILayout.Width(80));
+				MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("AutoSave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, EditorStyles.miniLabel, GUILayout.Width(80));
 				if (EditorGUI.EndChangeCheck())
 				{
 					MerinoPrefs.SaveHiddenPrefs();
@@ -1311,11 +1449,18 @@ namespace Merino
 			GUILayout.FlexibleSpace();
 			
 			// help and documentation, with short and long buttons
-			if ( FluidGUIButtonIcon(" Help & Documentation", helpIcon, "open Merino help page / documentation in web browser", EditorStyles.label, GUILayout.Width(160) ) )
+			if ( FluidGUIButtonIcon(" Help & Docs", helpIcon, "open Merino help page / documentation in web browser", EditorStyles.toolbarButton, GUILayout.Width(90) ) )
 			{
 				Help.BrowseURL("https://github.com/radiatoryang/merino/wiki");
 			}
 			GUILayout.EndHorizontal();
+			GUILayout.EndArea();
+		}
+		
+				
+		void DrawMainPane(Rect rect)
+		{
+			GUILayout.BeginArea(rect);
 			GUILayout.Space(4);
 
 //			bool forceSave = false;
@@ -1327,6 +1472,7 @@ namespace Merino
 				
 				foreach (var id in viewState.selectedIDs)
 				{
+					// DRAW FILE NODE ==================================================================
 					if (m_TreeView.treeModel.Find(id).leafType == MerinoTreeElement.LeafType.File)
 					{
 						EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -1340,7 +1486,7 @@ namespace Merino
 						EditorGUILayout.EndHorizontal();
 
 						EditorGUILayout.BeginHorizontal();
-						var textAsset = currentFiles.Where(x => fileToNodeID[x] == id).First();
+						var textAsset = GetTextAssetForNode(m_TreeView.treeModel.Find(id) );
 						
 						// if the file got renamed in Project tab, then we can refresh the node name here, at least
 						if (textAsset.name != m_TreeView.treeModel.Find(id).name)
@@ -1364,6 +1510,8 @@ namespace Merino
 						continue;
 					}
 
+					// DRAW YARN NODE ===================================================================
+					
 					// start node container
 					EditorGUI.BeginChangeCheck();
 					EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -1383,13 +1531,13 @@ namespace Merino
 					
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));
-					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " see yarn.txt" : " see " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", GUI.skin.button, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
+					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", GUI.skin.button, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
 					{
 						idToZoomTo = fileParent.id;
 					}
 					
 					// delete button
-					if (GUILayout.Button(new GUIContent(" Delete Node", deleteIcon), GUILayout.Width(110)))
+					if ( FluidGUIButtonIcon(" Delete Node", deleteIcon, "click to delete this node", GUI.skin.button, GUILayout.Width(110) ) )
 					{
 						AddNodeToDelete(id);
 					}
@@ -1571,12 +1719,18 @@ namespace Merino
 					// combine all body texts into a single string for saving
 					var newBody = string.Join("\n", newBodies);
 
-					// playtest preview button at bottom of node
+					// bottom of node container: playtest button and +add new node button
+					GUILayout.BeginHorizontal();
 					if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
 					{
 						idToPreview = id;
 					}
- 
+					if (GUILayout.Button(new GUIContent(" Add New Node", newNodeIcon, "click to add a new node with the same parent (sibling)"), GUILayout.Height(18), GUILayout.Width(120) ) )
+					{
+						AddNewNode( new List<int> {treeView.treeModel.Find(id).parent.id} );
+					}
+					GUILayout.EndHorizontal();
+					
 					// close out node container				
 					EditorGUILayout.EndVertical();
 					EditorGUILayout.Space();
@@ -1596,6 +1750,7 @@ namespace Merino
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
 						serializedTreeData.editedID = id;
 						serializedTreeData.timestamp = EditorApplication.timeSinceStartup;
+						MarkFileDirty( GetTextAssetForNode( m_TreeView.treeModel.Find(id) ) );
 						
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
@@ -1646,14 +1801,59 @@ namespace Merino
 			}
 			else
 			{
-				if ( currentFiles.Count == 0 ) { EditorGUILayout.HelpBox(" To edit a Yarn.txt file, click a Load button above.", MessageType.Info);}
-				EditorGUILayout.HelpBox(" Select node(s) from the sidebar on the left.\n - Left-Click:  select\n - Left-Click + Shift:  select multiple\n - Left-Click + Ctrl / Left-Click + Command:  add / remove from selection", MessageType.Info);
+				DrawDefaultHelpBox(rect);
 			}
 
 			GUILayout.EndArea();
 		}
 		
 		#region MainPaneUtility
+
+		void DrawDefaultHelpBox(Rect rect)
+		{
+			var helpRect = new Rect(rect);
+			helpRect.x = margin*2;
+			helpRect.y = margin*2;
+			helpRect.width -= margin * 4;
+			helpRect.height /= 2;
+			GUILayout.BeginArea(helpRect);
+				
+			if (currentFiles.Count == 0)
+			{
+				EditorGUILayout.HelpBox(
+					" To write anything, you must load at least one file.\n" +
+					" - Click the [Create] dropdown, or click the [+ Folder] or [+ File] button.\n" +
+					" - For info and advice, click [Help & Docs].",
+					MessageType.Info
+				);
+				GUILayout.Space(8);
+				GUILayout.BeginHorizontal();
+				if ( GUILayout.Button( new GUIContent(" Create File", newFileIcon, "Create a new .yarn.txt file and load it into Merino"), GUILayout.Height(18), GUILayout.Width(100) ))
+				{
+					CreateNewYarnFile();
+				}
+				GUILayout.Space(8);
+				if ( GUILayout.Button( new GUIContent(" Add Folder ", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino"), GUILayout.Height(18), GUILayout.Width(105) ))
+				{
+					LoadFolder();
+				}
+				GUILayout.Space(8);
+				if ( GUILayout.Button( new GUIContent(" Add File", textIcon, "Load a single .yarn.txt file into Merino"), GUILayout.Height(18), GUILayout.Width(80) ))
+				{
+					LoadFile();
+				}
+				GUILayout.EndHorizontal();
+					
+			}
+			else
+			{
+				EditorGUILayout.HelpBox(
+					" Select node(s) from the sidebar on the left.\n - Left-Click:  select\n - Left-Click + Shift:  select multiple\n - Left-Click + Ctrl / Left-Click + Command:  add / remove from selection",
+					MessageType.Info);
+			}
+				
+			GUILayout.EndArea();
+		}
 
 		// I can't believe I finally got this to work, wow
 		// only needed for GUILayout.TextArea
@@ -1720,10 +1920,10 @@ namespace Merino
 			}
 		}
 
-		bool FluidGUIButtonIcon(string buttonTitle, Texture buttonIcon, string buttonTooltip, GUIStyle iconStyle, params GUILayoutOption[] longParams)
+		bool FluidGUIButtonIcon(string buttonTitle, Texture buttonIcon, string buttonTooltip, GUIStyle buttonStyle, params GUILayoutOption[] longParams)
 		{
-			return (position.width <= 900 && GUILayout.Button(new GUIContent(buttonIcon, buttonTooltip), iconStyle, GUILayout.Height(20), GUILayout.Width(24)))
-			       || (position.width > 900 && GUILayout.Button(new GUIContent(buttonTitle, buttonIcon, buttonTooltip), longParams) );
+			return (position.width-MerinoPrefs.sidebarWidth <= 400 && GUILayout.Button(new GUIContent(buttonIcon, buttonTooltip), buttonStyle, GUILayout.Height(20), GUILayout.Width(24)))
+			       || (position.width-MerinoPrefs.sidebarWidth > 400 && GUILayout.Button(new GUIContent(buttonTitle, buttonIcon, buttonTooltip), buttonStyle, longParams) );
 		}
 
 		string SanitizeRichText(string lineText)

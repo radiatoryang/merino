@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor.TreeViewExamples;
+using UnityEditor.IMGUI.Controls;
 
 namespace Merino
 {
@@ -10,6 +11,9 @@ namespace Merino
 		public int editedID = -1;
 		public double timestamp;
 		[SerializeField] List<MerinoTreeElement> m_TreeElements = new List<MerinoTreeElement> ();
+		[SerializeField] public List<TextAsset> currentFiles = new List<TextAsset>();
+		[SerializeField] public Dictionary<TextAsset, int> fileToNodeID = new Dictionary<TextAsset, int>();
+		[SerializeField] public TreeViewState viewState = new TreeViewState();
 
 		internal List<MerinoTreeElement> treeElements
 		{

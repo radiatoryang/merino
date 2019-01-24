@@ -18,14 +18,17 @@ namespace Merino
 	class MerinoEditorWindow : EditorWindow
 	{
 		static MerinoEditorWindow window;
+		static int treeDataInstanceID;
 		
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
-		[SerializeField] TreeViewState viewState; // Serialized in the window layout file so it survives assembly reloading
+		TreeViewState viewState { get { return serializedTreeData.viewState; } set { serializedTreeData.viewState = value; } } // Serialized in ScriptableObject so it survives assembly reloading AND window refresh
+
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
 		SearchField m_SearchField;
 		[SerializeField] MerinoTreeData serializedTreeData;
 		[SerializeField] MerinoTreeView m_TreeView;
+
 		public MerinoTreeView treeView {
 			get { return m_TreeView; }
 		}
@@ -84,8 +87,8 @@ namespace Merino
 		Texture helpIcon, errorIcon, folderIcon, textIcon, nodeIcon, newNodeIcon, deleteIcon, resetIcon, saveIcon, newFileIcon;
 		
 		// TextAsset currentFile; // deprecated, juse currentFiles instead
-		List<TextAsset> currentFiles = new List<TextAsset>();
-		Dictionary<TextAsset, int> fileToNodeID = new Dictionary<TextAsset, int>();
+		List<TextAsset> currentFiles { get { return serializedTreeData.currentFiles; } set { serializedTreeData.currentFiles = value; } }
+		Dictionary<TextAsset, int> fileToNodeID { get { return serializedTreeData.fileToNodeID; } set { serializedTreeData.fileToNodeID = value; } }
 		List<TextAsset> dirtyFiles = new List<TextAsset>();
 		
 		// undo management
@@ -156,6 +159,7 @@ namespace Merino
 		
 		void ResetMerino()
 		{
+			Debug.Log("resetMerino()");
 			currentFiles.Clear();
 			fileToNodeID.Clear();
 			dirtyFiles.Clear();
@@ -222,10 +226,40 @@ namespace Merino
 			errorLog.Clear();
 			
 			InitIcons();
-			
-			// Check if it already exists (deserialized from window layout file or scriptable object)
-			if (viewState == null)
+
+			// try to recover scriptableobject based on instance ID (see https://forum.unity.com/threads/editorwindow-loses-reference-of-scriptableobject-on-play-mode.107831/#post-1077162)
+			bool foundDataAlready = false;
+			if ( treeDataInstanceID != 0 ) {
+				var possibleData = (MerinoTreeData)EditorUtility.InstanceIDToObject( treeDataInstanceID );
+				if ( possibleData != null && possibleData.treeElements != null ) {
+					serializedTreeData = possibleData;
+					foundDataAlready = true;
+				}
+			}
+
+			// still didn't find any data, so try searching the disk too
+			if ( !foundDataAlready ) {
+				// detect temp data written to disk (e.g. when going into play mode and back)
+				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
+				if (possibleTempData != null && possibleTempData.treeElements != null)
+				{
+					serializedTreeData = possibleTempData;
+				}
+				else
+				{
+					serializedTreeData = ScriptableObject.CreateInstance<MerinoTreeData>();
+					AssetDatabase.CreateAsset(serializedTreeData, MerinoPrefs.tempDataPath);
+					AssetDatabase.SaveAssets();
+				}
+			}
+
+			// oh well, whatever happened, let's save the ID now
+			treeDataInstanceID = serializedTreeData.GetInstanceID();
+
+			// Check if viewstate already exists (deserialized from window layout file or scriptable object)
+			if (viewState == null) {
 				viewState = new TreeViewState();
+			}
 
 			bool firstInit = m_MultiColumnHeaderState == null;
 			var headerState = MerinoTreeView.CreateDefaultMultiColumnHeaderState(sidebarRect.width);
@@ -236,19 +270,6 @@ namespace Merino
 			var multiColumnHeader = new MerinoMultiColumnHeader(headerState);
 			if (firstInit)
 				multiColumnHeader.ResizeToFit ();
-
-			// detect temp data (e.g. when going into play mode and back)
-			var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
-			if (possibleTempData == null)
-			{
-				serializedTreeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-				AssetDatabase.CreateAsset(serializedTreeData, MerinoPrefs.tempDataPath);
-				AssetDatabase.SaveAssets();
-			}
-			else
-			{
-				serializedTreeData = possibleTempData;
-			}
 
 			// generate sidebar data structures
 			var treeModel = new TreeModel<MerinoTreeElement>(GetData(null, true));
@@ -760,7 +781,10 @@ namespace Merino
 			}
 			
 			// gather data
-			ValidateNodeTitles();
+			if ( MerinoPrefs.validateNodeTitles ) {
+				ValidateNodeTitles();
+			}
+
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
 			
 			// grab nodes based on visible order in the hierarchy tree view (sorting)
@@ -967,6 +991,8 @@ namespace Merino
 		// ensure unique node titles, very important for YarnSpinner
 		void ValidateNodeTitles(List<MerinoTreeElement> nodesToCheck = null)
 		{
+			if ( MerinoPrefs.validateNodeTitles == false ) { return; }
+
 			if (nodesToCheck == null) // if null, then let's just use all currently loaded nodes
 			{
 				nodesToCheck = serializedTreeData.treeElements;
@@ -995,7 +1021,7 @@ namespace Merino
 						nodeTitles.Add(nodesToCheck[i].id, nodesToCheck[i].name);
 					}
 					
-					nodeTitles[nodesToCheck[i].id] = nodesToCheck[i].name + "-" + duplicateCount[nodesToCheck[i].name]++;
+					nodeTitles[nodesToCheck[i].id] = nodesToCheck[i].name + "_" + duplicateCount[nodesToCheck[i].name]++;
 					foundDuplicate = true;
 				} // but if there's not already a node with that name, we should still make a note of it
 				else if (nodeTitles.ContainsKey(nodesToCheck[i].id) == false)

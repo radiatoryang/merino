@@ -42,3 +42,5 @@ Assets/Plugins/Editor/JetBrains*
 #Merino stuff
 /Assets/Merino/Editor/MerinoTempData*
 Logs/
+*yarn.txt
+*yarn.txt.meta

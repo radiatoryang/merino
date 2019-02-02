@@ -18,7 +18,6 @@ namespace Merino
 	class MerinoEditorWindow : EditorWindow
 	{
 		static MerinoEditorWindow window;
-		static int treeDataInstanceID;
 		
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
@@ -26,7 +25,7 @@ namespace Merino
 
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
 		SearchField m_SearchField;
-		[SerializeField] MerinoTreeData serializedTreeData;
+		private MerinoTreeData serializedTreeData { get { return MerinoTreeData.Instance;} }
 		[SerializeField] MerinoTreeView m_TreeView;
 
 		public MerinoTreeView treeView {
@@ -88,8 +87,8 @@ namespace Merino
 		
 		// TextAsset currentFile; // deprecated, juse currentFiles instead
 		List<TextAsset> currentFiles { get { return serializedTreeData.currentFiles; } set { serializedTreeData.currentFiles = value; } }
+		List<TextAsset> dirtyFiles { get { return serializedTreeData.dirtyFiles; } set { serializedTreeData.dirtyFiles = value; } }
 		Dictionary<TextAsset, int> fileToNodeID { get { return serializedTreeData.fileToNodeID; } set { serializedTreeData.fileToNodeID = value; } }
-		List<TextAsset> dirtyFiles = new List<TextAsset>();
 		
 		// undo management
 		double lastUndoTime;
@@ -227,35 +226,6 @@ namespace Merino
 			
 			InitIcons();
 
-			// try to recover scriptableobject based on instance ID (see https://forum.unity.com/threads/editorwindow-loses-reference-of-scriptableobject-on-play-mode.107831/#post-1077162)
-			bool foundDataAlready = false;
-			if ( treeDataInstanceID != 0 ) {
-				var possibleData = (MerinoTreeData)EditorUtility.InstanceIDToObject( treeDataInstanceID );
-				if ( possibleData != null && possibleData.treeElements != null ) {
-					serializedTreeData = possibleData;
-					foundDataAlready = true;
-				}
-			}
-
-			// still didn't find any data, so try searching the disk too
-			if ( !foundDataAlready ) {
-				// detect temp data written to disk (e.g. when going into play mode and back)
-				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
-				if (possibleTempData != null && possibleTempData.treeElements != null)
-				{
-					serializedTreeData = possibleTempData;
-				}
-				else
-				{
-					serializedTreeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-					AssetDatabase.CreateAsset(serializedTreeData, MerinoPrefs.tempDataPath);
-					AssetDatabase.SaveAssets();
-				}
-			}
-
-			// oh well, whatever happened, let's save the ID now
-			treeDataInstanceID = serializedTreeData.GetInstanceID();
-
 			// Check if viewstate already exists (deserialized from window layout file or scriptable object)
 			if (viewState == null) {
 				viewState = new TreeViewState();
@@ -318,36 +288,6 @@ namespace Merino
 //			}
 		}
 
-		void ReimportFiles(bool forceReimportAll=false)
-		{
-			if (forceReimportAll)
-			{
-				foreach (var file in currentFiles)
-				{
-					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
-				}
-			}
-			else if ( dirtyFiles.Count > 0 )
-			{
-//				Debug.Log("reimporting dirty files: " + string.Join(", ", dirtyFiles.Select( x => x.name)) );
-				foreach (var file in dirtyFiles)
-				{
-					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
-				}
-			}
-
-			dirtyFiles.Clear();
-		}
-
-		// TODO: eventually, add more data on what's dirty about it (what nodes modified? when it was last modified? etc)
-		void MarkFileDirty(TextAsset dirtyFile)
-		{
-			if (dirtyFiles.Contains(dirtyFile) == false)
-			{
-				dirtyFiles.Add(dirtyFile);
-			}
-		}
-
 		// This gets called 10 times a second, good for low priority stuff
 		public void OnInspectorUpdate()
 		{
@@ -360,16 +300,16 @@ namespace Merino
 			// small delay before saving after OnTreeChanged
 			if (MerinoPrefs.useAutosave && currentFiles.Count > 0 && EditorApplication.timeSinceStartup > lastTreeChangeTime + 0.5)
 			{
-				SaveDataToFiles();
-				ReimportFiles(true); // we have no idea which node ID got changed, so we just have to reimport all files at this point
+				MerinoCore.SaveDataToFiles();
+				MerinoCore.ReimportFiles(true); // we have no idea which node ID got changed, so we just have to reimport all files at this point
 				lastTreeChangeTime = EditorApplication.timeSinceStartup + 99999;
 			}
 			
 			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
-			if (EditorApplication.timeSinceStartup > lastSaveTime + 1.0 && currentFiles.Count > 0)
+			if (EditorApplication.timeSinceStartup > MerinoCore.LastSaveTime + 1.0 && currentFiles.Count > 0)
 			{
-				ReimportFiles();
-				lastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
+				MerinoCore.ReimportFiles();
+				MerinoCore.LastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
 			}
 		}
 
@@ -388,7 +328,7 @@ namespace Merino
 			// if destroyed, make sure the text file got refreshed at least
 			if (currentFiles.Count > 0)
 			{
-				ReimportFiles(true);
+				MerinoCore.ReimportFiles(true);
 			}
 			
 			Undo.undoRedoPerformed -= OnUndo;
@@ -429,7 +369,7 @@ namespace Merino
 			m_TreeView.Reload();
 			if (currentFiles.Count > 0 && MerinoPrefs.useAutosave)
 			{
-				SaveDataToFiles();
+				MerinoCore.SaveDataToFiles();
 			}
 		}
 		#endregion
@@ -613,10 +553,10 @@ namespace Merino
 			foreach (var node in nodes)
 			{
 				// clean some of the stuff to help prevent file corruption
-				string cleanName = CleanYarnField(node.title, true);
-				string cleanBody = CleanYarnField(node.body);
-				string cleanTags = CleanYarnField(node.tags, true);
-				string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : CleanYarnField(node.parent, true);
+				string cleanName = MerinoUtils.CleanYarnField(node.title, true);
+				string cleanBody = MerinoUtils.CleanYarnField(node.body);
+				string cleanTags = MerinoUtils.CleanYarnField(node.tags, true);
+				string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : MerinoUtils.CleanYarnField(node.parent, true);
 				
 				// write data to the objects
 				var newItem = new MerinoTreeElement( cleanName, 0, startID + treeElements.Count);
@@ -709,143 +649,6 @@ namespace Merino
 			return serializedTreeData.treeElements;
 		}
 
-		string CleanYarnField(string inputString, bool extraClean=false)
-		{
-			if (extraClean)
-			{
-				return inputString.Replace("===", " ").Replace("---", " ").Replace("title:", " ").Replace("tags:", " ").Replace("position:", " ").Replace("colorID:", " ");
-			}
-			else
-			{
-				return inputString.Replace("===", " ").Replace("---", " ");
-			}
-		}
-		
-		// used for file saving
-		string SaveFileNodesAsString( int fileNodeID)
-		{
-			var nodeInfoList = new List<YarnSpinnerLoader.NodeInfo>();
-			
-			// expand all leaf nodes for this file (which also accounts for sorting)
-			var previousExpanded = treeView.GetExpanded();
-			treeView.ExpandAll();
-
-			// expand all children manually, because SetExpandedRecursive doesn't seem to work properly?
-			var toTraverse = new List<int>() {fileNodeID};
-			var filterList = new List<int>();
-
-			while (toTraverse.Count > 0)
-			{
-				if (filterList.Contains(toTraverse[0]) == false)
-				{
-					filterList.Add(toTraverse[0]);
-					var node = treeView.treeModel.Find(toTraverse[0]);
-					if ( node != null && node.hasChildren)
-					{
-						toTraverse.AddRange(node.children.Select(x => x.id));
-					}
-				}
-
-				toTraverse.RemoveAt(0);
-			}
-
-			// export these leaf nodes
-			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where(x => filterList.Contains(x.id)).ToArray();
-
-			treeView.SetExpanded(previousExpanded);
-
-			// save data to string
-			foreach (var treeNode in treeNodes)
-			{
-				// skip the root, and skip any non-node nodes
-				if (treeNode.depth == -1 || treeNode.leafType != MerinoTreeElement.LeafType.Node)
-				{
-					continue;
-				}
-
-				nodeInfoList.Add(TreeNodeToYarnNode(treeNode));
-			}
-				
-			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfoList);
-			
-		}
-
-		// used internally for playtest preview
-		string SaveAllNodesAsString()
-		{
-			if (serializedTreeData == null)
-			{
-				Debug.LogError("Merino TreeData got corrupted somehow! Trying to reinitialize... but if you can reproduce this, please file a bug report at https://github.com/radiatoryang/merino/issues");
-				m_Initialized = false;
-				InitIfNeeded();
-			}
-			
-			// gather data
-			if ( MerinoPrefs.validateNodeTitles ) {
-				ValidateNodeTitles();
-			}
-
-			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-			
-			// grab nodes based on visible order in the hierarchy tree view (sorting)
-			
-			// first, in order to properly export, we need to expand everything
-			var previousExpanded = treeView.GetExpanded();
-			treeView.ExpandAll();
-			// then grab the nodes
-			var treeNodes = treeView.GetRows().Select(x => treeView.treeModel.Find(x.id)).Where( x => x.leafType == MerinoTreeElement.LeafType.Node).ToArray(); // treeData.treeElements; // m_TreeView.treeModel.root.children;
-			// then set the expanded nodes back to what they were
-			treeView.SetExpanded(previousExpanded);
-			
-			// save data to string
-			foreach (var treeNode in treeNodes)
-			{
-				// skip the root
-				if (treeNode.depth == -1)
-				{
-					continue;
-				}
-
-				nodeInfo.Add( TreeNodeToYarnNode(treeNode) );
-			}
-
-			return YarnSpinnerFileFormatConverter.ConvertNodesToYarnText(nodeInfo);
-		}
-
-		YarnSpinnerLoader.NodeInfo TreeNodeToYarnNode(MerinoTreeElement treeNode)
-		{
-			var itemCasted = (MerinoTreeElement) treeNode;
-			var newNodeInfo = new YarnSpinnerLoader.NodeInfo();
-
-			newNodeInfo.title = itemCasted.name;
-			newNodeInfo.body = itemCasted.nodeBody;
-			newNodeInfo.tags = itemCasted.nodeTags;
-			var newPosition = new YarnSpinnerLoader.NodeInfo.Position();
-			newPosition.x = itemCasted.nodePosition.x;
-			newPosition.y = itemCasted.nodePosition.y;
-			newNodeInfo.position = newPosition;
-			if (((MerinoTreeElement) itemCasted.parent).leafType != MerinoTreeElement.LeafType.File)
-			{
-				newNodeInfo.parent = itemCasted.parent.name;
-			}
-
-			return newNodeInfo;
-		}
-
-		// writes data to the file
-		double lastSaveTime;
-		void SaveDataToFiles()
-		{
-			if ( currentFiles.Count > 0 )
-			{
-				foreach (var file in currentFiles)
-				{
-					File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString( fileToNodeID[file] ) );
-					EditorUtility.SetDirty(file);
-					lastSaveTime = EditorApplication.timeSinceStartup;
-				}
-			}
-		}
 		#endregion
 		
 		#region NodeManagement
@@ -898,7 +701,7 @@ namespace Merino
 
 			if (MerinoPrefs.useAutosave)
 			{
-				SaveDataToFiles();
+				MerinoCore.SaveDataToFiles();
 			}
 		}
 
@@ -973,7 +776,7 @@ namespace Merino
 			
 			if (MerinoPrefs.useAutosave)
 			{
-				SaveDataToFiles();
+				MerinoCore.SaveDataToFiles();
 			}
 		}
 
@@ -988,75 +791,7 @@ namespace Merino
 			return currentFiles.Where(x => fileToNodeID[x] == fileParent.id).First();
 		}
 		
-		// ensure unique node titles, very important for YarnSpinner
-		void ValidateNodeTitles(List<MerinoTreeElement> nodesToCheck = null)
-		{
-			if ( MerinoPrefs.validateNodeTitles == false ) { return; }
-
-			if (nodesToCheck == null) // if null, then let's just use all currently loaded nodes
-			{
-				nodesToCheck = serializedTreeData.treeElements;
-			}
-			// make sure we're not doing this to any folder or file nodes, ONLY YARN NODES
-			nodesToCheck = nodesToCheck.Where(x => x.leafType == MerinoTreeElement.LeafType.Node).ToList();
-
-			// validate data: ensure unique node names
-			var nodeTitles = new Dictionary<int,string>(); // index, newTitle
-			var duplicateCount = new Dictionary<string, int>(); // increment counter for each duplicate name, and use for rename suffix
-			bool foundDuplicate = false;
-			for (int i=0;i<nodesToCheck.Count;i++)
-			{
-				// if there's a node already with that name, then append unique suffix
-				if (nodeTitles.Values.Contains(nodesToCheck[i].name))
-				{
-					// count duplicates
-					if (!duplicateCount.ContainsKey(nodesToCheck[i].name))
-					{
-						duplicateCount.Add(nodesToCheck[i].name, 2);
-					}
-					
-					// when we make a new name, we have to ensure it's unique...
-					if (nodeTitles.ContainsKey(nodesToCheck[i].id) == false)
-					{
-						nodeTitles.Add(nodesToCheck[i].id, nodesToCheck[i].name);
-					}
-					
-					nodeTitles[nodesToCheck[i].id] = nodesToCheck[i].name + "_" + duplicateCount[nodesToCheck[i].name]++;
-					foundDuplicate = true;
-				} // but if there's not already a node with that name, we should still make a note of it
-				else if (nodeTitles.ContainsKey(nodesToCheck[i].id) == false)
-				{
-					nodeTitles.Add(nodesToCheck[i].id, nodesToCheck[i].name);
-				}
-	
-			}
-			if (foundDuplicate)
-			{	
-				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break node links, you can undo it. The following nodes were renamed: ";
-				Undo.RecordObject(serializedTreeData, "Merino: AutoRename");
-				
-				foreach (var kvp in nodeTitles)
-				{
-					if (serializedTreeData.treeElements[kvp.Key].name != kvp.Value)
-					{
-						renamedNodes += string.Format("\n* {0} > {1}", serializedTreeData.treeElements[kvp.Key].name, kvp.Value);
-						serializedTreeData.treeElements[kvp.Key].name = kvp.Value;
-					}
-				}
-				EditorUtility.SetDirty(serializedTreeData);
-				Debug.LogWarning(renamedNodes);
-				// repaint tree view so names get updated
-				m_TreeView.Reload();
-				
-				// this is bad, but we're gonna do some recursion here, just to make extra sure there's STILL no duplicates...
-				ValidateNodeTitles(serializedTreeData.treeElements);
-			}
-			else if ( MerinoPrefs.useAutosave )
-			{
-				SaveDataToFiles();
-			}
-			
-		}
+		
 		#endregion
 		
 		#region PlaytestPreview
@@ -1068,9 +803,11 @@ namespace Merino
 				dialogue.UnloadAll();
 				dialogue.experimentalMode = MerinoPrefs.useYarnSpinnerExperimentalMode;
 				varStorage.ResetToDefaults();
+				
 				try
 				{
-					var program = SaveAllNodesAsString();
+					var program = MerinoCore.SaveAllNodesAsString();
+					Debug.Log(program);
 					if (!string.IsNullOrEmpty(program))
 					{
 						dialogue.LoadString(program);
@@ -1460,8 +1197,8 @@ namespace Merino
 				// autosave / save button
 				if (!MerinoPrefs.useAutosave && FluidGUIButtonIcon( " Save All", saveIcon, "save all changes to all files", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70)))
 				{
-					SaveDataToFiles();
-					ReimportFiles(true);
+					MerinoCore.SaveDataToFiles();
+					MerinoCore.ReimportFiles(true);
 				}
 				GUILayout.Space(4);
 				EditorGUI.BeginChangeCheck();
@@ -1776,7 +1513,7 @@ namespace Merino
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
 						serializedTreeData.editedID = id;
 						serializedTreeData.timestamp = EditorApplication.timeSinceStartup;
-						MarkFileDirty( GetTextAssetForNode( m_TreeView.treeModel.Find(id) ) );
+						MerinoCore.MarkFileDirty( GetTextAssetForNode( m_TreeView.treeModel.Find(id) ) );
 						
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
@@ -1784,7 +1521,7 @@ namespace Merino
 						// save after commit if we're autosaving
 						if (currentFiles.Count > 0 && MerinoPrefs.useAutosave)
 						{
-							SaveDataToFiles();
+							MerinoCore.SaveDataToFiles();
 						}
 						
 						// repaint tree view so names get updated

@@ -43,10 +43,6 @@ namespace Merino
 		
 		bool resizingSidebar = false;
 		
-		float playPreviewHeight {
-			get { return isDialogueRunning ? 180f : 0f; }
-		}
-		
 		Rect sidebarSearchRect
 		{
 			get { return new Rect (0, 0, MerinoPrefs.sidebarWidth, 18); }
@@ -69,12 +65,7 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin, toolbarRect.height, position.width-MerinoPrefs.sidebarWidth-margin, position.height-toolbarRect.height-bottomToolbarRect.height-playPreviewHeight);} // was height-30
-		}
-		
-		Rect playPreviewRect
-		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, position.height-margin-playPreviewHeight, position.width-MerinoPrefs.sidebarWidth-15, playPreviewHeight-margin);}
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*2);} // was height-30
 		}
 
 		Rect bottomToolbarRect
@@ -97,37 +88,11 @@ namespace Merino
 		bool spaceWillIncrementUndo = false; // used just in Main Pane
 		
 		// error checking
-		List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
+		public static List<MerinoErrorLine> errorLog = new List<MerinoErrorLine>();
 		
 		// node management
 		private List<int> DeleteList = new List<int>();
 		int currentNodeIDEditing;
-		
-		// Yarn Spinner running stuff
-		[NonSerialized] bool isDialogueRunning;
-		MerinoVariableStorage varStorage;
-		MerinoDialogueUI dialogueUI;
-		Dialogue _dialogue;
-		Dialogue dialogue {
-			get {
-				if (_dialogue == null) {
-					// Create the main Dialogue runner, and pass our variableStorage to it
-					varStorage = new MerinoVariableStorage();
-					_dialogue = new Yarn.Dialogue ( varStorage );
-					_dialogue.experimentalMode = MerinoPrefs.useYarnSpinnerExperimentalMode;
-					dialogueUI = new MerinoDialogueUI();
-					
-					// Set up the logging system.
-					_dialogue.LogDebugMessage = delegate (string message) {
-						Debug.Log (message);
-					};
-					_dialogue.LogErrorMessage = delegate (string message) {
-						PlaytestErrorLog (message);
-					};
-				}
-				return _dialogue;
-			}
-		}
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
@@ -164,7 +129,6 @@ namespace Merino
 			dirtyFiles.Clear();
 			viewState = null;
 			m_Initialized = false;
-			ForceStopDialogue();
 			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
@@ -316,7 +280,7 @@ namespace Merino
 		// This gets called many times a second, for real-time interaction / smoother animation / feel stuff
 		public void Update()
 		{
-			if (isDialogueRunning || resizingSidebar || zoomToLineNumber > -1 || lastZoomToLineNumber > -1)
+			if (resizingSidebar || zoomToLineNumber > -1 || lastZoomToLineNumber > -1)
 			{
 				// MASSIVELY improves framerate, wow, amazing
 				Repaint();
@@ -335,8 +299,6 @@ namespace Merino
 			Undo.ClearUndo(serializedTreeData);
 			
 			undoData.Clear();
-			
-			ForceStopDialogue();
 		}
 		
 		void OnUndo()
@@ -795,48 +757,7 @@ namespace Merino
 		#endregion
 		
 		#region PlaytestPreview
-		void PlaytestFrom(string startPassageName, bool reset=true)
-		{
-			if (reset)
-			{
-				errorLog.Clear();
-				dialogue.UnloadAll();
-				dialogue.experimentalMode = MerinoPrefs.useYarnSpinnerExperimentalMode;
-				varStorage.ResetToDefaults();
-				
-				try
-				{
-					var program = MerinoCore.SaveAllNodesAsString();
-					Debug.Log(program);
-					if (!string.IsNullOrEmpty(program))
-					{
-						dialogue.LoadString(program);
-					}
-				}
-				catch (Exception ex)
-				{
-					PlaytestErrorLog(ex.Message);
-					return;
-				}
-				
-			}
-			this.StopAllCoroutines();
-
-			// use EditorCoroutines to run the dialogue
-			this.StartCoroutine(RunDialogue(startPassageName));
-		}
 		
-		void ForceStopDialogue()
-		{
-			isDialogueRunning = false;
-			if (dialogue != null)
-			{
-				dialogue.Stop();
-			}
-
-			this.StopAllCoroutines();
-		}
-
 		// logs errors from the playtest engine and Yarn Loader
 		public void PlaytestErrorLog(string message)
 		{
@@ -907,76 +828,6 @@ namespace Merino
 			}
 		}
 
-		// this is basically just ripped from YarnSpinner/DialogueRunner.cs
-		IEnumerator RunDialogue (string startNode = "Start")
-        {        
-            // Mark that we're in conversation.
-            isDialogueRunning = true;
-
-            // Signal that we're starting up.
-            //  yield return this.StartCoroutine(this.dialogueUI.DialogueStarted());
-
-            // Get lines, options and commands from the Dialogue object,
-            // one at a time.
-            foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
-            {
-	            dialogueUI.currentNode = dialogue.currentNode;
-
-                if (step is Yarn.Dialogue.LineResult) {
-
-                    // Wait for line to finish displaying
-                    var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(this.dialogueUI.RunLine(lineResult.line, MerinoPrefs.useAutoAdvance));
-//	                while (dialogueUI.inputContinue == false)
-//	                {
-//		                yield return new WaitForSeconds(0.01f);
-//	                }
-
-                } else if (step is Yarn.Dialogue.OptionSetResult) {
-
-                    // Wait for user to finish picking an option
-                    var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
-	                dialogueUI.RunOptions(optionSetResult.options, optionSetResult.setSelectedOptionDelegate);
-	                while (dialogueUI.inputOption < 0)
-	                {
-		                yield return new WaitForSeconds(0.01f);
-	                }
-
-                } else if (step is Yarn.Dialogue.CommandResult) {
-
-                    // Wait for command to finish running
-
-                    var commandResult = step as Yarn.Dialogue.CommandResult;
-
-//                    if (DispatchCommand(commandResult.command.text) == true) {
-//                        // command was dispatched
-//                    } else {
-	                yield return this.StartCoroutine( dialogueUI.RunCommand(commandResult.command, MerinoPrefs.useAutoAdvance));
-//                    }
-
-
-                } else if(step is Yarn.Dialogue.NodeCompleteResult) {
-
-                    // Wait for post-node action
-                    // var nodeResult = step as Yarn.Dialogue.NodeCompleteResult;
-                    // yield return this.StartCoroutine (this.dialogueUI.NodeComplete (nodeResult.nextNode));
-                }
-            }
-	        Debug.Log("Merino: reached the end of the dialogue.");
-	        
-            // No more results! The dialogue is done.
-            // yield return this.StartCoroutine (this.dialogueUI.DialogueComplete ());
-	        while (MerinoPrefs.stopOnDialogueEnd==false)
-	        {
-		        yield return new WaitForSeconds(0.01f);
-	        }
-
-            // Clear the 'is running' flag. We do this after DialogueComplete returns,
-            // to allow time for any animations that might run while transitioning
-            // out of a conversation (ie letterboxing going away, etc)
-            isDialogueRunning = false;
-	        Repaint();
-        }
 		#endregion
 		
 		void OnGUI ()
@@ -991,13 +842,6 @@ namespace Merino
 			{
 				DrawMainToolbar(toolbarRect);
 				DrawMainPane(nodeEditRect);
-			}
-
-			if (dialogueUI != null && isDialogueRunning)
-			{
-				DrawPlaytestToolbar(playPreviewRect);
-				// if not pressed, then show the normal play preview
-				dialogueUI.OnGUI(playPreviewRect);
 			}
 
 			DrawBottomToolBar (bottomToolbarRect);
@@ -1027,84 +871,6 @@ namespace Merino
 				resizingSidebar = false;
 				MerinoPrefs.SaveHiddenPrefs();
 			}
-		}
-
-		void DrawPlaytestToolbar(Rect rect)
-		{
-			// toolbar
-			GUILayout.BeginArea(rect);
-			EditorGUILayout.BeginHorizontal(MerinoStyles.ToolbarStyle, GUILayout.ExpandWidth(true));
-
-			// jump to node button, but only if dialogue is already running
-			var jumpOptions = dialogue.allNodes.ToList();
-			var currentJumpIndex = jumpOptions.IndexOf(dialogue.currentNode);
-			bool dialogueEnded = false;
-			if (dialogue.currentNode == null)
-			{ // if there is no current node, then tell them that
-				dialogueEnded = true;
-				currentJumpIndex = 0;
-				jumpOptions.Insert(0, "<Stopped> Jump to Node?...");
-			}
-			var newJumpIndex = EditorGUILayout.Popup(
-				new GUIContent("", "the node you're currently playing; you can also jump to any other node"), 
-				currentJumpIndex, 
-				jumpOptions.Select( 
-					x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)
-				).ToArray(), 
-				EditorStyles.toolbarPopup, 
-				GUILayout.Width(160)
-			);
-			if (currentJumpIndex != newJumpIndex)
-			{
-				if ( !dialogueEnded || newJumpIndex > 0) {
-					PlaytestFrom(jumpOptions[newJumpIndex], false);
-				}
-			}
-			GUILayout.Space(4);
-			
-			// current node button
-			GUI.enabled = !dialogueEnded;
-			if (dialogue.currentNode != null && GUILayout.Button(new GUIContent("View Node Source", string.Format("click to see Yarn script code for this node")), EditorStyles.toolbarButton))
-			{
-				var matchingNode = serializedTreeData.treeElements.Find(x => x.name == dialogue.currentNode);
-				if (matchingNode != null)
-				{
-					SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, dialogueUI.displayStringFull) );
-				}
-				else if ( dialogue != null && dialogue.currentNode != null )
-				{
-					Debug.LogWarning("Marino couldn't find the node " + dialogue.currentNode + "... it might've been deleted or the Yarn file is corrupted.");
-				}
-			}
-			GUI.enabled = true;
-
-			GUILayout.FlexibleSpace();
-			
-			// begin some settings
-			EditorGUI.BeginChangeCheck();
-		
-			// auto advance button
-			MerinoPrefs.useAutoAdvance = EditorGUILayout.ToggleLeft(new GUIContent("AutoAdvance", "automatically advance dialogue, with no user input, until there's a choice"), MerinoPrefs.useAutoAdvance, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
-			GUILayout.FlexibleSpace();
-			// stop on dialogue end button
-			MerinoPrefs.stopOnDialogueEnd = EditorGUILayout.ToggleLeft(new GUIContent("CloseOnEnd", "when dialogue terminates, stop and close playtest session automatically"), MerinoPrefs.stopOnDialogueEnd, MerinoStyles.SmallToggleStyle, GUILayout.Width(100));
-			if (EditorGUI.EndChangeCheck())
-			{
-				MerinoPrefs.SaveHiddenPrefs(); // remember new settings
-			}
-			
-			// stop button
-			var backupColor = GUI.backgroundColor;
-			GUI.backgroundColor = Color.red;
-			if (GUILayout.Button(new GUIContent("Close", "click to force stop the playtest preview and close it"), EditorStyles.toolbarButton))
-			{
-				ForceStopDialogue();
-			}
-			GUI.backgroundColor = backupColor;
-			
-			// close out toolbar
-			EditorGUILayout.EndHorizontal();
-			GUILayout.EndArea();
 		}
 		
 		void DrawSidebarSearch (Rect rect)
@@ -1552,7 +1318,7 @@ namespace Merino
 				// detect if we need to do play preview
 				if (idToPreview > -1)
 				{
-					PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name, !isDialogueRunning);
+					MerinoPlaytestWindow.PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name);
 				}
 				
 				// detect if we need to zoom to a different node ID (can't zoom while in the foreach, that modifies the collection)
@@ -1769,7 +1535,7 @@ namespace Merino
 		{
 			GUILayout.BeginArea (rect);
 
-			using (new EditorGUILayout.HorizontalScope (isDialogueRunning ? EditorStyles.label : EditorStyles.helpBox))
+			using (new EditorGUILayout.HorizontalScope (EditorStyles.helpBox))
 			{
 				var style = GUI.skin.button; //EditorStyles.miniButton;
 				
@@ -1805,14 +1571,12 @@ namespace Merino
 				GUILayout.FlexibleSpace ();
 				
 				// playtest button, based on the last node you touched
-				if ( !isDialogueRunning 
-				     && currentNodeIDEditing > -1 
-				     && treeView.treeModel.Find(currentNodeIDEditing) != null 
-				     && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node 
-				     && GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style)
-				     )
+				if (currentNodeIDEditing > -1 
+					&& treeView.treeModel.Find(currentNodeIDEditing) != null 
+				    && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node 
+				    && GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style))
 				{
-					PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
+					MerinoPlaytestWindow.PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
 				}
 			}
 

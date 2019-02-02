@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace Merino
 {
-	
 	public static class MerinoPrefs 
 	{
 		//editor prefs
@@ -25,6 +24,7 @@ namespace Merino
 		//window specific
 		private static bool prefsLoaded = false;
 		private static Vector2 scrollPos;
+		internal static LoggingLevel loggingLevel = LoggingLevel.Error;
 
 		public const string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
 		
@@ -51,7 +51,8 @@ namespace Merino
 			GUILayout.Label("File Handling", EditorStyles.boldLabel);
 			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
 			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
-			
+			loggingLevel = (LoggingLevel) EditorGUILayout.EnumPopup("Logging Level", loggingLevel);
+
 			// 14 Oct 2018: commented out experimental mode, it seems to have the same parser problem as before: can't read "---" sentinel, keeps looking for node header data  -RY
 			// useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
 
@@ -90,6 +91,7 @@ namespace Merino
 		static void ResetEditorPrefs()
 		{
 			newFileTemplatePath = "NewFileTemplate.yarn";
+			loggingLevel = LoggingLevel.Error;
 			useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
 			
@@ -123,6 +125,7 @@ namespace Merino
 				EditorPrefs.SetBool("MerinoFirstRun", true);
 			}
 			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
+			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int) LoggingLevel.Error);
 			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
 
@@ -151,6 +154,7 @@ namespace Merino
 		public static void SaveEditorPrefs()
 		{
 			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
+			EditorPrefs.SetInt("MerinoLoggingLevel", (int) loggingLevel);
 			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			EditorPrefs.SetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			

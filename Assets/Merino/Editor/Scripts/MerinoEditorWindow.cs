@@ -30,10 +30,9 @@ namespace Merino
 			get { return m_TreeView; }
 		}
 
-		double lastTabTime = 0.0; // used for keyboard tab / space replacement
-		int lastTabIndex = -1;
-		bool moveCursorBackAfterTab = false;
-		int lastTabbedControlID = -1;
+		// used for keyboard tab / space replacement
+		double lastTabTime = 0.0; 
+		bool moveCursorAfterTab = false;
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
@@ -1063,7 +1062,7 @@ namespace Merino
 					
 					// NODE BODY ======================================================================
 					var backupContentColor = GUI.contentColor;
-					string passage = m_TreeView.treeModel.Find(id).nodeBody;
+					string passage = DoKeyboardTabReplacement( m_TreeView.treeModel.Find(id).nodeBody );
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
 					// start preparing to draw the body
@@ -1159,49 +1158,43 @@ namespace Merino
 								spaceWillIncrementUndo = true;
 							}
 
-							if (GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t'))
+
+                            // NEW APPROACH TO HANDLING KEYBOARD TABS: replace all tab characters with equivalent spaces, and move caret forward
+
+							// TODO: this is still very hacky, because I still don't know how exactly to time when the tab character gets inserted into TextArea
+							// so for now, this is just approximating the tab count with a timed delay... works OK as long as you don't hold down TAB?
+                            if (MerinoPrefs.tabSize > 0 && Event.current.type != EventType.Layout)
                             {
-								bool wasForceSave = forceSave;
-                                newBodies[chunkIndex] = DoKeyboardTabReplacement(newBodies[chunkIndex], te, controlName, nextControlID, ref forceSave);
-								//if ( EditorApplication.timeSinceStartup + 0.2 >= lastTabTime ) {
-									GUI.FocusControl(controlName);
-                                	Event.current.Use();
-	
-									//GUIUtility.hotControl = nextControlID;
-									//EditorGUI.FocusTextInControl(controlName);
-									
-								//}
+								// move keyboard caret forward
+                                if (moveCursorAfterTab)
+                                {
+                                    te.cursorIndex += MerinoPrefs.tabSize - 1;
+                                    te.selectIndex = te.cursorIndex;
+                                    forceSave = true;
+                                    moveCursorAfterTab = false;
+                                }
 
-									if ( moveCursorBackAfterTab && nextControlID == lastTabbedControlID ) {
-										EditorGUI.FocusTextInControl(controlName);
-										GUIUtility.keyboardControl = nextControlID;
-										te.cursorIndex = lastTabIndex;
-										te.selectIndex = te.cursorIndex;
-										Event.current.Use();
-										moveCursorBackAfterTab = false;
-									}
+                                // keyboard tab replacement:
+                                te.text = DoKeyboardTabReplacement(te.text);
+                                if ((Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') && te.text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.1)
+                                {
+                                    lastTabTime = EditorApplication.timeSinceStartup;
+                                    moveCursorAfterTab = true;
+                                    forceSave = true;
+                                }
 
-									if ( !wasForceSave && forceSave ) {
-										Debug.Log("saved... controlID: " + nextControlID.ToString() );
-										moveCursorBackAfterTab = true;
-										lastTabbedControlID = nextControlID;
+                                // keyboard tabbed backspace: delete X increments of consecutive spaces backwards
+                                if (MerinoPrefs.useTabbedBackspace && Event.current.keyCode == KeyCode.Backspace && EditorApplication.timeSinceStartup > lastTabTime + 0.1)
+                                {
+                                    if ( te.cursorIndex-MerinoPrefs.tabSize >= 0 && String.IsNullOrWhiteSpace( te.text.Substring(te.cursorIndex-MerinoPrefs.tabSize, MerinoPrefs.tabSize) ) ) {
+										te.selectIndex -= MerinoPrefs.tabSize-1;
+										te.DeleteSelection();
+										newBodies[chunkIndex] = te.text;
 									}
+                                    lastTabTime = EditorApplication.timeSinceStartup;
+                                    forceSave = true;
+                                }
                             }
-
-							// if user has "convert tabs to spaces" enabled (default: ON) then intercept tabs
-							// int tabSize = 4;
-                            // if (eventCurrent.type )
-                            // {
-							// 	Debug.Log("tab insert!");
-                            //     for (int t = 0; t < tabSize; t++)
-                            //     {
-                            //         te.Insert(' ');
-                            //     }
-                            // }
-							// if ( eventCurrent.isKey && eventCurrent.keyCode == KeyCode.Tab ) {
-							// 	Debug.Log("tab!");
-							// 	eventCurrent.Use();
-							// }
 
 							// now, anything that has to do with counting lines or word-level alignment
 							
@@ -1417,29 +1410,12 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 
-        // I can't believe I finally got this to work, wow
-        string DoKeyboardTabReplacement(string text, TextEditor te, string controlName, int nextControlID, ref bool forceSave)
+        string DoKeyboardTabReplacement(string text)
         {
-            // GUI.FocusControl(controlName);
-			// Event.current.Use();
-            if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
-            {
-				lastTabIndex = te.cursorIndex+4;
-                lastTabTime = EditorApplication.timeSinceStartup;
-                for (int t = 0; t < 4; t++)
-                {
-                    text = text.Insert(te.cursorIndex, " ");
-                }
-                forceSave = true;
-
-                // EditorGUI.FocusTextInControl(controlName);
-                // GUIUtility.keyboardControl = nextControlID;
-                // te.cursorIndex = cursorIndex-4;
-                // te.selectIndex = te.cursorIndex;
-            }
-
-
-
+			if ( MerinoPrefs.tabSize > 0 ) {
+				string tabReplace = new string(' ', MerinoPrefs.tabSize);
+				text = text.Replace( "\t", tabReplace );
+			}
             return text;
 		}
 

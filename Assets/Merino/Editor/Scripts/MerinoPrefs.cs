@@ -14,6 +14,8 @@ namespace Merino
 		// public static Color highlightVariables;
 		public static bool useYarnSpinnerExperimentalMode = false;
 		public static bool validateNodeTitles = true;
+		public static int tabSize = 4;
+		public static bool useTabbedBackspace = true;
 
 		//hidden prefs
 		public static bool stopOnDialogueEnd = true;
@@ -59,6 +61,10 @@ namespace Merino
 			// 23 Jan 2019: in reponse to GitHub issue #16, let user disable node validation? (even though I don't really see the point...)
 			validateNodeTitles = EditorGUILayout.ToggleLeft("Validate and correct duplicate node titles", validateNodeTitles);
 
+			// 2 Feb 2019: added "tab size" setting, in response to issue #20
+			tabSize = EditorGUILayout.IntField("Tab Size (< 0: keep tabs)", tabSize);
+			useTabbedBackspace = EditorGUILayout.ToggleLeft("Backspace uses tabSize", useTabbedBackspace);
+
 			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
 			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
 			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
@@ -94,6 +100,8 @@ namespace Merino
 			loggingLevel = LoggingLevel.Error;
 			useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
+			tabSize = 4;
+			useTabbedBackspace = true;
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -128,6 +136,8 @@ namespace Merino
 			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int) LoggingLevel.Error);
 			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
+			tabSize = EditorPrefs.GetInt("MerinoTabSize", tabSize);
+			useTabbedBackspace = EditorPrefs.GetBool("MerinoTabbedBackspace", useTabbedBackspace );
 
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
@@ -157,6 +167,8 @@ namespace Merino
 			EditorPrefs.SetInt("MerinoLoggingLevel", (int) loggingLevel);
 			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			EditorPrefs.SetBool("MerinoValidateNodeTitles", validateNodeTitles );
+			EditorPrefs.SetInt("MerinoTabSize", tabSize );
+			EditorPrefs.SetBool("MerinoTabbedBackspace", useTabbedBackspace );
 			
 			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
 			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );

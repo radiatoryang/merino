@@ -27,16 +27,28 @@ namespace Merino
 		
 		Rect prefButtonRect; // used to determine the height of the toolbar
 
+		private bool validDialogue;
+		private Texture errorIcon;
+
 		const float textSpeed = 0.01f;
 		const string windowTitle = "Merino Playtest";
 		const string popupControl = "nodeJumpPopup";
 
-		bool IsDialogueRunning
+		private bool IsDialogueRunning
 		{
-			get { return dialogue.currentNode != null; }
+			get
+			{
+				return dialogue.currentNode != null;
+			}
+		}
+		
+		const int margin = 10;
+		Rect bottomToolbarRect
+		{
+			get { return new Rect(0, position.height - margin * 2.5f, position.width, margin * 2.5f); }
 		}
 
-		void Awake()
+		private void Awake()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
 			varStorage = new MerinoVariableStorage();
@@ -44,8 +56,12 @@ namespace Merino
 			
 			// setup the logging system.
 			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, "[Merino] " + message);
-//			dialogue.LogErrorMessage = message => PlaytestErrorLog(message);
-			dialogue.LogErrorMessage = message => MerinoDebug.Log(LoggingLevel.Error, "[Merino] " + message);
+			dialogue.LogErrorMessage = PlaytestErrorLog;
+			
+			if (errorIcon == null) {
+				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
+			}
+
 		}
 
 		private void Update()
@@ -64,6 +80,8 @@ namespace Merino
 			{
 				DrawDialog();
 			}
+			
+			DrawBottomToolBar(bottomToolbarRect);
 			
 			HandleEvents(Event.current);
 		}
@@ -89,7 +107,7 @@ namespace Merino
 		
 		#region Public Static Methods and their "Internal" versions
 
-		[DidReloadScripts] // make sure the window is closed after recompiling to prevent errors
+		[DidReloadScripts] //prevents a lot of errors, now we don't need to handle them ourselves!
 		public static void ForceStop()
 		{
 			if (EditorUtils.HasWindow<MerinoPlaytestWindow>())
@@ -112,7 +130,7 @@ namespace Merino
 		public static void PlaytestFrom(string startPassageName)
 		{
 			var window = GetWindow<MerinoPlaytestWindow>(windowTitle, true);
-			window.PlaytestFrom_Internal(startPassageName, !window.IsDialogueRunning);
+			window.PlaytestFrom_Internal(startPassageName);
 		}
 
 		void PlaytestFrom_Internal(string startPassageName, bool reset = true)
@@ -120,6 +138,7 @@ namespace Merino
 			if (reset)
 			{
 				MerinoEditorWindow.errorLog.Clear();
+				dialogue.Stop();
 				dialogue.UnloadAll();
 				varStorage.ResetToDefaults();
 				
@@ -133,11 +152,13 @@ namespace Merino
 				}
 				catch (Exception ex)
 				{
-//					PlaytestErrorLog(ex.Message);
+					validDialogue = false;
+					PlaytestErrorLog(ex.Message);
 					return;
 				}
 			}
-			
+
+			validDialogue = true;
 			this.StopAllCoroutines();
 			this.StartCoroutine(RunDialogue(startPassageName));
 		}
@@ -150,52 +171,58 @@ namespace Merino
 		{
 			EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
-			GUILayout.Space(2); //small space to mimic unity editor
-			
-			// jump to node button
-			var jumpOptions = dialogue.allNodes.ToList();
-			int currentJumpIndex = jumpOptions.IndexOf(dialogue.currentNode);
-			if (!IsDialogueRunning)
-			{ 
-				// if there is no current node, then inform the user that
-				currentJumpIndex = 0;
-				jumpOptions.Insert(0, "<Stopped> Jump to Node?...");
-			}
-
-			GUI.SetNextControlName(popupControl);
-			int newJumpIndex = EditorGUILayout.Popup(
-				new GUIContent("", "The node you're currently playing; you can also jump to any other node."), 
-				currentJumpIndex, 
-				jumpOptions.Select(x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)).ToArray(), 
-				EditorStyles.toolbarDropDown, 
-				GUILayout.Width(160));
-			if (currentJumpIndex != newJumpIndex)
+			if (validDialogue)
 			{
-				if (IsDialogueRunning || newJumpIndex > 0)
-					PlaytestFrom(jumpOptions[newJumpIndex]);
-			}
-			GUILayout.Space(6);
+				GUILayout.Space(2); //small space to mimic unity editor
 			
-			// view node source button
-			GUI.enabled = IsDialogueRunning; //disable if dialogue isn't running
-			if (GUILayout.Button(new GUIContent("View Node Source", "Click to see Yarn script code for this node."), EditorStyles.toolbarButton))
-			{
-				throw new System.NotImplementedException();
-//				// attempt to get current node
-//				var matchingNode = MerinoTreeData.Instance.GetNode(dialogue.currentNode);
-//				if (matchingNode != null)
-//				{
-//					// display in yarn editor window
-//					var w = GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true);
-//					w.SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull) );
-//				}
-//				else
-//				{
-//					if (MerinoPrefs.loggingLevel >= LoggingLevel.Warning)
-//						Debug.LogWarningFormat("[Merino] Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
-//				}
+				// jump to node button
+				var jumpOptions = dialogue.allNodes.ToList();
+				int currentJumpIndex = jumpOptions.IndexOf(dialogue.currentNode);
+				if (!IsDialogueRunning)
+				{ 
+					// if there is no current node, then inform the user that
+					currentJumpIndex = 0;
+					jumpOptions.Insert(0, "<Stopped> Jump to Node?...");
+				}
+				GUI.SetNextControlName(popupControl);
+				int newJumpIndex = EditorGUILayout.Popup(
+					new GUIContent("", "The node you're currently playing; you can also jump to any other node."), 
+					currentJumpIndex, 
+					jumpOptions.Select(x => x.StartsWith("<Stopped>") ? new GUIContent(x) : new GUIContent("Node: " + x)).ToArray(), 
+					EditorStyles.toolbarDropDown, 
+					GUILayout.Width(160));
+				if (currentJumpIndex != newJumpIndex)
+				{
+					if (IsDialogueRunning || newJumpIndex > 0)
+					{
+						PlaytestFrom_Internal(jumpOptions[newJumpIndex], false);
+					}
+				}
+				GUILayout.Space(6);
+			
+				// view node source button
+				GUI.enabled = IsDialogueRunning; //disable if dialogue isn't running
+				if (GUILayout.Button(new GUIContent("View Node Source", "Click to see Yarn script code for this node."), EditorStyles.toolbarButton))
+				{
+					// attempt to get current node
+					var matchingNode = MerinoTreeData.GetNode(dialogue.currentNode);
+					if (matchingNode != null)
+					{
+						// display in yarn editor window
+						var window = GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true);
+						window.SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
+					}
+					else
+					{
+						if (MerinoPrefs.loggingLevel >= LoggingLevel.Warning)
+						{
+							Debug.LogWarningFormat("[Merino] Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+						}
+					}
+				}
+				GUI.enabled = true;
 			}
-			GUI.enabled = true;
+		
 			GUILayout.FlexibleSpace();
 
 			// playtesting preferences popup
@@ -257,6 +284,42 @@ namespace Merino
 				}
 			}
 		}
+		
+		void DrawBottomToolBar (Rect rect)
+		{
+			if (MerinoEditorWindow.errorLog == null || MerinoEditorWindow.errorLog.Count <= 0) return;
+			
+			GUILayout.BeginArea (rect);
+
+			using (new EditorGUILayout.HorizontalScope (EditorStyles.helpBox))
+			{
+				var style = GUI.skin.button; //EditorStyles.miniButton;
+
+				GUILayout.FlexibleSpace();
+
+				if (MerinoEditorWindow.errorLog != null && MerinoEditorWindow.errorLog.Count > 0)
+				{
+					var error = MerinoEditorWindow.errorLog[MerinoEditorWindow.errorLog.Count - 1];
+					var node = MerinoTreeData.GetNode(error.nodeID);
+					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} at line {1}", node.name, error.lineNumber, error.message )), style, GUILayout.MaxWidth(position.width * 0.31f) ))
+					{
+						if (node != null)
+						{
+							GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle).SelectNodeAndZoomToLine(error.nodeID, error.lineNumber);
+						}
+						else
+						{
+							EditorUtility.DisplayDialog("Merino Error Message!", "Merino error message:\n\n" + error.message, "Close");
+						}
+					}
+				}
+
+				GUILayout.FlexibleSpace ();
+			}
+
+			GUILayout.EndArea();
+		}
+
 
 		#endregion
 
@@ -301,37 +364,29 @@ namespace Merino
 			displayStringFull = line.text;
 			optionStrings = new string[0];
 			
-			// display dialog
-//			if (textSpeed > 0.0f) 
-//			{
-				// Display the line one character at a time
-				var stringBuilder = new StringBuilder();
-				inputContinue = false;
-				
-				foreach (char c in line.text) 
+			// Display the line one character at a time
+			var stringBuilder = new StringBuilder();
+			inputContinue = false;
+			
+			foreach (char c in line.text) 
+			{
+				float timeWaited = 0f;
+				stringBuilder.Append(c);
+				displayString = stringBuilder.ToString();
+				while (timeWaited < textSpeed)
 				{
-					float timeWaited = 0f;
-					stringBuilder.Append(c);
-					displayString = stringBuilder.ToString();
-					while (timeWaited < textSpeed)
-					{
-						if (inputContinue) break; // early out / skip ahead
+					if (inputContinue) break; // early out / skip ahead
 
-						timeWaited += textSpeed;
-						yield return new WaitForSeconds(timeWaited);
-					}
-
-					if (inputContinue)
-					{
-						displayString = line.text; 
-						break;
-					}
+					timeWaited += textSpeed;
+					yield return new WaitForSeconds(timeWaited);
 				}
-//			}
-//			else 
-//			{
-//				displayString = line.text;
-//			}
+
+				if (inputContinue)
+				{
+					displayString = line.text; 
+					break;
+				}
+			}
 
 			showContinuePrompt = true;
 
@@ -358,7 +413,7 @@ namespace Merino
             useConsolasFont = false;
         }
 		
-        void RunOptions(Yarn.Options optionsCollection, Yarn.OptionChooser optionChooser)
+        private void RunOptions(Yarn.Options optionsCollection, Yarn.OptionChooser optionChooser)
         {
             optionStrings = new string[optionsCollection.options.Count];
 	        
@@ -372,5 +427,79 @@ namespace Merino
         }
 
 		#endregion
+		
+		/// <summary>
+		/// Logs errors from the playtest engine and Yarn Loader.
+		/// </summary>
+		public void PlaytestErrorLog(string message)
+		{
+			string fileName = "unknown";
+			string nodeName = "unknown";
+			int lineNumber = -1;
+			
+			// detect file name
+			if (message.Contains("file"))
+			{
+				fileName = message.Split(new string[] {"file"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+			}
+			
+			// detect node name
+			if (message.Contains("node"))
+			{
+				nodeName = message.Split(new string[] {"node"}, StringSplitOptions.None)[1].Split(new string[] {" ", ":"}, StringSplitOptions.None)[1];
+				
+				// detect line numbers, if any, by grabbing the first digit after nodeName
+				string numberLog = "";
+				for( int index = message.IndexOf(nodeName); index < message.Length; index++)
+				{
+					if (Char.IsDigit(message[index]))
+					{
+						numberLog += message[index];
+					}
+					else if ( numberLog.Length > 0) // did we hit a non-number, after already hitting numbers? then stop
+					{
+						break;
+					}
+				}
+
+				int.TryParse(numberLog, out lineNumber);
+			}
+			
+			// also output to Unity console
+			var nodeRef = MerinoTreeData.Instance.treeElements.Find(x => x.name == nodeName);
+			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
+			
+			MerinoDebug.Log(LoggingLevel.Error, "[Merino] " + message);
+		}
+		
+		/// <summary>
+		/// Guesses the line number of a given line. Used for the View Node Source button.
+		/// </summary>
+		int GuessLineNumber(int nodeID, string lineText)
+		{
+			var node = MerinoTreeData.GetNode(nodeID);
+			
+			// this is a really bad way of doing it, but Yarn Spinner's DialogueRunner doesn't offer any access to line numbers.
+			if (node != null && node.nodeBody.Contains(lineText))
+			{
+				var lines = node.nodeBody.Split('\n');
+				for (int i = 0; i < lines.Length; i++)
+				{
+					if (lines[i].Contains(lineText))
+						return i + 1;
+				}
+				return -1;
+			}
+			else
+			{
+				if (node == null)
+				{
+					if (MerinoPrefs.loggingLevel >= LoggingLevel.Warning)
+						Debug.LogWarningFormat("[Merino] Couldn't find node ID {0}. It might've been deleted or the Yarn file might be corrupted.", nodeID);
+				}
+
+				return -1;
+			}
+		}
 	}
 }

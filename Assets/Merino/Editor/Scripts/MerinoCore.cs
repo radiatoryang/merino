@@ -80,7 +80,7 @@ namespace Merino
 				if (filterList.Contains(toTraverse[0]) == false)
 				{
 					filterList.Add(toTraverse[0]);
-					var node = MerinoTreeData.GetElement(toTraverse[0]);
+					var node = MerinoTreeData.GetNode(toTraverse[0]);
 					if (node != null && node.hasChildren)
 					{
 						toTraverse.AddRange(node.children.Select(x => x.id));

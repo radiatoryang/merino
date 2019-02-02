@@ -56,9 +56,14 @@ namespace Merino
 		}
 		
 		//todo: can we move this to a more appropriate class, like a utils class or something. partial class? idk just don't overload this file
-		internal static MerinoTreeElement GetElement(int id)
+		internal static MerinoTreeElement GetNode(int id)
 		{
 			return Instance.treeElements.Find(x => x.depth != -1 && x.id == id);
+		}
+
+		internal static MerinoTreeElement GetNode(string name)
+		{
+			return Instance.treeElements.Find(x => x.depth != -1 && x.name == name);
 		}
 	}
 }

@@ -17,8 +17,6 @@ namespace Merino
 
 	class MerinoEditorWindow : EditorWindow
 	{
-		static MerinoEditorWindow window;
-		
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
 		TreeViewState viewState { get { return serializedTreeData.viewState; } set { serializedTreeData.viewState = value; } } // Serialized in ScriptableObject so it survives assembly reloading AND window refresh
@@ -99,26 +97,12 @@ namespace Merino
 		
 		#region EditorWindowStuff
 
+		public const string windowTitle = "Merino (Yarn Editor)";
+
 		[MenuItem("Window/Merino (Yarn Editor)")]
 		static void MenuItem_GetWindow()
 		{
-			GetWindow(true);
-		}
-		
-		// this should be always be used over EditorWindow.GetWindow to get the current MerinoEditorWindow
-		public static MerinoEditorWindow GetWindow (bool focus = false)
-		{
-			if (window == null)
-			{
-				window = GetWindow<MerinoEditorWindow>();
-				window.titleContent = new GUIContent("Merino (Yarn)");
-			}
-			
-			if (focus) // if window was previously null it will be focused either way.
-				window.Focus();
-			
-			window.Repaint();
-			return window;
+			GetWindow<MerinoEditorWindow>(windowTitle, true);
 		}
 		
 		void ResetMerino()
@@ -844,7 +828,7 @@ namespace Merino
 				DrawMainPane(nodeEditRect);
 			}
 
-			DrawBottomToolBar (bottomToolbarRect);
+			DrawBottomToolBar(bottomToolbarRect);
 		}
 
 		const int sidebarWidthClamp = 50;
@@ -1584,7 +1568,7 @@ namespace Merino
 		}
 
 		// a lot of the logic for this is handled in OnGUI > DrawMainPane, this just sets variables to get read elsewhere
-		void SelectNodeAndZoomToLine(int nodeID, int lineNumber)
+		public void SelectNodeAndZoomToLine(int nodeID, int lineNumber)
 		{
 			viewState.selectedIDs.Clear();
 			viewState.selectedIDs.Add(nodeID);

@@ -29,7 +29,11 @@ namespace Merino
 		public MerinoTreeView treeView {
 			get { return m_TreeView; }
 		}
-		// double lastTabTime = 0.0; // this is a really bad hack
+
+		double lastTabTime = 0.0; // used for keyboard tab / space replacement
+		int lastTabIndex = -1;
+		bool moveCursorBackAfterTab = false;
+		int lastTabbedControlID = -1;
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
@@ -1089,6 +1093,7 @@ namespace Merino
 					
 					// draw chunks as TextAreas, each with their own highlighting and line number overlays
 					var newBodies = new string[chunkCount];
+					bool forceSave = false; // a hack so that DoKeyboardTabReplacement() can force a save
 					for( int chunkIndex=0; chunkIndex<passageChunks.Length; chunkIndex++) {
 						int chunkStart = chunkIndex * chunkSize; // line number this chunk starts at
 						int chunkEnd = (chunkIndex + 1) * chunkSize; // line number this chunk ends at
@@ -1153,6 +1158,50 @@ namespace Merino
 							{
 								spaceWillIncrementUndo = true;
 							}
+
+							if (GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t'))
+                            {
+								bool wasForceSave = forceSave;
+                                newBodies[chunkIndex] = DoKeyboardTabReplacement(newBodies[chunkIndex], te, controlName, nextControlID, ref forceSave);
+								//if ( EditorApplication.timeSinceStartup + 0.2 >= lastTabTime ) {
+									GUI.FocusControl(controlName);
+                                	Event.current.Use();
+	
+									//GUIUtility.hotControl = nextControlID;
+									//EditorGUI.FocusTextInControl(controlName);
+									
+								//}
+
+									if ( moveCursorBackAfterTab && nextControlID == lastTabbedControlID ) {
+										EditorGUI.FocusTextInControl(controlName);
+										GUIUtility.keyboardControl = nextControlID;
+										te.cursorIndex = lastTabIndex;
+										te.selectIndex = te.cursorIndex;
+										Event.current.Use();
+										moveCursorBackAfterTab = false;
+									}
+
+									if ( !wasForceSave && forceSave ) {
+										Debug.Log("saved... controlID: " + nextControlID.ToString() );
+										moveCursorBackAfterTab = true;
+										lastTabbedControlID = nextControlID;
+									}
+                            }
+
+							// if user has "convert tabs to spaces" enabled (default: ON) then intercept tabs
+							// int tabSize = 4;
+                            // if (eventCurrent.type )
+                            // {
+							// 	Debug.Log("tab insert!");
+                            //     for (int t = 0; t < tabSize; t++)
+                            //     {
+                            //         te.Insert(' ');
+                            //     }
+                            // }
+							// if ( eventCurrent.isKey && eventCurrent.keyCode == KeyCode.Tab ) {
+							// 	Debug.Log("tab!");
+							// 	eventCurrent.Use();
+							// }
 
 							// now, anything that has to do with counting lines or word-level alignment
 							
@@ -1250,7 +1299,7 @@ namespace Merino
 					EditorGUILayout.Separator();
 					
 					// did user edit something?
-					if (EditorGUI.EndChangeCheck() )
+					if (EditorGUI.EndChangeCheck() || forceSave )
 					{
 						// remember last edited node, for the "playtest this" button in lower-right corner
 						currentNodeIDEditing = id;
@@ -1368,27 +1417,31 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 
-		// I can't believe I finally got this to work, wow
-		// only needed for GUILayout.TextArea
-//		string KeyboardTabSupport(string text, TextEditor te)
-//		{
-//			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
-//			{
-//				int cursorIndex = te.cursorIndex;
-//				GUI.FocusControl("TextArea");
-//				if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
-//				{
-//					lastTabTime = EditorApplication.timeSinceStartup;
-//					text = text.Insert(te.cursorIndex, "\t");
-//					te.cursorIndex = cursorIndex + 1;
-//					te.selectIndex = te.cursorIndex;
-//				}
-//
-//				Event.current.Use();
-//				GUI.FocusControl("TextArea");
-//			}
-//			return text;
-//		}
+        // I can't believe I finally got this to work, wow
+        string DoKeyboardTabReplacement(string text, TextEditor te, string controlName, int nextControlID, ref bool forceSave)
+        {
+            // GUI.FocusControl(controlName);
+			// Event.current.Use();
+            if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
+            {
+				lastTabIndex = te.cursorIndex+4;
+                lastTabTime = EditorApplication.timeSinceStartup;
+                for (int t = 0; t < 4; t++)
+                {
+                    text = text.Insert(te.cursorIndex, " ");
+                }
+                forceSave = true;
+
+                // EditorGUI.FocusTextInControl(controlName);
+                // GUIUtility.keyboardControl = nextControlID;
+                // te.cursorIndex = cursorIndex-4;
+                // te.selectIndex = te.cursorIndex;
+            }
+
+
+
+            return text;
+		}
 
 		string DoSyntaxMarch(string text)
 		{

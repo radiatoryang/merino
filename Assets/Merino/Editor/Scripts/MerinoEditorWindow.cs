@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions; // for Word Count
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
@@ -93,7 +94,7 @@ namespace Merino
 		
 		// node management
 		private List<int> DeleteList = new List<int>();
-		int currentNodeIDEditing;
+		int currentNodeIDEditing, currentNodeWordCountCache;
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
@@ -261,6 +262,13 @@ namespace Merino
 			{
 				MerinoCore.ReimportFiles();
 				MerinoCore.LastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
+			}
+
+			// calculate and cache wordcount
+			if ( currentNodeIDEditing > -1 && treeView != null && treeView.treeModel != null && treeView.treeModel.Find(currentNodeIDEditing) != null && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node ) {
+				currentNodeWordCountCache = GetWordCount( treeView.treeModel.Find(currentNodeIDEditing).nodeBody );
+			} else {
+				currentNodeWordCountCache = -1;
 			}
 		}
 
@@ -1582,6 +1590,11 @@ namespace Merino
 				}
 
 				GUILayout.FlexibleSpace ();
+
+				// word count, based on last node you touched
+				if ( currentNodeWordCountCache > -1 ) {
+					GUILayout.Label( currentNodeWordCountCache.ToString() + " words  " );
+				}
 				
 				// playtest button, based on the last node you touched
 				if (currentNodeIDEditing > -1 
@@ -1594,6 +1607,11 @@ namespace Merino
 			}
 
 			GUILayout.EndArea();
+		}
+
+		public static int GetWordCount(string text) {
+        	MatchCollection collection = Regex.Matches(text, @"[\S]+");
+        	return collection.Count;
 		}
 
 		// a lot of the logic for this is handled in OnGUI > DrawMainPane, this just sets variables to get read elsewhere

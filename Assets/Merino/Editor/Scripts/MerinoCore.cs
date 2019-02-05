@@ -60,7 +60,7 @@ namespace Merino
 	                }
 	                else
 	                {
-		                Debug.LogWarning(file.name + " has not been mapped to a NodeID and cannot be saved, reload the file and try again.");
+		                MerinoDebug.Log(LoggingLevel.Warning, file.name + " has not been mapped to a NodeID and cannot be saved, reload the file and try again.");
 	                }
                 }
             }
@@ -232,7 +232,7 @@ namespace Merino
 					}
 				}
 				EditorUtility.SetDirty(data);
-				Debug.LogWarning(renamedNodes);
+				MerinoDebug.Log(LoggingLevel.Warning, renamedNodes);
 				//todo: repaint MerinoEditorWindow tree view so names get updated
 				
 				// this is bad, but we're gonna do some recursion here, just to make extra sure there's STILL no duplicates...

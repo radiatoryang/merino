@@ -49,7 +49,7 @@ namespace Merino
 
 			if (paths.Count == 0)
 			{
-				Debug.LogWarning("No files provided.");
+				MerinoDebug.Log(LoggingLevel.Warning, "No files provided.");
 				return;
 			}
 
@@ -78,7 +78,7 @@ namespace Merino
 					invalid.Count == 1 ? "is not valid" : "are not valid"
 				);
 
-				Debug.LogError(message);
+				MerinoDebug.Log(LoggingLevel.Error, message);
 			}
 		}
 	#endregion
@@ -110,7 +110,7 @@ namespace Merino
 
 				if (YarnSpinnerLoader.GetFormatFromFileName(file) == NodeFormat.JSON)
 				{
-					Debug.LogWarning(string.Format("Not converting file {0}, because its name implies it's already in JSON format", file));
+					MerinoDebug.LogFormat(LoggingLevel.Warning, "Not converting file {0}, because its name implies it's already in JSON format", file);
 					continue;
 				}
 
@@ -126,7 +126,7 @@ namespace Merino
 			{
 				if (YarnSpinnerLoader.GetFormatFromFileName(file) == NodeFormat.Text)
 				{
-					Debug.LogWarning(string.Format("Not converting file {0}, because its name implies it's already in Yarn format", file));
+					MerinoDebug.LogFormat(LoggingLevel.Warning, "Not converting file {0}, because its name implies it's already in Yarn format", file);
 					continue;
 				}
 
@@ -190,7 +190,7 @@ namespace Merino
 
 						value = string.Format("{0},{1}", position.x, position.y);
 					} else {
-						Debug.LogError(string.Format("Internal error: Node {0}'s property {1} has unsupported type {2}", node.title, property.Name, propertyType.FullName));
+						MerinoDebug.LogFormat(LoggingLevel.Error, "Internal error: Node {0}'s property {1} has unsupported type {2}", node.title, property.Name, propertyType.FullName);
 
 						// will never be run, but prevents the compiler being mean about us not returning a value
 						throw new Exception();
@@ -226,7 +226,7 @@ namespace Merino
 			try {
 				nodes = YarnSpinnerLoader.GetNodesFromText(text, YarnSpinnerLoader.GetFormatFromFileName(file));
 			} catch (FormatException e) {
-				Debug.LogError(e.Message);
+				MerinoDebug.Log(LoggingLevel.Error, e.Message);
 				return;
 			}
 
@@ -255,7 +255,7 @@ namespace Merino
 
 			if (options.verbose)
 			{
-				Debug.Log("Wrote " + destinationFilePath);
+				MerinoDebug.Log(LoggingLevel.Verbose, "Wrote " + destinationFilePath);
 			}
 		}
 

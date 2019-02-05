@@ -72,7 +72,7 @@ namespace Merino
 		}
 
 		// misc resources
-		Texture helpIcon, errorIcon, folderIcon, textIcon, nodeIcon, newNodeIcon, deleteIcon, resetIcon, saveIcon, newFileIcon;
+		Texture helpIcon, errorIcon, folderIcon, textIcon, deleteIcon, resetIcon;
 		
 		// TextAsset currentFile; // deprecated, juse currentFiles instead
 		List<TextAsset> currentFiles { get { return serializedTreeData.currentFiles; } set { serializedTreeData.currentFiles = value; } }
@@ -107,7 +107,6 @@ namespace Merino
 		
 		void ResetMerino()
 		{
-			Debug.Log("resetMerino()");
 			currentFiles.Clear();
 			fileToNodeID.Clear();
 			dirtyFiles.Clear();
@@ -121,46 +120,26 @@ namespace Merino
 
 		void InitIcons()
 		{
-			if (helpIcon == null) {
+			if (helpIcon == null) 
 				helpIcon = EditorGUIUtility.IconContent("_Help").image;
-			}
 			
-			if (errorIcon == null) {
+			if (errorIcon == null) 
 				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
-			}
 			
-			if (folderIcon == null) {
+			if (folderIcon == null) 
 				folderIcon = EditorGUIUtility.FindTexture("Folder Icon");
-			}
 			
-			if (textIcon == null) {
+			if (textIcon == null)
 				textIcon = EditorGUIUtility.IconContent("TextAsset Icon").image;
-			}
 			
-			if (deleteIcon == null) {
+			if (deleteIcon == null)
 				deleteIcon = EditorGUIUtility.Load("icons/d_TreeEditor.Trash.png") as Texture;
-			}
 			
-			if (resetIcon == null) {
-				resetIcon = EditorGUIUtility.Load("icons/animation.prevkey.png") as Texture;
+			if (resetIcon == null)
+			{
+				string path =  EditorGUIUtility.isProSkin ? "icons/d_animation.prevkey.png" : "icons/animation.prevkey.png";
+				resetIcon = EditorGUIUtility.Load(path) as Texture;
 			}
-			
-			if (saveIcon == null) {
-				saveIcon = Resources.Load<Texture>("Merino_SaveIcon");
-			}
-			
-			if (newFileIcon == null) {
-				newFileIcon = Resources.Load<Texture>("Merino_PageIcon_New");
-			}
-			
-			if (nodeIcon == null) {
-				nodeIcon = Resources.Load<Texture>("Merino_NodeIcon");
-			}
-			
-			if (newNodeIcon == null) {
-				newNodeIcon = Resources.Load<Texture>("Merino_NodeIcon_Add");
-			}
-			
 		}
 		
 		void InitIfNeeded (bool ignoreSelection=false)
@@ -415,7 +394,7 @@ namespace Merino
 			var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
 			if (defaultData == null)
 			{
-				Debug.LogWarning("Merino couldn't find the new file template at Resources/" + MerinoPrefs.newFileTemplatePath + ". Double-check the file exists there, or you can override this path in EditorPrefs.");
+				MerinoDebug.Log(LoggingLevel.Warning, "Merino couldn't find the new file template at Resources/" + MerinoPrefs.newFileTemplatePath + ". Double-check the file exists there, or you can override this path in EditorPrefs.");
 				return null;
 			}
 			return defaultData;
@@ -442,7 +421,7 @@ namespace Merino
 			}
 			else
 			{
-				Debug.LogWarning("Merino: file at " + path + " is already loaded!");
+				MerinoDebug.Log(LoggingLevel.Warning, "Merino: file at " + path + " is already loaded!");
 			}
 
 			return newFile;
@@ -527,7 +506,7 @@ namespace Merino
 				var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
 				if (parent.Length == 0)
 				{
-					Debug.LogErrorFormat("Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
+					MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
 				}
 				else
 				{
@@ -585,12 +564,6 @@ namespace Merino
 			// but I think we're supposed to do this thing so let's do it
 			TreeElementUtility.UpdateDepthValues( root );
 			
-			// DEBUG: dump tree data
-//			foreach (var node in treeElements)
-//			{
-//				Debug.LogFormat("{0}:{1}, parent:{2}, depth:{3}", node.id, node.name, node.parent != null ? node.parent.id.ToString() : "null", node.depth);
-//			}
-
 			serializedTreeData.treeElements = treeElements;
 			return serializedTreeData.treeElements;
 		}
@@ -778,8 +751,7 @@ namespace Merino
 			}
 			
 			// also output to Unity console
-			Debug.LogError(message);
-			// Debug.LogFormat("{0} {1} {2}", fileName, nodeName, lineNumber);
+			MerinoDebug.Log(LoggingLevel.Error, message);
 			var nodeRef = serializedTreeData.treeElements.Where(x => x.name == nodeName).ToArray();
 			errorLog.Add( new MerinoErrorLine(message, fileName, nodeRef.Length > 0 ? nodeRef[0].id : -1, Mathf.Max(0, lineNumber)));
 		}
@@ -805,7 +777,7 @@ namespace Merino
 			{
 				if (node == null)
 				{
-					Debug.LogWarning("Merino couldn't find node ID " + nodeID.ToString() + "... it might've been deleted or the Yarn file might be corrupted.");
+					MerinoDebug.Log(LoggingLevel.Warning, "Merino couldn't find node ID " + nodeID.ToString() + "... it might've been deleted or the Yarn file might be corrupted.");
 				}
 
 				return -1;
@@ -862,7 +834,7 @@ namespace Merino
 			GUILayout.BeginArea( rect, EditorStyles.toolbar );
 
 			// CREATE menu
-			bool showDropdown = EditorGUILayout.DropdownButton(new GUIContent(" Create", newFileIcon, "create new Yarn.txt files and new Yarn nodes"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.MaxWidth(67));
+			bool showDropdown = EditorGUILayout.DropdownButton(new GUIContent(" Create", MerinoEditorResources.PageNew, "create new Yarn.txt files and new Yarn nodes"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.MaxWidth(67));
 			var dropdownRect = GUILayoutUtility.GetLastRect();
 
 			if (showDropdown)
@@ -945,7 +917,7 @@ namespace Merino
 				GUILayout.FlexibleSpace();
 				
 				// autosave / save button
-				if (!MerinoPrefs.useAutosave && FluidGUIButtonIcon( " Save All", saveIcon, "save all changes to all files", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70)))
+				if (!MerinoPrefs.useAutosave && FluidGUIButtonIcon( " Save All", MerinoEditorResources.Save, "save all changes to all files", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70)))
 				{
 					MerinoCore.SaveDataToFiles();
 					MerinoCore.ReimportFiles(true);
@@ -1238,7 +1210,7 @@ namespace Merino
 					{
 						idToPreview = id;
 					}
-					if (GUILayout.Button(new GUIContent(" Add New Node", newNodeIcon, "click to add a new node with the same parent (sibling)"), GUILayout.Height(18), GUILayout.Width(120) ) )
+					if (GUILayout.Button(new GUIContent(" Add New Node", MerinoEditorResources.NodeAdd, "click to add a new node with the same parent (sibling)"), GUILayout.Height(18), GUILayout.Width(120) ) )
 					{
 						AddNewNode( new List<int> {treeView.treeModel.Find(id).parent.id} );
 					}
@@ -1341,7 +1313,7 @@ namespace Merino
 				);
 				GUILayout.Space(8);
 				GUILayout.BeginHorizontal();
-				if ( GUILayout.Button( new GUIContent(" Create File", newFileIcon, "Create a new .yarn.txt file and load it into Merino"), GUILayout.Height(18), GUILayout.Width(100) ))
+				if ( GUILayout.Button( new GUIContent(" Create File", MerinoEditorResources.PageNew, "Create a new .yarn.txt file and load it into Merino"), GUILayout.Height(18), GUILayout.Width(100) ))
 				{
 					CreateNewYarnFile();
 				}

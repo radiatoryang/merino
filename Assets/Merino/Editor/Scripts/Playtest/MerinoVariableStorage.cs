@@ -65,7 +65,7 @@ namespace Merino
                         // We don't support assigning default variables from other variables
                         // yet
                         MerinoDebug.LogFormat(LoggingLevel.Error,
-                            "[Merino] Can't set variable {0} to {1}: You can't set a default variable to be another variable, because it may not have been initialised yet.",
+                            "Can't set variable {0} to {1}: You can't set a default variable to be another variable, because it may not have been initialised yet.",
                             variable.name, variable.value);
                         continue;
 	

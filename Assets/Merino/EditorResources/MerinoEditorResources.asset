@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 827ea349aea75424980dc2adbf4b97c4, type: 3}
+  m_Name: MerinoEditorResources
+  m_EditorClassIdentifier: 
+  updateOnReloadScripts: 0
+  node:
+    free: {fileID: 2800000, guid: cfaaccf24fdb57447bcc7ce7dc217378, type: 3}
+    pro: {fileID: 0}
+  node_add:
+    free: {fileID: 2800000, guid: 1db30a65c5e27b3418682f9a0ecc986c, type: 3}
+    pro: {fileID: 0}
+  node_delete:
+    free: {fileID: 2800000, guid: e6afef112bd76124abc0b7b1965b6a6f, type: 3}
+    pro: {fileID: 0}
+  node_edit:
+    free: {fileID: 2800000, guid: 1e7568c926ac7b54089818d6fffb17b7, type: 3}
+    pro: {fileID: 0}
+  page:
+    free: {fileID: 2800000, guid: 75b00a6c479ed42488cafaf0b517fd85, type: 3}
+    pro: {fileID: 0}
+  page_new:
+    free: {fileID: 2800000, guid: 5b2c387a7ea222d4dad0d09a672c870d, type: 3}
+    pro: {fileID: 0}
+  save:
+    free: {fileID: 2800000, guid: 08e96a7a017ea0c4aa5606e05a552a73, type: 3}
+    pro: {fileID: 2800000, guid: 8ae809f37db00cc41bded85e1939f7a9, type: 3}

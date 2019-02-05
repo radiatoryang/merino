@@ -55,12 +55,12 @@ namespace Merino
 			dialogue = new Yarn.Dialogue(varStorage);
 			
 			// setup the logging system.
-			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, "[Merino] " + message);
+			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, message);
 			dialogue.LogErrorMessage = PlaytestErrorLog;
 			
-			if (errorIcon == null) {
+			// icons
+			if (errorIcon == null)
 				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
-			}
 
 		}
 
@@ -214,10 +214,7 @@ namespace Merino
 					}
 					else
 					{
-						if (MerinoPrefs.loggingLevel >= LoggingLevel.Warning)
-						{
-							Debug.LogWarningFormat("[Merino] Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
-						}
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
 					}
 				}
 				GUI.enabled = true;
@@ -311,6 +308,7 @@ namespace Merino
 						{
 							EditorUtility.DisplayDialog("Merino Error Message!", "Merino error message:\n\n" + error.message, "Close");
 						}
+						ForceStop_Internal();
 					}
 				}
 
@@ -320,12 +318,11 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 
-
 		#endregion
 
 		#region Playtest Methods
 
-		//todo: can we add possibly add a wait before continuing text while autoadvance is active if an option is not the next result?
+		//todo: add a wait before continuing if next step isn't an option when auto advancing
 		IEnumerator RunDialogue(string startNode = "Start")
         {        
             // Get lines, options and commands from the Dialogue object, one at a time.
@@ -351,8 +348,8 @@ namespace Merino
 	                yield return this.StartCoroutine(RunCommand(commandResult.command));
                 } 
             }
-	        if (MerinoPrefs.loggingLevel >= LoggingLevel.Info)
-				Debug.Log("[Merino] Reached the end of the dialogue.");
+	        
+			MerinoDebug.Log(LoggingLevel.Info, "Reached the end of the dialogue.");
 	        
             // No more results! The dialogue is done.
 	        yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);
@@ -468,8 +465,7 @@ namespace Merino
 			// also output to Unity console
 			var nodeRef = MerinoTreeData.Instance.treeElements.Find(x => x.name == nodeName);
 			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
-			
-			MerinoDebug.Log(LoggingLevel.Error, "[Merino] " + message);
+			MerinoDebug.Log(LoggingLevel.Error, message);
 		}
 		
 		/// <summary>
@@ -490,16 +486,11 @@ namespace Merino
 				}
 				return -1;
 			}
-			else
-			{
-				if (node == null)
-				{
-					if (MerinoPrefs.loggingLevel >= LoggingLevel.Warning)
-						Debug.LogWarningFormat("[Merino] Couldn't find node ID {0}. It might've been deleted or the Yarn file might be corrupted.", nodeID);
-				}
 
-				return -1;
-			}
+			if (node == null)
+				MerinoDebug.LogFormat(LoggingLevel.Warning, "Couldn't find node ID {0}. It might've been deleted or the Yarn file might be corrupted.", nodeID);
+
+			return -1;
 		}
 	}
 }

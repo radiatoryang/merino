@@ -18,6 +18,8 @@ namespace Merino
 			//should we actually log this message?
 			if (MerinoPrefs.loggingLevel < level)
 				return;
+
+			message = "[Merino] " + message; 
 			
 			switch (level)
 			{
@@ -38,6 +40,8 @@ namespace Merino
 			//should we actually log this message?
 			if (MerinoPrefs.loggingLevel < level)
 				return;
+
+			format = "[Merino] " + format;
 			
 			switch (level)
 			{
@@ -58,6 +62,8 @@ namespace Merino
 			//should we actually log this message?
 			if (MerinoPrefs.loggingLevel < level)
 				return;
+
+			format = "[Merino] " + format;
 			
 			switch (level)
 			{

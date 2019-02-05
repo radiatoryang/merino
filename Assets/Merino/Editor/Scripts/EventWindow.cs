@@ -1,8 +1,10 @@
-﻿// https://github.com/thecodejunkie/unity.resources/blob/master/scripts/editor/ExtendedEditorWindow.cs
+﻿// original code: https://github.com/thecodejunkie/unity.resources/blob/master/scripts/editor/ExtendedEditorWindow.cs
 
+using System;
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Merino
 {
@@ -68,6 +70,31 @@ namespace Merino
 			{
 				handler.Invoke(e);
 			}
+		}
+
+		/// <summary>
+		/// Gets if the EditorWindow docked.
+		/// </summary>
+		protected bool IsDocked()
+		{
+			var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+			var isDockedMethod = typeof(EditorWindow).GetProperty("docked", flags).GetGetMethod(true);
+			return (bool) isDockedMethod.Invoke(this, null);
+		}
+
+		/// <summary>
+		/// Gets if the EditorWindow docked.
+		/// This version delays reporting the docked value since it will occasionally not report properly otherwise.
+		/// </summary>
+		protected void IsDocked_Delayed(Action<bool> callback)
+		{
+			EditorApplication.delayCall += () => 
+			{
+				var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+				var isDockedMethod = typeof(EditorWindow).GetProperty("docked", flags).GetGetMethod(true);
+				if (callback != null)
+					callback((bool) isDockedMethod.Invoke(this, null));
+			};
 		}
 	}
 }

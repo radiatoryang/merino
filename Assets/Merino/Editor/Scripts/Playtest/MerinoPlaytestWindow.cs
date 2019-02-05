@@ -4,16 +4,17 @@ using System.Linq;
 using System.Text;
 using Merino.EditorCoroutines;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEngine;
 
 namespace Merino
 {
+	//todo: mark if the dialogue loaded in the playtest window is "stale" and that the user should restart if they wish to see the latest changes.
+	//todo: replace "<input>" in parsing errors with the name of the file instead.
 	public class MerinoPlaytestWindow : EventWindow
 	{
-		Yarn.Dialogue dialogue;
-		MerinoVariableStorage varStorage;
-		Yarn.OptionChooser optionChooser;
+		[NonSerialized] Yarn.Dialogue dialogue;
+		[NonSerialized] MerinoVariableStorage varStorage;
+		[NonSerialized] Yarn.OptionChooser optionChooser;
 		
 		string displayString, displayStringFull;
 		string[] optionStrings = new string[0];
@@ -27,7 +28,8 @@ namespace Merino
 		
 		Rect prefButtonRect; // used to determine the height of the toolbar
 
-		private bool validDialogue;
+		[NonSerialized] private bool validDialogue;
+		
 		private Texture errorIcon;
 
 		const float textSpeed = 0.01f;
@@ -38,6 +40,9 @@ namespace Merino
 		{
 			get
 			{
+				if (dialogue == null)
+					return false;
+				
 				return dialogue.currentNode != null;
 			}
 		}
@@ -48,7 +53,12 @@ namespace Merino
 			get { return new Rect(0, position.height - margin * 2.5f, position.width, margin * 2.5f); }
 		}
 
-		private void Awake()
+		private void OnEnable()
+		{
+			InitIfNeeded();
+		}
+
+		private void InitIfNeeded()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
 			varStorage = new MerinoVariableStorage();
@@ -61,7 +71,6 @@ namespace Merino
 			// icons
 			if (errorIcon == null)
 				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
-
 		}
 
 		private void Update()
@@ -107,24 +116,28 @@ namespace Merino
 		
 		#region Public Static Methods and their "Internal" versions
 
-		[DidReloadScripts] //prevents a lot of errors, now we don't need to handle them ourselves!
-		public static void ForceStop()
+		public static void StopPlaytest(bool force = false)
 		{
 			if (EditorUtils.HasWindow<MerinoPlaytestWindow>())
 			{
 				var window = GetWindow<MerinoPlaytestWindow>();
-				window.ForceStop_Internal();
+				window.StopPlaytest_Internal(force);
 			}
 		}
 
-		void ForceStop_Internal()
+		void StopPlaytest_Internal(bool force = false)
 		{
-			if (dialogue != null)
+			if (!IsDocked() || force)
 			{
-				dialogue.Stop();
+				if (dialogue != null)
+				{
+					dialogue.Stop();
+				}
+				this.StopAllCoroutines();
+				validDialogue = false;
+			
+				Close();
 			}
-			this.StopAllCoroutines();
-			Close();
 		}
 
 		public static void PlaytestFrom(string startPassageName)
@@ -225,7 +238,7 @@ namespace Merino
 			// playtesting preferences popup
 			if (GUILayout.Button(new GUIContent("Preferences"), EditorStyles.toolbarDropDown))
 			{
-				PopupWindow.Show(prefButtonRect, new PlaytestPrefsPopup());
+				PopupWindow.Show(prefButtonRect, new PlaytestPrefsPopup(IsDocked()));
 			}
 			//grab popup button's rect do determine the height of the toolbar
 			if (e.type == EventType.Repaint) prefButtonRect = GUILayoutUtility.GetLastRect();
@@ -308,7 +321,7 @@ namespace Merino
 						{
 							EditorUtility.DisplayDialog("Merino Error Message!", "Merino error message:\n\n" + error.message, "Close");
 						}
-						ForceStop_Internal();
+						StopPlaytest_Internal();
 					}
 				}
 
@@ -322,7 +335,6 @@ namespace Merino
 
 		#region Playtest Methods
 
-		//todo: add a wait before continuing if next step isn't an option when auto advancing
 		IEnumerator RunDialogue(string startNode = "Start")
         {        
             // Get lines, options and commands from the Dialogue object, one at a time.
@@ -353,7 +365,7 @@ namespace Merino
 	        
             // No more results! The dialogue is done.
 	        yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);
-	        ForceStop_Internal();
+			StopPlaytest_Internal();
         }
 		
 		IEnumerator RunLine(Yarn.Line line)

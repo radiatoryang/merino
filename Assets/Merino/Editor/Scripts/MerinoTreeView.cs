@@ -338,12 +338,12 @@ namespace Merino
 
 		void AddNewNode()
 		{
-			EditorWindow.GetWindow<MerinoEditorWindow>().AddNewNode(GetSelection());
+			EditorWindow.GetWindow<MerinoYarnEditorWindow>().AddNewNode(GetSelection());
 		}
 
 		void DeleteSelectedNodes()
 		{
-			EditorWindow.GetWindow<MerinoEditorWindow>().AddNodeToDelete(GetSelection());
+			EditorWindow.GetWindow<MerinoYarnEditorWindow>().AddNodeToDelete(GetSelection());
 		}
 
 		#endregion

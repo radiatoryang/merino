@@ -8,6 +8,17 @@ namespace Merino
 {
     internal static class MerinoCore
     {
+	    /// <summary>
+	    /// Calls Refresh() on all MerinoEditorWindows.
+	    /// </summary>
+	    public static void RefreshWindows()
+	    {
+		    if (EditorUtils.HasWindow<MerinoYarnEditorWindow>())
+			    EditorWindow.GetWindow<MerinoYarnEditorWindow>().Refresh();
+		    if (EditorUtils.HasWindow<MerinoNodemapWindow>())
+			    EditorWindow.GetWindow<MerinoNodemapWindow>().Refresh();
+	    }
+	    
         public static void ReimportFiles(bool forceReimportAll = false)
         {
             MerinoTreeData data = MerinoTreeData.Instance;

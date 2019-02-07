@@ -33,7 +33,6 @@ namespace Merino
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
 		
-		
 		int zoomID = -1, zoomToLineNumber = -1, lastZoomToLineNumber = -1;
 		double zoomToLineNumberTimestamp;
 		const double zoomLineFadeTime = 1.0;
@@ -93,6 +92,9 @@ namespace Merino
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
+
+		public static Action OnFileLoaded;
+		public static Action OnFileUnloaded;
 		
 		#region EditorWindowStuff
 
@@ -685,6 +687,9 @@ namespace Merino
 					fileToNodeID.Remove(fileToRemove);
 					currentFiles.Remove(fileToRemove);
 					dirtyFiles.Remove(fileToRemove);
+
+					if (OnFileUnloaded != null)
+						OnFileUnloaded();
 				} 
 			}
 
@@ -908,6 +913,10 @@ namespace Merino
 						"Are you sure you want to unload all files? All unsaved work will be lost.", "Unload all files", "Cancel"))
 					{
 						ResetMerino();
+
+						if (OnFileUnloaded != null)
+							OnFileUnloaded();
+						
 						return;
 					}
 				}

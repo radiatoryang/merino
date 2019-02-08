@@ -8,53 +8,46 @@ namespace Merino
 {
     internal static class MerinoCore
     {
+	    public static double LastSaveTime;
+
         public static void ReimportFiles(bool forceReimportAll = false)
         {
-            MerinoTreeData data = MerinoTreeData.Instance;
-            
             if (forceReimportAll)
             {
-                foreach (var file in data.currentFiles)
+                foreach (var file in MerinoData.CurrentFiles)
                 {
                     AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
                 }
             }
-            else if (data.dirtyFiles.Count > 0 )
+            else if (MerinoData.DirtyFiles.Count > 0 )
             {
-                foreach (var file in data.dirtyFiles)
+                foreach (var file in MerinoData.DirtyFiles)
                 {
                     AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
                 }
             }
 
-            data.dirtyFiles.Clear();
+	        MerinoData.DirtyFiles.Clear();
         }
 
         // TODO: eventually, add more data on what's dirty about it (what nodes modified? when it was last modified? etc)
         public static void MarkFileDirty(TextAsset dirtyFile)
         {
-            MerinoTreeData data = MerinoTreeData.Instance;
-
-            if (data.dirtyFiles.Contains(dirtyFile) == false)
+            if (MerinoData.DirtyFiles.Contains(dirtyFile) == false)
             {
-                data.dirtyFiles.Add(dirtyFile);
+	            MerinoData.DirtyFiles.Add(dirtyFile);
             }
         }
-
-
-	    public static double LastSaveTime;
 	    
         public static void SaveDataToFiles()
         {
-            MerinoTreeData data = MerinoTreeData.Instance;
-
-            if (data.currentFiles.Count > 0 )
+            if (MerinoData.CurrentFiles.Count > 0 )
             {
-                foreach (var file in data.currentFiles)
+                foreach (var file in MerinoData.CurrentFiles)
                 {
-	                if (data.fileToNodeID.ContainsKey(file))
+	                if (MerinoData.FileToNodeID.ContainsKey(file))
 	                {
-		                File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString(data.fileToNodeID[file]));
+		                File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString(MerinoData.FileToNodeID[file]));
 		                EditorUtility.SetDirty(file);
 		                LastSaveTime = EditorApplication.timeSinceStartup;
 	                }
@@ -69,8 +62,6 @@ namespace Merino
 		// used for file saving
 		public static string SaveFileNodesAsString(int fileNodeID)
 		{
-			MerinoTreeData data = MerinoTreeData.Instance;
-			
 			var nodeInfoList = new List<YarnSpinnerLoader.NodeInfo>();
 			var toTraverse = new List<int>() {fileNodeID};
 			var filterList = new List<int>();
@@ -80,7 +71,7 @@ namespace Merino
 				if (filterList.Contains(toTraverse[0]) == false)
 				{
 					filterList.Add(toTraverse[0]);
-					var node = MerinoTreeData.GetNode(toTraverse[0]);
+					var node = MerinoData.GetNode(toTraverse[0]);
 					if (node != null && node.hasChildren)
 					{
 						toTraverse.AddRange(node.children.Select(x => x.id));
@@ -92,7 +83,7 @@ namespace Merino
 			// export these nodes
 			//todo: move back over to linq, we were getting null ref exception so using this for the time being
 			var treeNodes = new List<MerinoTreeElement>();
-			foreach (var merinoTreeElement in data.treeElements)
+			foreach (var merinoTreeElement in MerinoData.TreeElements)
 			{
 				if (filterList.Contains(merinoTreeElement.id))
 				{
@@ -121,13 +112,12 @@ namespace Merino
 				ValidateNodeTitles();
 			}
 			
-			MerinoTreeData data = MerinoTreeData.Instance;
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
 
 			// save data to string
 			//todo: move back over to linq, we were getting null ref exception so using this for the time being
 			var treeNodes = new List<MerinoTreeElement>();
-			foreach (var merinoTreeElement in data.treeElements)
+			foreach (var merinoTreeElement in MerinoData.TreeElements)
 			{
 				if (merinoTreeElement.leafType == MerinoTreeElement.LeafType.Node)
 				{
@@ -179,7 +169,7 @@ namespace Merino
 
 			if (nodes == null) // if null, then let's just use all currently loaded nodes
 			{
-				nodes = MerinoTreeData.Instance.treeElements;
+				nodes = MerinoData.TreeElements;
 			}
 			
 			// make sure we're not doing this to any folder or file nodes, ONLY YARN NODES
@@ -218,25 +208,23 @@ namespace Merino
 			
 			if (foundDuplicate)
 			{
-				MerinoTreeData data = MerinoTreeData.Instance;
-			
 				string renamedNodes = "Merino found nodes with duplicate names (which aren't allowed for Yarn) and renamed them. This might break node links, you can undo it. The following nodes were renamed: ";
-				Undo.RecordObject(data, "Merino: AutoRename");
+				Undo.RecordObject(MerinoData.Instance, "Merino: AutoRename");
 				
 				foreach (var kvp in nodeTitles)
 				{
-					if (data.treeElements[kvp.Key].name != kvp.Value)
+					if (MerinoData.TreeElements[kvp.Key].name != kvp.Value)
 					{
-						renamedNodes += string.Format("\n* {0} > {1}", data.treeElements[kvp.Key].name, kvp.Value);
-						data.treeElements[kvp.Key].name = kvp.Value;
+						renamedNodes += string.Format("\n* {0} > {1}", MerinoData.TreeElements[kvp.Key].name, kvp.Value);
+						MerinoData.TreeElements[kvp.Key].name = kvp.Value;
 					}
 				}
-				EditorUtility.SetDirty(data);
+				EditorUtility.SetDirty(MerinoData.Instance);
 				MerinoDebug.Log(LoggingLevel.Warning, renamedNodes);
 				//todo: repaint MerinoEditorWindow tree view so names get updated
 				
 				// this is bad, but we're gonna do some recursion here, just to make extra sure there's STILL no duplicates...
-				ValidateNodeTitles(data.treeElements);
+				ValidateNodeTitles(MerinoData.TreeElements);
 			}
 			else if (MerinoPrefs.useAutosave)
 			{

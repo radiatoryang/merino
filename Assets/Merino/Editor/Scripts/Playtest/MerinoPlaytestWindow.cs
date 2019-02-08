@@ -218,7 +218,7 @@ namespace Merino
 				if (GUILayout.Button(new GUIContent("View Node Source", "Click to see Yarn script code for this node."), EditorStyles.toolbarButton))
 				{
 					// attempt to get current node
-					var matchingNode = MerinoTreeData.GetNode(dialogue.currentNode);
+					var matchingNode = MerinoData.GetNode(dialogue.currentNode);
 					if (matchingNode != null)
 					{
 						// display in yarn editor window
@@ -310,7 +310,7 @@ namespace Merino
 				if (MerinoEditorWindow.errorLog != null && MerinoEditorWindow.errorLog.Count > 0)
 				{
 					var error = MerinoEditorWindow.errorLog[MerinoEditorWindow.errorLog.Count - 1];
-					var node = MerinoTreeData.GetNode(error.nodeID);
+					var node = MerinoData.GetNode(error.nodeID);
 					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} at line {1}", node.name, error.lineNumber, error.message )), style, GUILayout.MaxWidth(position.width * 0.31f) ))
 					{
 						if (node != null)
@@ -475,7 +475,7 @@ namespace Merino
 			}
 			
 			// also output to Unity console
-			var nodeRef = MerinoTreeData.Instance.treeElements.Find(x => x.name == nodeName);
+			var nodeRef = MerinoData.TreeElements.Find(x => x.name == nodeName);
 			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
 			MerinoDebug.Log(LoggingLevel.Error, message);
 		}
@@ -485,7 +485,7 @@ namespace Merino
 		/// </summary>
 		int GuessLineNumber(int nodeID, string lineText)
 		{
-			var node = MerinoTreeData.GetNode(nodeID);
+			var node = MerinoData.GetNode(nodeID);
 			
 			// this is a really bad way of doing it, but Yarn Spinner's DialogueRunner doesn't offer any access to line numbers.
 			if (node != null && node.nodeBody.Contains(lineText))

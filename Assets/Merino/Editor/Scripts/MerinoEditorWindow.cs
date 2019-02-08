@@ -19,11 +19,9 @@ namespace Merino
 	{
 		// sidebar tree view management stuff
 		[NonSerialized] bool m_Initialized;
-		TreeViewState viewState { get { return serializedTreeData.viewState; } set { serializedTreeData.viewState = value; } } // Serialized in ScriptableObject so it survives assembly reloading AND window refresh
 
 		[SerializeField] MultiColumnHeaderState m_MultiColumnHeaderState;
 		SearchField m_SearchField;
-		private MerinoTreeData serializedTreeData { get { return MerinoTreeData.Instance;} }
 		[SerializeField] MerinoTreeView m_TreeView;
 
 		public MerinoTreeView treeView {
@@ -74,11 +72,6 @@ namespace Merino
 		// misc resources
 		Texture helpIcon, errorIcon, folderIcon, textIcon, deleteIcon, resetIcon;
 		
-		// TextAsset currentFile; // deprecated, juse currentFiles instead
-		List<TextAsset> currentFiles { get { return serializedTreeData.currentFiles; } set { serializedTreeData.currentFiles = value; } }
-		List<TextAsset> dirtyFiles { get { return serializedTreeData.dirtyFiles; } set { serializedTreeData.dirtyFiles = value; } }
-		Dictionary<TextAsset, int> fileToNodeID { get { return serializedTreeData.fileToNodeID; } set { serializedTreeData.fileToNodeID = value; } }
-		
 		// undo management
 		double lastUndoTime;
 		int moveCursorUndoID, moveCursorUndoIndex;
@@ -107,14 +100,15 @@ namespace Merino
 		
 		void ResetMerino()
 		{
-			currentFiles.Clear();
-			fileToNodeID.Clear();
-			dirtyFiles.Clear();
-			viewState = null;
-			m_Initialized = false;
+			MerinoData.CurrentFiles.Clear();
+			MerinoData.FileToNodeID.Clear();
+			MerinoData.DirtyFiles.Clear();
+			MerinoData.ViewState = null;
 			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
+			
+			m_Initialized = false;
 			InitIfNeeded(true);
 		}
 
@@ -154,8 +148,9 @@ namespace Merino
 			InitIcons();
 
 			// Check if viewstate already exists (deserialized from window layout file or scriptable object)
-			if (viewState == null) {
-				viewState = new TreeViewState();
+			if (MerinoData.ViewState == null) 
+			{
+				MerinoData.ViewState = new TreeViewState();
 			}
 
 			bool firstInit = m_MultiColumnHeaderState == null;
@@ -170,7 +165,7 @@ namespace Merino
 
 			// generate sidebar data structures
 			var treeModel = new TreeModel<MerinoTreeElement>(GetData(null, true));
-			m_TreeView = new MerinoTreeView(viewState, multiColumnHeader, treeModel);
+			m_TreeView = new MerinoTreeView(MerinoData.ViewState, multiColumnHeader, treeModel);
 			m_TreeView.treeChanged += OnTreeChanged;
 			
 			m_SearchField = new SearchField();
@@ -193,8 +188,7 @@ namespace Merino
 		// called when something get selected in Project tab
 		void OnSelectionChange ()
 		{
-			if (!m_Initialized)
-				return;
+			if (!m_Initialized) return;
 
 			// TODO: commented out until we figure out what this UX should actually be
 //			var possibleYarnFile = Selection.activeObject as TextAsset;
@@ -208,7 +202,7 @@ namespace Merino
 //
 //				// ok load this new file now?
 //				currentFile = possibleYarnFile;
-//				viewState.selectedIDs.Clear();
+//				ViewState.selectedIDs.Clear();
 //				ForceStopDialogue();
 //				m_TreeView.treeModel.SetData (GetData ());
 //				m_TreeView.Reload ();
@@ -218,6 +212,7 @@ namespace Merino
 		// This gets called 10 times a second, good for low priority stuff
 		public void OnInspectorUpdate()
 		{
+			var viewState = MerinoData.ViewState;
 			// if there are no nodes selected, let's still process deleted nodes
 			if (viewState != null && viewState.selectedIDs != null && viewState.selectedIDs.Count == 0)
 			{
@@ -225,7 +220,7 @@ namespace Merino
 			}
 			
 			// small delay before saving after OnTreeChanged
-			if (MerinoPrefs.useAutosave && currentFiles.Count > 0 && EditorApplication.timeSinceStartup > lastTreeChangeTime + 0.5)
+			if (MerinoPrefs.useAutosave && MerinoData.CurrentFiles.Count > 0 && EditorApplication.timeSinceStartup > lastTreeChangeTime + 0.5)
 			{
 				MerinoCore.SaveDataToFiles();
 				MerinoCore.ReimportFiles(true); // we have no idea which node ID got changed, so we just have to reimport all files at this point
@@ -233,7 +228,7 @@ namespace Merino
 			}
 			
 			// small delay before reimporting the asset (otherwise it's too annoying to constantly reimport the asset)
-			if (EditorApplication.timeSinceStartup > MerinoCore.LastSaveTime + 1.0 && currentFiles.Count > 0)
+			if (EditorApplication.timeSinceStartup > MerinoCore.LastSaveTime + 1.0 && MerinoData.CurrentFiles.Count > 0)
 			{
 				MerinoCore.ReimportFiles();
 				MerinoCore.LastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
@@ -253,13 +248,13 @@ namespace Merino
 		void OnDestroy()
 		{
 			// if destroyed, make sure the text file got refreshed at least
-			if (currentFiles.Count > 0)
+			if (MerinoData.CurrentFiles.Count > 0)
 			{
 				MerinoCore.ReimportFiles(true);
 			}
 			
 			Undo.undoRedoPerformed -= OnUndo;
-			Undo.ClearUndo(serializedTreeData);
+			Undo.ClearUndo(MerinoData.Instance);
 			
 			undoData.Clear();
 		}
@@ -274,10 +269,10 @@ namespace Merino
 			
 			// detect which nodes changed, if any
 			// is the current treeData timestamp earlier than our undo log?... if so, then an undo probably happened
-			for( int i=undoData.Count-1; i>0 && serializedTreeData.timestamp < undoData[i].time; i-- )
+			for( int i=undoData.Count-1; i>0 && MerinoData.Timestamp < undoData[i].time; i-- )
 			{
 				var recent = undoData[i];
-				var treeDataNode = serializedTreeData.treeElements.First(x => x.id == recent.id);
+				var treeDataNode = MerinoData.TreeElements.First(x => x.id == recent.id);
 				
 				moveCursorUndoID = recent.id;
 				
@@ -292,7 +287,7 @@ namespace Merino
 			
 			// repaint tree view so names get updated
 			m_TreeView.Reload();
-			if (currentFiles.Count > 0 && MerinoPrefs.useAutosave)
+			if (MerinoData.CurrentFiles.Count > 0 && MerinoPrefs.useAutosave)
 			{
 				MerinoCore.SaveDataToFiles();
 			}
@@ -352,9 +347,9 @@ namespace Merino
 		{
 			string defaultPath = Application.dataPath + "/";
 			string defaultName = "NewYarnFile";
-			if ( currentFiles.Count > 0)
+			if (MerinoData.CurrentFiles.Count > 0)
 			{
-				var lastFile = currentFiles.Last();
+				var lastFile = MerinoData.CurrentFiles.Last();
 				defaultPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6) + AssetDatabase.GetAssetPath(lastFile );
 				defaultName = lastFile.name.Substring(0, lastFile.name.Length - 5); // -5 because ignore ".yarn" at end of file name
 			}
@@ -380,7 +375,7 @@ namespace Merino
 					m_TreeView.treeModel.SetData(GetData());
 					m_TreeView.Reload();
 
-					var fileID = fileToNodeID[newFile];
+					var fileID = MerinoData.FileToNodeID[newFile];
 					m_TreeView.FrameItem( fileID );
 					m_TreeView.SetExpanded(fileID, true);
 					m_TreeView.SetSelection(new List<int>() { fileID });
@@ -415,9 +410,9 @@ namespace Merino
 		TextAsset LoadYarnFileAtFullPath(string path, bool isRelativePath=false)
 		{
 			var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>( isRelativePath ? path : "Assets" + path.Substring(Application.dataPath.Length) );
-			if (currentFiles.Contains(newFile) == false)
+			if (MerinoData.CurrentFiles.Contains(newFile) == false)
 			{
-				currentFiles.Add(newFile);
+				MerinoData.CurrentFiles.Add(newFile);
 			}
 			else
 			{
@@ -438,9 +433,9 @@ namespace Merino
 				.ToArray();
 			foreach (var file in files)
 			{
-				if (currentFiles.Contains(file)==false )
+				if (MerinoData.CurrentFiles.Contains(file)==false )
 				{
-					currentFiles.Add(file);
+					MerinoData.CurrentFiles.Add(file);
 				}
 			}
 
@@ -463,13 +458,13 @@ namespace Merino
 			fileRoot.leafType = MerinoTreeElement.LeafType.File;
 			fileRoot.children = new List<TreeElement>();
 			treeElements.Add(fileRoot);
-			if (fileToNodeID.ContainsKey(source))
+			if (MerinoData.FileToNodeID.ContainsKey(source))
 			{
-				fileToNodeID[source] = startID;
+				MerinoData.FileToNodeID[source] = startID;
 			}
 			else
 			{
-				fileToNodeID.Add(source, startID);
+				MerinoData.FileToNodeID.Add(source, startID);
 			}
 
 			// load nodes
@@ -543,7 +538,7 @@ namespace Merino
 			// then go through each file and get nodes for it, adding folder nodes as appropriate
 			int nodeID = 1;
 
-			foreach (var yarnFile in currentFiles)
+			foreach (var yarnFile in MerinoData.CurrentFiles)
 			{
 				// all folders are now created, let's add the yarn data now
 				var yarnData = GetDataFromFile(yarnFile, nodeID);
@@ -564,8 +559,8 @@ namespace Merino
 			// but I think we're supposed to do this thing so let's do it
 			TreeElementUtility.UpdateDepthValues( root );
 			
-			serializedTreeData.treeElements = treeElements;
-			return serializedTreeData.treeElements;
+			MerinoData.TreeElements = treeElements;
+			return MerinoData.TreeElements;
 		}
 
 		#endregion
@@ -579,7 +574,7 @@ namespace Merino
 
 		public void AddNewNode(IList<int> parents=null)
 		{
-			if (currentFiles.Count == 0)
+			if (MerinoData.CurrentFiles.Count == 0)
 			{
 				return;
 			}
@@ -588,7 +583,7 @@ namespace Merino
 			{
 				var parentSearch = currentNodeIDEditing > 0 && m_TreeView.treeModel.Find(currentNodeIDEditing) != null
 					? m_TreeView.treeModel.Find(currentNodeIDEditing)
-					: m_TreeView.treeModel.Find(fileToNodeID[currentFiles[0]]);
+					: m_TreeView.treeModel.Find(MerinoData.FileToNodeID[MerinoData.CurrentFiles[0]]);
 
 				while (parentSearch.leafType == MerinoTreeElement.LeafType.Node)
 				{
@@ -675,18 +670,18 @@ namespace Merino
 			foreach (var id in DeleteList)
 			{
 				// remove from selection
-				if (viewState.selectedIDs.Contains(id))
+				if (MerinoData.ViewState.selectedIDs.Contains(id))
 				{
-					viewState.selectedIDs.Remove(id);
+					MerinoData.ViewState.selectedIDs.Remove(id);
 				}
 				
 				// remove any files from file lists
-				if (fileToNodeID.ContainsValue(id))
+				if (MerinoData.FileToNodeID.ContainsValue(id))
 				{
-					var fileToRemove = fileToNodeID.Where(x => x.Value == id).Select(x => x.Key).First();
-					fileToNodeID.Remove(fileToRemove);
-					currentFiles.Remove(fileToRemove);
-					dirtyFiles.Remove(fileToRemove);
+					var fileToRemove = MerinoData.FileToNodeID.Where(x => x.Value == id).Select(x => x.Key).First();
+					MerinoData.FileToNodeID.Remove(fileToRemove);
+					MerinoData.CurrentFiles.Remove(fileToRemove);
+					MerinoData.DirtyFiles.Remove(fileToRemove);
 				} 
 			}
 
@@ -707,7 +702,7 @@ namespace Merino
 		TextAsset GetTextAssetForNode( MerinoTreeElement treeNode )
 		{
 			var fileParent = GetFileParent(treeNode);
-			return currentFiles.Where(x => fileToNodeID[x] == fileParent.id).First();
+			return MerinoData.CurrentFiles.First(x => MerinoData.FileToNodeID[x] == fileParent.id);
 		}
 		
 		
@@ -752,7 +747,7 @@ namespace Merino
 			
 			// also output to Unity console
 			MerinoDebug.Log(LoggingLevel.Error, message);
-			var nodeRef = serializedTreeData.treeElements.Where(x => x.name == nodeName).ToArray();
+			var nodeRef = MerinoData.TreeElements.Where(x => x.name == nodeName).ToArray();
 			errorLog.Add( new MerinoErrorLine(message, fileName, nodeRef.Length > 0 ? nodeRef[0].id : -1, Mathf.Max(0, lineNumber)));
 		}
 
@@ -794,7 +789,7 @@ namespace Merino
 			DrawSidebar (sidebarRect);
 			ResizeSidebar();
 
-			if (viewState != null)
+			if (MerinoData.ViewState != null)
 			{
 				DrawMainToolbar(toolbarRect);
 				DrawMainPane(nodeEditRect);
@@ -841,7 +836,7 @@ namespace Merino
 			{
 				var createMenu = new GenericMenu();
 				createMenu.AddItem(new GUIContent("Yarn.txt File"), false, CreateNewYarnFile);
-				if (currentFiles.Count > 0)
+				if (MerinoData.CurrentFiles.Count > 0)
 				{
 					createMenu.AddItem(new GUIContent("New Yarn Node"), false, AddNewNode);
 				}
@@ -901,7 +896,7 @@ namespace Merino
 				LoadFile();
 			}
 			
-			if (currentFiles.Count > 0 )
+			if (MerinoData.CurrentFiles.Count > 0 )
 			{
 				// UNLOAD BUTTON, formerly known as the NEW FILE BUTTON
 				if ( FluidGUIButtonIcon("Unload All", resetIcon, "will unload all files, throw away any unsaved changes, and reset Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(80) ) )
@@ -951,11 +946,11 @@ namespace Merino
 //			bool forceSave = false;
 			int idToPreview = -1;
 			int idToZoomTo = -1;
-			if (viewState.selectedIDs.Count > 0)
+			if (MerinoData.ViewState.selectedIDs.Count > 0)
 			{
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 				
-				foreach (var id in viewState.selectedIDs)
+				foreach (var id in MerinoData.ViewState.selectedIDs)
 				{
 					// DRAW FILE NODE ==================================================================
 					if (m_TreeView.treeModel.Find(id).leafType == MerinoTreeElement.LeafType.File)
@@ -1228,20 +1223,20 @@ namespace Merino
 						currentNodeIDEditing = id;
 						
 						// undo begin
-						Undo.RecordObject(serializedTreeData, "Merino > " + newName );
+						Undo.RecordObject(MerinoData.Instance, "Merino > " + newName );
 						
 						// actually commit the data now
 						m_TreeView.treeModel.Find(id).name = newName;
 						m_TreeView.treeModel.Find(id).nodeBody = newBody;
-						serializedTreeData.editedID = id;
-						serializedTreeData.timestamp = EditorApplication.timeSinceStartup;
+						MerinoData.EditedID = id;
+						MerinoData.Timestamp = EditorApplication.timeSinceStartup;
 						MerinoCore.MarkFileDirty( GetTextAssetForNode( m_TreeView.treeModel.Find(id) ) );
 						
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );
 						
 						// save after commit if we're autosaving
-						if (currentFiles.Count > 0 && MerinoPrefs.useAutosave)
+						if (MerinoData.CurrentFiles.Count > 0 && MerinoPrefs.useAutosave)
 						{
 							MerinoCore.SaveDataToFiles();
 						}
@@ -1266,9 +1261,9 @@ namespace Merino
 				EditorGUILayout.EndScrollView();
 				
 				// if we only have one node selected, then let's just say that's the node we're working with
-				if (viewState.selectedIDs.Count == 1)
+				if (MerinoData.ViewState.selectedIDs.Count == 1)
 				{
-					currentNodeIDEditing = viewState.selectedIDs[0];
+					currentNodeIDEditing = MerinoData.ViewState.selectedIDs[0];
 				}
 				
 				// detect if we need to do play preview
@@ -1303,7 +1298,7 @@ namespace Merino
 			helpRect.height /= 2;
 			GUILayout.BeginArea(helpRect);
 				
-			if (currentFiles.Count == 0)
+			if (MerinoData.CurrentFiles.Count == 0)
 			{
 				EditorGUILayout.HelpBox(
 					" To write anything, you must load at least one file.\n" +
@@ -1542,8 +1537,8 @@ namespace Merino
 		// a lot of the logic for this is handled in OnGUI > DrawMainPane, this just sets variables to get read elsewhere
 		public void SelectNodeAndZoomToLine(int nodeID, int lineNumber)
 		{
-			viewState.selectedIDs.Clear();
-			viewState.selectedIDs.Add(nodeID);
+			MerinoData.ViewState.selectedIDs.Clear();
+			MerinoData.ViewState.selectedIDs.Add(nodeID);
 			// treeView.SetSelection(new List<int>() { nodeID });
 			
 			// grab the node, count the lines, and guess the line number

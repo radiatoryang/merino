@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using Yarn;
 
 namespace Merino
 {
@@ -233,6 +234,114 @@ namespace Merino
 			
 		}
 	    
+		// FYI: TextAsset source basically does nothing right now, will be removed
+		public static IList<MerinoTreeElement> GetData()
+		{
+			// init variables, create global tree root
+			var treeElements = new List<MerinoTreeElement>();
+			var root = new MerinoTreeElement("Root", -1, 0);
+			root.children = new List<TreeElement>();
+			treeElements.Add(root);
+			
+			// ok, now let's load the data
+	
+			// then go through each file and get nodes for it, adding folder nodes as appropriate
+			int nodeID = 1;
+
+			foreach (var yarnFile in MerinoData.CurrentFiles)
+			{
+				// all folders are now created, let's add the yarn data now
+				var yarnData = GetDataFromFile(yarnFile, nodeID);
+				
+				// set the file node's parent to root
+				yarnData[0].parent = root;
+				root.children.Add(yarnData[0]);
+				
+				// add all data to tree elements
+				treeElements.AddRange( yarnData );
+				nodeID += yarnData.Count;
+			}
+			
+			// IMPORTANT: sort the treeElements by id!!!
+			treeElements = treeElements.OrderBy(x => x.id).ToList();
+			
+			// if there's already parent data then I don't really know what the depth value is used for (a cache to speed up GUI drawing?)
+			// but I think we're supposed to do this thing so let's do it
+			TreeElementUtility.UpdateDepthValues( root );
+			
+			MerinoData.TreeElements = treeElements;
+			return MerinoData.TreeElements;
+		}
 	    
+		public static IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1)
+		{
+			var treeElements = new List<MerinoTreeElement>();
+			AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
+			//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+			
+			// ROOT: create a root node for the file itself
+			var fileRoot = new MerinoTreeElement(source.name, 0, startID);
+			fileRoot.leafType = MerinoTreeElement.LeafType.File;
+			fileRoot.children = new List<TreeElement>();
+			treeElements.Add(fileRoot);
+			if (MerinoData.FileToNodeID.ContainsKey(source))
+			{
+				MerinoData.FileToNodeID[source] = startID;
+			}
+			else
+			{
+				MerinoData.FileToNodeID.Add(source, startID);
+			}
+
+			// load nodes
+			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
+			var parents = new Dictionary<MerinoTreeElement, string>();
+			foreach (var node in nodes)
+			{
+				// clean some of the stuff to help prevent file corruption
+				string cleanName = MerinoUtils.CleanYarnField(node.title, true);
+				string cleanBody = MerinoUtils.CleanYarnField(node.body);
+				string cleanTags = MerinoUtils.CleanYarnField(node.tags, true);
+				string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : MerinoUtils.CleanYarnField(node.parent, true);
+				
+				// write data to the objects
+				var newItem = new MerinoTreeElement( cleanName, 0, startID + treeElements.Count);
+				newItem.nodeBody = cleanBody;
+				newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
+				newItem.nodeTags = cleanTags;
+				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
+				{
+					newItem.parent = fileRoot;
+					fileRoot.children.Add(newItem);
+				}
+				else
+				{
+					parents.Add(newItem, cleanParent); // we have to assign parents in a second pass later on, not right now
+				}
+				treeElements.Add(newItem);
+			}
+			
+			// second pass: now that all nodes have been created, we can finally assign parents
+			foreach (var kvp in parents )
+			{
+				var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
+				if (parent.Length == 0)
+				{
+					MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
+				}
+				else
+				{
+					// tell child about it's parent
+					kvp.Key.parent = parent[0];
+					// tell parent about it's child
+					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
+					{
+						kvp.Key.parent.children = new List<TreeElement>();
+					}
+					kvp.Key.parent.children.Add(kvp.Key);
+				}
+			}
+			return treeElements;
+		}
     }
 }

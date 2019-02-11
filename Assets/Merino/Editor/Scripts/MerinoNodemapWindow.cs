@@ -50,7 +50,7 @@ namespace Merino
             if (currentFile == null) return;
 
             int nodeID;
-            if (MerinoTreeData.Instance.fileToNodeID.TryGetValue(currentFile, out nodeID))
+            if (MerinoData.FileToNodeID.TryGetValue(currentFile, out nodeID))
             {
                 
             }
@@ -62,7 +62,7 @@ namespace Merino
             {
                 GUILayout.Space(2); //small space to mimic unity editor
 
-                if (MerinoTreeData.Instance.currentFiles.Count > 0)
+                if (MerinoData.CurrentFiles.Count > 0)
                 {
                     var fileOptions = GetCurrentFileNames();
                     int currentCurrentFile = 0;
@@ -97,7 +97,7 @@ namespace Merino
                     if (currentCurrentFile != newCurrentFile || forceUpdateCurrentFile)
                     {
                         // change current file to new file
-                        var newFile = MerinoTreeData.Instance.currentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
+                        var newFile = MerinoData.CurrentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
                         
                         currentFile = newFile;
                         shouldRepaint = true;
@@ -140,7 +140,7 @@ namespace Merino
         {
             var list = new List<string>();
 
-            foreach (var file in MerinoTreeData.Instance.currentFiles)
+            foreach (var file in MerinoData.CurrentFiles)
                 list.Add(file.name);
 
             return list;

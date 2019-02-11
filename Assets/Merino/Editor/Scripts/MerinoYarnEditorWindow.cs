@@ -90,10 +90,10 @@ namespace Merino
 
 		public const string windowTitle = "Merino (Yarn Editor)";
 
-		[MenuItem("Window/Merino (Yarn Editor)")]
+		[MenuItem("Window/Merino/Yarn Editor")]
 		static void MenuItem_GetWindow()
 		{
-			GetWindow<MerinoEditorWindow>(windowTitle, true);
+			GetWindow<MerinoYarnEditorWindow>(windowTitle, true);
 		}
 		
 		void ResetMerino()

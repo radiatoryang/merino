@@ -100,7 +100,7 @@ namespace Merino
 			MerinoData.FileToNodeID.Clear();
 			MerinoData.DirtyFiles.Clear();
 			MerinoData.ViewState = null;
-			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
+			MerinoCore.CleanupTempData();
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			
@@ -208,8 +208,10 @@ namespace Merino
 		// This gets called 10 times a second, good for low priority stuff
 		public void OnInspectorUpdate()
 		{
-			var viewState = MerinoData.ViewState;
+			if (!m_Initialized) return;
+
 			// if there are no nodes selected, let's still process deleted nodes
+			var viewState = MerinoData.ViewState;
 			if (viewState != null && viewState.selectedIDs != null && viewState.selectedIDs.Count == 0)
 			{
 				DeleteNodes();

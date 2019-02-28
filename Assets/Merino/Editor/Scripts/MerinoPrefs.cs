@@ -26,8 +26,6 @@ namespace Merino
 		private static Vector2 scrollPos;
 		internal static LoggingLevel loggingLevel = LoggingLevel.Error;
 
-		public const string tempDataPath = "Assets/Merino/Editor/MerinoTempData.asset";
-		
 		[InitializeOnLoadMethod]
 		public static void InitializePrefs()
 		{

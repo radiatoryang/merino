@@ -343,5 +343,52 @@ namespace Merino
 			}
 			return treeElements;
 		}
+
+		#region TempData
+				
+		/// <summary>
+		/// Delete all Merino temp data instances in the project.
+		/// </summary>
+		public static void CleanupTempData()
+		{
+			var tempData = Resources.FindObjectsOfTypeAll<MerinoData>();
+			foreach (var data in tempData)
+			{
+				var path = AssetDatabase.GetAssetPath(data);
+				if (!string.IsNullOrEmpty(path)) //don't attempt to delete ghost(?) scriptable objects
+					AssetDatabase.DeleteAsset(path);
+			}
+		}
+
+		/// <summary>
+		/// Returns the path of the Merino folder, based on the location of MerinoEditorWindow.cs since that should always be in there.
+		/// </summary>
+		private static string LocateMerinoFolder()
+		{
+			string[] results = Directory.GetFiles(Application.dataPath, "MerinoEditorWindow.cs", SearchOption.AllDirectories);
+			if (results.Length > 0)
+			{
+				var parent = Directory.GetParent(results[0]);
+				while (parent.Name != "Merino")
+					parent = parent.Parent;
+
+				return parent.FullName;
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Returns the path Merino temp data should live.
+		/// </summary>
+		public static string GetTempDataPath()
+		{
+			var path = LocateMerinoFolder(); //find folder in project...
+			path += "\\Editor\\MerinoTempData.asset"; //append on the path for temp data;
+			path = path.Substring(path.IndexOf("Assets")); //remove path before the assets folder
+			return (path);
+		}
+
+		#endregion
     }
 }

@@ -132,6 +132,54 @@ namespace Merino
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
+
+		//todo: Move into MerinoCore.cs when merged into Develop
+		#region TempPath Hotfix
+		
+		/// <summary>
+		/// Delete all Merino temp data instances in the project.
+		/// </summary>
+		public static void CleanupTempData()
+		{
+			var tempData = Resources.FindObjectsOfTypeAll<MerinoTreeData>();
+			foreach (var data in tempData)
+			{
+				var path = AssetDatabase.GetAssetPath(data);
+				if (!string.IsNullOrEmpty(path)) //don't attempt to delete ghost(?) scriptable objects
+					AssetDatabase.DeleteAsset(path);
+			}
+		}
+
+		/// <summary>
+		/// Returns the path of the Merino folder, based on the location of MerinoEditorWindow.cs since that should always be in there.
+		/// </summary>
+		public static string LocateMerinoFolder()
+		{
+			string[] results = Directory.GetFiles(Application.dataPath, "MerinoEditorWindow.cs", SearchOption.AllDirectories);
+			if (results.Length > 0)
+			{
+				var parent = Directory.GetParent(results[0]);
+				while (parent.Name != "Merino")
+					parent = parent.Parent;
+
+				return parent.FullName;
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Returns the path Merino temp data should live.
+		/// </summary>
+		public static string GetTempDataPath()
+		{
+			var path = LocateMerinoFolder(); //find folder in project...
+			path += "\\Editor\\MerinoTempData.asset"; //append on the path for temp data;
+			path = path.Substring(path.IndexOf("Assets")); //remove path before the assets folder
+			return (path);
+		}
+
+		#endregion
 		
 		#region EditorWindowStuff
 
@@ -166,7 +214,7 @@ namespace Merino
 			viewState = null;
 			m_Initialized = false;
 			ForceStopDialogue();
-			AssetDatabase.DeleteAsset(MerinoPrefs.tempDataPath); // delete tempdata, or else it will just get reloaded again
+			CleanupTempData();
 			Selection.objects = new UnityEngine.Object[0]; // deselect all
 			Undo.undoRedoPerformed -= OnUndo;
 			InitIfNeeded(true);
@@ -229,18 +277,23 @@ namespace Merino
 
 			// try to recover scriptableobject based on instance ID (see https://forum.unity.com/threads/editorwindow-loses-reference-of-scriptableobject-on-play-mode.107831/#post-1077162)
 			bool foundDataAlready = false;
-			if ( treeDataInstanceID != 0 ) {
-				var possibleData = (MerinoTreeData)EditorUtility.InstanceIDToObject( treeDataInstanceID );
-				if ( possibleData != null && possibleData.treeElements != null ) {
+			if (treeDataInstanceID != 0) 
+			{
+				var possibleData = (MerinoTreeData)EditorUtility.InstanceIDToObject(treeDataInstanceID);
+				if (possibleData != null && possibleData.treeElements != null) 
+				{
 					serializedTreeData = possibleData;
 					foundDataAlready = true;
 				}
 			}
 
 			// still didn't find any data, so try searching the disk too
-			if ( !foundDataAlready ) {
+			if (!foundDataAlready)
+			{
+				var tempPath = GetTempDataPath();
+				
 				// detect temp data written to disk (e.g. when going into play mode and back)
-				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(MerinoPrefs.tempDataPath);
+				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoTreeData>(tempPath);
 				if (possibleTempData != null && possibleTempData.treeElements != null)
 				{
 					serializedTreeData = possibleTempData;
@@ -248,7 +301,7 @@ namespace Merino
 				else
 				{
 					serializedTreeData = ScriptableObject.CreateInstance<MerinoTreeData>();
-					AssetDatabase.CreateAsset(serializedTreeData, MerinoPrefs.tempDataPath);
+					AssetDatabase.CreateAsset(serializedTreeData, tempPath);
 					AssetDatabase.SaveAssets();
 				}
 			}
@@ -351,6 +404,8 @@ namespace Merino
 		// This gets called 10 times a second, good for low priority stuff
 		public void OnInspectorUpdate()
 		{
+			if (!m_Initialized) return;
+			
 			// if there are no nodes selected, let's still process deleted nodes
 			if (viewState != null && viewState.selectedIDs != null && viewState.selectedIDs.Count == 0)
 			{

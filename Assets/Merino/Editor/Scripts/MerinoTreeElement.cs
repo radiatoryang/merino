@@ -21,7 +21,7 @@ namespace Merino
 
 		public Rect nodeRect
 		{
-			get { return new Rect(nodePosition.x, nodePosition.y, 100, 60); }
+			get { return new Rect(nodePosition.x, nodePosition.y, 100, 40); }
 		}
 
 		public MerinoTreeElement (string name, int depth, int id) : base (name, depth, id)

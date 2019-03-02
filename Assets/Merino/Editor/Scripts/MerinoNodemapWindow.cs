@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -20,6 +21,21 @@ namespace Merino
         const float minZoom = 0.2f;
         const float maxZoom = 1f;
 
+        [NonSerialized] MerinoTreeElement dragNode;
+        List<MerinoTreeElement> selectedNodes = new List<MerinoTreeElement>();
+        MerinoTreeElement SelectedNode
+        {
+            get
+            {
+                return selectedNodes.FirstOrDefault();
+            }
+			
+            set
+            {
+                selectedNodes.Clear();
+                selectedNodes.Add(value);
+            }
+        }
         
         [NonSerialized] private MerinoTestData data;
         [NonSerialized] private bool initComplete;
@@ -138,7 +154,7 @@ namespace Merino
             for (int i = 0; i < data.TreeElements.Count; i++)
             {
                 var node = data.TreeElements[i];
-                if (node.depth == -1) continue; // skip root node
+                if (node.depth == -1) continue; // skip root node and non-yarn node nodes
 
                 Handles.color = Color.white;
                 var connectedNodes = GetConnectedNodes(node);
@@ -168,8 +184,21 @@ namespace Merino
 
                 Rect windowRect = new Rect(node.nodeRect); //todo: adjust size
                 windowRect.position += scrollPos;
-				
-                GUI.Box(windowRect, node.name, GUI.skin.GetStyle("flow node 5"));
+
+                bool isSelected = false;
+                foreach (var selectedNode in selectedNodes)
+                {
+                    if (selectedNode.name == node.name)
+                    {
+                        isSelected = true;
+                        break;
+                    }
+                }
+
+                GUIStyle style = GUI.skin.GetStyle(isSelected ? "flow node 1 on" : "flow node 1");
+                style.alignment = TextAnchor.MiddleCenter;
+                
+                GUI.Box(windowRect, node.name, style);
             }
         }
 
@@ -262,6 +291,26 @@ namespace Merino
             Repaint();
         }
         
+        MerinoTreeElement GetNodeAt(Vector2 point)
+        {
+            for (int i = data.TreeElements.Count - 1; i >= 0; i--) // reverse for loop so we get the nodes on top first
+            {
+                var node = data.TreeElements[i];
+                if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
+
+                var rect = node.nodeRect;
+                rect.position += scrollPos;
+                if (rect.Contains(point / zoom)) 
+                    return node;
+            }
+
+            return null;
+        }
+        
+        private bool GetAppendKeyDown()
+        {
+            return Event.current.shift || EditorGUI.actionKey;
+        }
 
         #region Prototyping Methods
 
@@ -336,14 +385,77 @@ namespace Merino
         #endregion
 
         #region EventWindow Methods
+        
+        protected override void OnMouseDown(Event e)
+        {
+            var node = GetNodeAt(e.mousePosition);
 
-		protected override void OnMouseDrag(Event e)
+            switch (e.button)
+            {
+                case MouseButton.Left:
+                {
+                    if (node != null)
+                    {
+                        // handle hit node
+                        
+                        if (GetAppendKeyDown())
+                        {
+                            // add or remove node from selection
+                            if (selectedNodes.Contains(node))
+                                selectedNodes.Remove(node);
+                            else
+                                selectedNodes.Add(node);
+                        }
+                        else
+                        {
+                            if (!selectedNodes.Contains(node))
+                                SelectedNode = node;
+							
+                            dragNode = node;
+                        }
+						
+                        e.Use();
+                    }
+                    else if (!(Tools.current == Tool.View && Tools.viewTool == ViewTool.Zoom))
+                    {
+                        // no node hit, and not not view/zoom tool
+						
+                        if (!GetAppendKeyDown())
+                            selectedNodes.Clear(); // deselect all nodes
+						
+                        e.Use();
+                    }
+                    break;
+                }
+            }
+        }
+
+        protected override void OnMouseDrag(Event e)
 		{
 			bool drag = false;
 			
 			switch (e.button)
 			{
-				case MouseButton.Right:
+			    case MouseButton.Left:
+			    {
+			        if (dragNode != null)
+			        {
+			            // node dragging
+			            foreach (var node in selectedNodes)
+			            {
+			                node.nodePosition += Vector2Int.RoundToInt(e.delta / zoom);
+			            }
+
+			            e.Use();
+			        }
+			        if (e.alt)
+			        {
+			            // pan nodemap via alt/left-click
+			            drag = true;
+			        }	
+			        break;
+			    }
+			    case MouseButton.Right:
 				{
 					if (!e.alt)
 					{
@@ -373,6 +485,27 @@ namespace Merino
 				e.Use();
 			}
 		}
+        
+        protected override void OnRawMouseUp(Event e)
+        {
+            var node = GetNodeAt(e.mousePosition);
+			
+            switch (e.button)
+            {
+                case MouseButton.Left:
+                {
+                    // release dragged node
+                    if (dragNode != null)
+                    {
+                        dragNode = null;
+                        e.Use();
+                    }
+					
+                    //TODO: autosave changes made to nodemap
+                    break;
+                }
+            }
+        }
         
         protected override void OnScrollWheel(Event e)
         {

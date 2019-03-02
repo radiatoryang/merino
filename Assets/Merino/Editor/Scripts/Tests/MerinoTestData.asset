@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b88ca95d73b6ce04e9e475625d70dc27, type: 3}
+  m_Name: MerinoTestData
+  m_EditorClassIdentifier: 
+  TreeElements:
+  - m_ID: 0
+    m_Name: Root
+    m_Depth: -1
+    nodeTags: 
+    nodeBody: 
+    leafType: 0
+    nodePosition: {x: 0, y: 0}
+  - m_ID: 1
+    m_Name: Sally.yarn
+    m_Depth: 0
+    nodeTags: 
+    nodeBody: 
+    leafType: 1
+    nodePosition: {x: 0, y: 0}
+  - m_ID: 2
+    m_Name: Sally
+    m_Depth: 1
+    nodeTags: 
+    nodeBody: "<<if visited(\"Sally\") is false>>\n    Player: Hey, Sally.\n    Sally:
+      Oh! Hi.\n    Sally: You snuck up on me.\n    Sally: Don't do that.\n<<else>>\n
+      \   Player: Hey.\n    Sally: Hi.\n<<endif>>\n\n<<if not visited(\"Sally.Watch\")>>\n
+      \   [[Anything exciting happen on your watch?|Sally.Watch]]\n<<endif>>\n\n<<if
+      $sally_warning and not visited(\"Sally.Sorry\")>>\n    [[Sorry about the console.|Sally.Sorry]]\n<<endif>>\n[[See
+      you later.|Sally.Exit]]"
+    leafType: 0
+    nodePosition: {x: 550, y: 111}
+  - m_ID: 3
+    m_Name: Sally.Watch
+    m_Depth: 1
+    nodeTags: 
+    nodeBody: "Sally: Not really. \nSally: Same old nebula, doing the same old thing.\nSally:
+      Oh, Ship wanted to see you. Go say hi to it.\n<<set $should_see_ship to true>>\n<<if
+      visited(\"Ship\") is true>>\n    Player: Already done!\n    Sally: Go say hi
+      again.\n<<endif>>"
+    leafType: 0
+    nodePosition: {x: 512, y: 430}
+  - m_ID: 4
+    m_Name: Sally.Exit
+    m_Depth: 1
+    nodeTags: 
+    nodeBody: 'Sally: Bye.'
+    leafType: 0
+    nodePosition: {x: 211, y: 417}
+  - m_ID: 5
+    m_Name: Sally.Sorry
+    m_Depth: 1
+    nodeTags: 
+    nodeBody: 'Sally: Yeah. Don''t do it again.'
+    leafType: 0
+    nodePosition: {x: 827, y: 439}

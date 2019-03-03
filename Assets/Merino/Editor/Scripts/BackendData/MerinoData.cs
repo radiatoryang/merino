@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEditor.IMGUI.Controls;
@@ -84,6 +85,69 @@ namespace Merino
 		{
 			get { return Instance.treeElements; }
 			set { Instance.treeElements = value; }
+		}
+
+		public static TextAsset GetDefaultData()
+		{
+			var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
+			if (defaultData == null)
+			{
+				MerinoDebug.Log(LoggingLevel.Warning, "Merino couldn't find the new file template at Resources/" + MerinoPrefs.newFileTemplatePath + ". Double-check the file exists there, or you can override this path in EditorPrefs.");
+				return null;
+			}
+			return defaultData;
+		}
+		
+		static bool IsProbablyYarnFile(TextAsset textAsset)
+		{
+			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
+			{
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		public static TextAsset LoadYarnFileAtFullPath(string path, bool isRelativePath=false)
+		{
+			var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>( isRelativePath ? path : "Assets" + path.Substring(Application.dataPath.Length) );
+			if (MerinoData.CurrentFiles.Contains(newFile) == false)
+			{
+				MerinoData.CurrentFiles.Add(newFile);
+			}
+			else
+			{
+				MerinoDebug.Log(LoggingLevel.Warning, "Merino: file at " + path + " is already loaded!");
+			}
+
+			return newFile;
+		}
+		
+		public static TextAsset[] LoadYarnFilesAtPath(string path)
+		{
+			// use Unity's AssetDatabase search function to find TextAssets, then convert GUIDs to files, and add unique items to currentFiles
+			var guids = !string.IsNullOrEmpty(path) ? AssetDatabase.FindAssets("t:TextAsset", new string[] {path} ) : AssetDatabase.FindAssets("t:TextAsset");
+			var files = guids.Select(AssetDatabase.GUIDToAssetPath )
+				.Where( x => x.Contains("Editor")==false )
+				.Select( AssetDatabase.LoadAssetAtPath<TextAsset>)
+				.Where( IsProbablyYarnFile )
+				.ToArray();
+			foreach (var file in files)
+			{
+				if (MerinoData.CurrentFiles.Contains(file)==false )
+				{
+					MerinoData.CurrentFiles.Add(file);
+				}
+			}
+
+			if (files.Length == 0)
+			{
+				EditorUtility.DisplayDialog("Merino: no Yarn.txt files found", "No valid Yarn.txt files were found at the path " + path, "Close");
+			}
+
+			return files;
 		}
 
 		#region Util Methods

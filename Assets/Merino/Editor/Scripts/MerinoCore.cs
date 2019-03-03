@@ -273,11 +273,15 @@ namespace Merino
 			return MerinoData.TreeElements;
 		}
 	    
-		public static IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1)
+		public static IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1, bool useFastMode=false)
 		{
 			var treeElements = new List<MerinoTreeElement>();
-			AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
-			//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+
+            if (!useFastMode)
+            {
+                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
+            	//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+            }
 			
 			// ROOT: create a root node for the file itself
 			var fileRoot = new MerinoTreeElement(source.name, 0, startID);

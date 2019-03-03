@@ -6,6 +6,13 @@ using UnityEngine;
 
 namespace Merino
 {
+    // RY, 2 March 2019 - just throwing this in here to prototype a speedier nodemap data cache thing, without messing with ScriptableObject stuff
+    public class MerinoNodemapData {
+        [SerializeField] internal IList<MerinoTreeElement> TreeElements = new List<MerinoTreeElement>();
+        
+    }
+
+
     public class MerinoNodemapWindow : MerinoEditorWindow
     {
         public const string windowTitle = "Merino (Nodemap)";
@@ -37,7 +44,7 @@ namespace Merino
             }
         }
         
-        [NonSerialized] private MerinoTestData data;
+        [NonSerialized] private MerinoNodemapData data;
         [NonSerialized] private bool initComplete;
 
         [MenuItem("Window/Merino/Nodemap", priority = 1)]
@@ -78,9 +85,12 @@ namespace Merino
         {
             if (initComplete) return;
             
-            // load fake data for now so we don't need to worry about the performance right now and actually make the nodemap :)
-            var testData = AssetDatabase.LoadAssetAtPath<MerinoTestData>("Assets/Merino/Editor/Scripts/Tests/MerinoTestData.asset");
-            data = testData;
+            // // load fake data for now so we don't need to worry about the performance right now and actually make the nodemap :)
+            // var testData = AssetDatabase.LoadAssetAtPath<MerinoTestData>("Assets/Merino/Editor/Scripts/Tests/MerinoTestData.asset");
+            // data = testData;
+            
+            data = new MerinoNodemapData(); // temp class to replace MerinoTestData
+            data.TreeElements = MerinoCore.GetDataFromFile( MerinoData.GetDefaultData(), 1, useFastMode:true );
 
             initComplete = true;
         }
@@ -257,6 +267,7 @@ namespace Merino
                         var newFile = MerinoData.CurrentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
                         
                         currentFile = newFile;
+                        data.TreeElements = MerinoCore.GetDataFromFile( currentFile, 1, useFastMode:true );
                         shouldRepaint = true;
                         forceUpdateCurrentFile = false;
                     }

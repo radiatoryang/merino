@@ -300,7 +300,7 @@ namespace Merino
 		[MenuItem("Assets/Create/Yarn.txt Script")]
 		public static void ProjectTabCreateNewYarnFile()
 		{
-			var defaultData = GetDefaultData();
+			var defaultData = MerinoData.GetDefaultData();
 			ProjectWindowUtil.CreateAssetWithContent("NewYarnFile.yarn.txt", defaultData != null ? defaultData.text : "title: Start\n---\nWrite your story here.\n===");
 		}
 
@@ -317,7 +317,7 @@ namespace Merino
 				{
 					// remove project folder path from selected path (+1 = trailing slash)
 					addFilePath = "Assets/" + addFilePath.Substring(Application.dataPath.Length + 1);
-					LoadYarnFileAtFullPath(addFilePath, true); // add all found files to currentFiles
+					MerinoData.LoadYarnFileAtFullPath(addFilePath, true); // add all found files to currentFiles
 					m_TreeView.treeModel.SetData(MerinoCore.GetData());
 					m_TreeView.Reload();
 					
@@ -340,7 +340,7 @@ namespace Merino
 				{
 					// remove project folder path from selected path (+1 = trailing slash)
 					addPath = addPath == Application.dataPath ? "Assets" : "Assets/" + addPath.Substring( Application.dataPath.Length + 1);
-					LoadYarnFilesAtPath(addPath); // add all found files to currentFiles
+					MerinoData.LoadYarnFilesAtPath(addPath); // add all found files to currentFiles
 					m_TreeView.treeModel.SetData(MerinoCore.GetData());
 					m_TreeView.Reload();
 
@@ -373,12 +373,12 @@ namespace Merino
 				} 
 				else
 				{
-					var defaultData = GetDefaultData();
+					var defaultData = MerinoData.GetDefaultData();
 					File.WriteAllText(fullFilePath, defaultData != null ? defaultData.text : "");
 					AssetDatabase.Refresh();
 					var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets" + fullFilePath.Substring(Application.dataPath.Length));
 					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(newFile));
-					LoadYarnFileAtFullPath(AssetDatabase.GetAssetPath(newFile), true);
+					MerinoData.LoadYarnFileAtFullPath(AssetDatabase.GetAssetPath(newFile), true);
 					m_TreeView.treeModel.SetData(MerinoCore.GetData());
 					m_TreeView.Reload();
 
@@ -393,68 +393,7 @@ namespace Merino
 			}
 		}
 		
-		static TextAsset GetDefaultData()
-		{
-			var defaultData = Resources.Load<TextAsset>(MerinoPrefs.newFileTemplatePath);
-			if (defaultData == null)
-			{
-				MerinoDebug.Log(LoggingLevel.Warning, "Merino couldn't find the new file template at Resources/" + MerinoPrefs.newFileTemplatePath + ". Double-check the file exists there, or you can override this path in EditorPrefs.");
-				return null;
-			}
-			return defaultData;
-		}
 		
-		static bool IsProbablyYarnFile(TextAsset textAsset)
-		{
-			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
-			{
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-
-		TextAsset LoadYarnFileAtFullPath(string path, bool isRelativePath=false)
-		{
-			var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>( isRelativePath ? path : "Assets" + path.Substring(Application.dataPath.Length) );
-			if (MerinoData.CurrentFiles.Contains(newFile) == false)
-			{
-				MerinoData.CurrentFiles.Add(newFile);
-			}
-			else
-			{
-				MerinoDebug.Log(LoggingLevel.Warning, "Merino: file at " + path + " is already loaded!");
-			}
-
-			return newFile;
-		}
-		
-		TextAsset[] LoadYarnFilesAtPath(string path)
-		{
-			// use Unity's AssetDatabase search function to find TextAssets, then convert GUIDs to files, and add unique items to currentFiles
-			var guids = !string.IsNullOrEmpty(path) ? AssetDatabase.FindAssets("t:TextAsset", new string[] {path} ) : AssetDatabase.FindAssets("t:TextAsset");
-			var files = guids.Select(AssetDatabase.GUIDToAssetPath )
-				.Where( x => x.Contains("Editor")==false )
-				.Select( AssetDatabase.LoadAssetAtPath<TextAsset>)
-				.Where( IsProbablyYarnFile )
-				.ToArray();
-			foreach (var file in files)
-			{
-				if (MerinoData.CurrentFiles.Contains(file)==false )
-				{
-					MerinoData.CurrentFiles.Add(file);
-				}
-			}
-
-			if (files.Length == 0)
-			{
-				EditorUtility.DisplayDialog("Merino: no Yarn.txt files found", "No valid Yarn.txt files were found at the path " + path, "Close");
-			}
-
-			return files;
-		}
 
 		#endregion
 		

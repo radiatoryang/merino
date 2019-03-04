@@ -9,7 +9,6 @@ namespace Merino
     // RY, 2 March 2019 - just throwing this in here to prototype a speedier nodemap data cache thing, without messing with ScriptableObject stuff
     public class MerinoNodemapData {
         [SerializeField] internal IList<MerinoTreeElement> TreeElements = new List<MerinoTreeElement>();
-        
     }
 
 
@@ -19,7 +18,7 @@ namespace Merino
         private const string popupControl = "currentFilePopup";
 
         [SerializeField] private TextAsset currentFile; // the current file we are displaying a nodemap for. we only display one of the loaded files at a time.
-        [NonSerialized] private bool shouldRepaint;
+        [NonSerialized] private bool shouldRepaint; //use for "delayed" repaints, call Repaint directly for instant refresh
         [NonSerialized] private bool forceUpdateCurrentFile;
         [NonSerialized] private string previousFileName;
 
@@ -44,8 +43,7 @@ namespace Merino
             }
         }
         
-        [NonSerialized] private MerinoNodemapData data;
-        [NonSerialized] private bool initComplete;
+        [NonSerialized] private MerinoNodemapData data = new MerinoNodemapData();
 
         [MenuItem("Window/Merino/Nodemap", priority = 1)]
         static void MenuItem_GetWindow()
@@ -67,8 +65,6 @@ namespace Merino
 
         void OnGUI()
         {
-            MaybeInit();
-            
             DrawNodemap();
             DrawToolbar(Event.current);
 
@@ -79,20 +75,6 @@ namespace Merino
                 Repaint();
                 shouldRepaint = false;
             }
-        }
-
-        private void MaybeInit()
-        {
-            if (initComplete) return;
-            
-            // // load fake data for now so we don't need to worry about the performance right now and actually make the nodemap :)
-            // var testData = AssetDatabase.LoadAssetAtPath<MerinoTestData>("Assets/Merino/Editor/Scripts/Tests/MerinoTestData.asset");
-            // data = testData;
-            
-            data = new MerinoNodemapData(); // temp class to replace MerinoTestData
-            data.TreeElements = MerinoCore.GetDataFromFile( MerinoData.GetDefaultData(), 1, useFastMode:true );
-
-            initComplete = true;
         }
 
         private void DrawNodemap()
@@ -277,7 +259,7 @@ namespace Merino
                     //todo: implement into logic above, or just keep as a dummy popup i guess.
                     var fileOptions = new string[] {"No Files Loaded"};
                     GUI.SetNextControlName(popupControl);
-                    EditorGUILayout.Popup(0, fileOptions);
+                    EditorGUILayout.Popup(0, fileOptions, EditorStyles.toolbarDropDown);
                 }
                 
                 GUILayout.FlexibleSpace();
@@ -377,13 +359,21 @@ namespace Merino
 
         #region EventHandler Methods
 
+        //todo: better repainting of window when a folder loaded
         private void FileLoadedHandler()
         {
-            shouldRepaint = true;
+            Repaint();
         }
 
         private void FileUnloadedHandler()
         {
+            if (MerinoData.CurrentFiles.Count == 0)
+            {
+                //clear nodemap data being displayed if files loaded is now 0
+                data.TreeElements = new List<MerinoTreeElement>();
+                Repaint();
+            }
+            
             if (currentFile != null) // the file was just unloaded, but not deleted
                 previousFileName = currentFile.name; //we will attempt to recover the file
             else

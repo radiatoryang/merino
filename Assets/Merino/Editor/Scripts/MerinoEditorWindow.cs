@@ -500,7 +500,13 @@ namespace Merino
 
 		void LoadFile()
 		{
+			// Fix OpenFilePanelWithFilters not behaving properly on OSX
+			// https://github.com/radiatoryang/merino/issues/25
+#if UNITY_EDITOR_WIN
 			string addFilePath = EditorUtility.OpenFilePanelWithFilters("Load a Yarn.txt script in Assets folder...", Application.dataPath, new string[] {"Yarn.txt scripts", "yarn.txt"});
+#else
+			string addFilePath = EditorUtility.OpenFilePanel("Load a Yarn.txt script in Assets folder...", Application.dataPath, "txt");
+#endif
 			if (!string.IsNullOrEmpty(addFilePath))
 			{
 				if (!addFilePath.StartsWith(Application.dataPath))

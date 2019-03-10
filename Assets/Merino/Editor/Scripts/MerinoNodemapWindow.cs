@@ -42,6 +42,11 @@ namespace Merino
                 selectedNodes.Add(value);
             }
         }
+
+        // selection box
+        Rect selectionBox;
+        Vector2 startSelectionBoxPos = -Vector2.one;
+        List<MerinoTreeElement> boxSelectionNodes;
         
         [NonSerialized] private MerinoNodemapData data = new MerinoNodemapData();
 
@@ -67,6 +72,13 @@ namespace Merino
         {
             DrawNodemap();
             DrawToolbar(Event.current);
+            
+            if (Event.current.type == EventType.Repaint)
+            {
+                // draw selection box
+                if (startSelectionBoxPos.x >= 0 && startSelectionBoxPos.y >= 0)
+                    GUI.Box(selectionBox, "", GUI.skin.FindStyle("SelectionRect"));
+            }
 
             HandleEvents(Event.current);
             
@@ -300,11 +312,64 @@ namespace Merino
             return null;
         }
         
+        public void FocusNode(int id)
+        {
+            var node = GetNode(id);
+            if (zoom < 1) 
+                HandleZoom(1 - zoom, Vector2.one * 0.5f); // reset zoom to 1
+            scrollPos = -node.nodeRect.center + position.size * 0.5f / zoom;
+        }
+
+        public void FocusNode(List<int> ids)
+        {
+            if (ids.Count == 1)
+            {
+                // use single node focusing behaviour
+                FocusNode(ids[0]);
+                return;
+            }
+
+            // find respective nodes for the ids
+            var nodes = new List<MerinoTreeElement>();
+            foreach (var id in ids)
+            {
+                var found = GetNode(id);
+                if (found != null) 
+                    nodes.Add(found);
+            }
+
+            // find max and min points of all nodes
+            Vector2 min = nodes[0].nodeRect.min;
+            Vector2 max = nodes[0].nodeRect.max;
+            for (int i = 0; i < nodes.Count; ++i)
+            {
+                var block = nodes[i];
+                min.x = Mathf.Min(min.x, block.nodeRect.center.x);
+                min.y = Mathf.Min(min.y, block.nodeRect.center.y);
+                max.x = Mathf.Max(max.x, block.nodeRect.center.x);
+                max.y = Mathf.Max(max.y, block.nodeRect.center.y);
+            }
+			
+            // find center of all nodes and focus there
+            var center = -(min + max) * 0.5f;
+            center.x += position.width * 0.5f / zoom;
+            center.y += position.height * 0.5f / zoom;
+            scrollPos = center;
+        }
+        
         private bool GetAppendKeyDown()
         {
             return Event.current.shift || EditorGUI.actionKey;
         }
 
+        private void AddSelectedNode(MerinoTreeElement node)
+        {
+            if (!selectedNodes.Contains(node))
+            {
+                selectedNodes.Add(node);
+            }
+        }
+        
         #region Prototyping Methods
 
         public List<string> GetCurrentFileNames()
@@ -354,6 +419,19 @@ namespace Merino
 
             return null;
         }
+        
+        private MerinoTreeElement GetNode(int id)
+        {
+            foreach (var node in data.TreeElements)
+            {
+                if (node.depth == -1) continue;
+				
+                if (node.id == id)
+                    return node;
+            }
+
+            return null;
+        }
 
         #endregion
 
@@ -398,14 +476,13 @@ namespace Merino
                     if (node != null)
                     {
                         // handle hit node
-                        
                         if (GetAppendKeyDown())
                         {
                             // add or remove node from selection
                             if (selectedNodes.Contains(node))
                                 selectedNodes.Remove(node);
                             else
-                                selectedNodes.Add(node);
+                                AddSelectedNode(node);
                         }
                         else
                         {
@@ -424,6 +501,10 @@ namespace Merino
                         if (!GetAppendKeyDown())
                             selectedNodes.Clear(); // deselect all nodes
 						
+                        // start box selection
+                        startSelectionBoxPos = e.mousePosition;
+                        boxSelectionNodes = new List<MerinoTreeElement>(selectedNodes);
+                        
                         e.Use();
                     }
                     break;
@@ -454,6 +535,45 @@ namespace Merino
 			            // pan nodemap via alt/left-click
 			            drag = true;
 			        }	
+			        else if (startSelectionBoxPos.x >= 0 && startSelectionBoxPos.y >= 0)
+			        {
+			            // handle contents of selection box
+
+			            // figure out rect of selection box
+			            var topLeft = Vector2.Min(startSelectionBoxPos, e.mousePosition);
+			            var bottomRight = Vector2.Max(startSelectionBoxPos, e.mousePosition);
+			            selectionBox = Rect.MinMaxRect(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y);
+
+			            // apply zoom to rect
+			            Rect zoomSelectionBox = selectionBox;
+			            zoomSelectionBox.position -= scrollPos * zoom;
+			            zoomSelectionBox.position /= zoom;
+			            zoomSelectionBox.size /= zoom;
+
+			            foreach (var node in data.TreeElements)
+			            {
+			                if (zoomSelectionBox.Overlaps(node.nodeRect))
+			                {
+			                    // the selection box overlaps node
+								
+			                    if (boxSelectionNodes.Contains(node))
+			                        selectedNodes.Remove(node);
+			                    else
+			                        AddSelectedNode(node);
+			                }
+			                else if (boxSelectionNodes.Contains(node))
+			                {
+			                    AddSelectedNode(node);
+			                }
+			                else
+			                {
+			                    // selection box doesn't overlap the node
+			                    selectedNodes.Remove(node);
+			                }
+			            }
+						
+			            e.Use();
+			        }
 			        break;
 			    }
 			    case MouseButton.Right:
@@ -501,15 +621,31 @@ namespace Merino
                         dragNode = null;
                         e.Use();
                     }
-					
+                    
+                    // check to see if selection actually changed?
+                    if (selectionBox.size.x > 0 && selectionBox.size.y > 0)
+                    {
+                        var tempList = new List<MerinoTreeElement>(selectedNodes);
+                        selectedNodes = boxSelectionNodes;
+                        selectedNodes = tempList;
+                    }
+                    
                     //TODO: autosave changes made to nodemap
                     break;
                 }
             }
+            		
+            // clear selection box
+            selectionBox.size = Vector2.zero;
+            selectionBox.position = -Vector2.one;
+            startSelectionBoxPos = selectionBox.position;
+            shouldRepaint = true;
         }
         
         protected override void OnScrollWheel(Event e)
         {
+            if (selectionBox.size != Vector2.zero) return;
+
             // get point to zoom in on based on mouse position
             Vector2 zoomCenter;
             zoomCenter.x = e.mousePosition.x / zoom / position.width;
@@ -518,6 +654,25 @@ namespace Merino
 
             HandleZoom(-e.delta.y * 0.01f, zoomCenter);
             e.Use();
+        }
+
+        protected override void OnKeyDown(Event e)
+        {
+            var node = GetNodeAt(e.mousePosition);
+
+            switch (e.keyCode)
+            {
+                case KeyCode.F:
+                {
+                    // focus on selected nodes
+                    if (selectedNodes.Count > 0)
+                    {
+                        FocusNode(selectedNodes.Select(x => x.id).ToList());
+                        Repaint();
+                    }
+                    break;
+                }
+            }
         }
 
         #endregion

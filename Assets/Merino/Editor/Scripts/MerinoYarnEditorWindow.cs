@@ -843,6 +843,9 @@ namespace Merino
 					// node title
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
 					GUILayout.FlexibleSpace();
+
+					// display node position
+					GUILayout.Label( "debug nodePosition: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() );
 					
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));

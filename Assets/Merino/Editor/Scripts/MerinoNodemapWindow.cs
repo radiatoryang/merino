@@ -6,12 +6,6 @@ using UnityEngine;
 
 namespace Merino
 {
-    // RY, 2 March 2019 - just throwing this in here to prototype a speedier nodemap data cache thing, without messing with ScriptableObject stuff
-    public class MerinoNodemapData {
-        [SerializeField] internal IList<MerinoTreeElement> TreeElements = new List<MerinoTreeElement>();
-    }
-
-
     public class MerinoNodemapWindow : MerinoEditorWindow
     {
         public const string windowTitle = "Merino (Nodemap)";
@@ -47,8 +41,6 @@ namespace Merino
         Rect selectionBox;
         Vector2 startSelectionBoxPos = -Vector2.one;
         List<MerinoTreeElement> boxSelectionNodes;
-        
-        [NonSerialized] private MerinoNodemapData data = new MerinoNodemapData();
 
         [MenuItem("Window/Merino/Nodemap", priority = 1)]
         static void MenuItem_GetWindow()
@@ -155,9 +147,9 @@ namespace Merino
 
         void DrawConnections()
         {
-            for (int i = 0; i < data.TreeElements.Count; i++)
+            for (int i = 0; i < MerinoData.TreeElements.Count; i++)
             {
-                var node = data.TreeElements[i];
+                var node = MerinoData.TreeElements[i];
                 if (node.depth == -1) continue; // skip root node and non-yarn node nodes
 
                 Handles.color = Color.white;
@@ -181,9 +173,9 @@ namespace Merino
         
         private void DrawNodes()
         {
-            for (int i = 0; i < data.TreeElements.Count; ++i)
+            for (int i = 0; i < MerinoData.TreeElements.Count; ++i)
             {
-                var node = data.TreeElements[i];
+                var node = MerinoData.TreeElements[i];
                 if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
 
                 Rect windowRect = new Rect(node.nodeRect); //todo: adjust size
@@ -261,7 +253,7 @@ namespace Merino
                         var newFile = MerinoData.CurrentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
                         
                         currentFile = newFile;
-                        data.TreeElements = MerinoCore.GetDataFromFile( currentFile, 1, useFastMode:true );
+                        //data.TreeElements = MerinoCore.GetDataFromFile( currentFile, 1, useFastMode:true );
                         shouldRepaint = true;
                         forceUpdateCurrentFile = false;
                     }
@@ -298,9 +290,9 @@ namespace Merino
         
         MerinoTreeElement GetNodeAt(Vector2 point)
         {
-            for (int i = data.TreeElements.Count - 1; i >= 0; i--) // reverse for loop so we get the nodes on top first
+            for (int i = MerinoData.TreeElements.Count - 1; i >= 0; i--) // reverse for loop so we get the nodes on top first
             {
-                var node = data.TreeElements[i];
+                var node = MerinoData.TreeElements[i];
                 if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
 
                 var rect = node.nodeRect;
@@ -409,7 +401,7 @@ namespace Merino
         
         private MerinoTreeElement GetNode(string name)
         {
-            foreach (var node in data.TreeElements)
+            foreach (var node in MerinoData.TreeElements)
             {
                 if (node.depth == -1) continue;
 				
@@ -422,7 +414,7 @@ namespace Merino
         
         private MerinoTreeElement GetNode(int id)
         {
-            foreach (var node in data.TreeElements)
+            foreach (var node in MerinoData.TreeElements)
             {
                 if (node.depth == -1) continue;
 				
@@ -448,7 +440,7 @@ namespace Merino
             if (MerinoData.CurrentFiles.Count == 0)
             {
                 //clear nodemap data being displayed if files loaded is now 0
-                data.TreeElements = new List<MerinoTreeElement>();
+                MerinoData.TreeElements = new List<MerinoTreeElement>();
                 Repaint();
             }
             
@@ -550,7 +542,7 @@ namespace Merino
 			            zoomSelectionBox.position /= zoom;
 			            zoomSelectionBox.size /= zoom;
 
-			            foreach (var node in data.TreeElements)
+			            foreach (var node in MerinoData.TreeElements)
 			            {
 			                if (zoomSelectionBox.Overlaps(node.nodeRect))
 			                {

@@ -1080,9 +1080,6 @@ namespace Merino
 							MerinoCore.SaveDataToFiles();
 						}
 
-						if (EditorUtils.HasWindow<MerinoNodemapWindow>())
-							GetWindow<MerinoNodemapWindow>().Refresh();
-						
 						// repaint tree view so names get updated
 						m_TreeView.Reload();
 					}

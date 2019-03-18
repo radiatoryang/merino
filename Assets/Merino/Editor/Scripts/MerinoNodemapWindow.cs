@@ -306,7 +306,7 @@ namespace Merino
         
         public void FocusNode(int id)
         {
-            var node = GetNode(id);
+            var node = MerinoData.GetNode(id);
             
             // dont focus on non-node leafs
             if (node.leafType != MerinoTreeElement.LeafType.Node)
@@ -330,7 +330,7 @@ namespace Merino
             var nodes = new List<MerinoTreeElement>();
             foreach (var id in ids)
             {
-                var found = GetNode(id);                
+                var found = MerinoData.GetNode(id);                
                 if (found != null && found.leafType == MerinoTreeElement.LeafType.Node) 
                     nodes.Add(found);
             }
@@ -417,37 +417,11 @@ namespace Merino
 				
                 // TODO: add a way to prevent drawing multiple of the same connection
                 // get and add connected node to list of connections
-                var node = GetNode(splitBody[i]);
+                var node = MerinoData.GetNode(splitBody[i]);
                 if (node != null) connected.Add(node);
             }
 
             return connected;
-        }
-        
-        private MerinoTreeElement GetNode(string name)
-        {
-            foreach (var node in MerinoData.TreeElements)
-            {
-                if (node.depth == -1) continue;
-				
-                if (node.name == name)
-                    return node;
-            }
-
-            return null;
-        }
-        
-        private MerinoTreeElement GetNode(int id)
-        {
-            foreach (var node in MerinoData.TreeElements)
-            {
-                if (node.depth == -1) continue;
-				
-                if (node.id == id)
-                    return node;
-            }
-
-            return null;
         }
 
         #endregion

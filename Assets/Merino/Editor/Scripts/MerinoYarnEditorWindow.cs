@@ -843,10 +843,11 @@ namespace Merino
 					// node title
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
 					GUILayout.FlexibleSpace();
-
-					// display node position
-					GUILayout.Label( "debug nodePosition: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() );
 					
+#if MERINO_DEVELOPER
+					// display node position
+					GUILayout.Label( "Debug NodePosition: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() );
+#endif
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));
 					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", GUI.skin.button, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
@@ -1078,6 +1079,9 @@ namespace Merino
 						{
 							MerinoCore.SaveDataToFiles();
 						}
+
+						if (EditorUtils.HasWindow<MerinoNodemapWindow>())
+							GetWindow<MerinoNodemapWindow>().Refresh();
 						
 						// repaint tree view so names get updated
 						m_TreeView.Reload();

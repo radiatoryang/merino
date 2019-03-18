@@ -215,56 +215,56 @@ namespace Merino
             {
                 GUILayout.Space(2); //small space to mimic unity editor
 
-                if (MerinoData.CurrentFiles.Count > 0)
-                {
-                    var fileOptions = GetCurrentFileNames();
-                    int currentCurrentFile = 0;
-                    if (currentFile != null)
-                    {
-                        currentCurrentFile = fileOptions.IndexOf(currentFile.name);
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrEmpty(previousFileName)) // was the previous file not deleted
-                        {
-                            if (fileOptions.Contains(previousFileName)) //is the file still loaded
-                            {
-                                currentCurrentFile = fileOptions.IndexOf(previousFileName);
-                            }
-                            else
-                            {
-                                currentCurrentFile = fileOptions.IndexOf(fileOptions[0]); // reset to 0 index
-                            }
-                        }
-                        else
-                        {
-                            currentCurrentFile = fileOptions.IndexOf(fileOptions[0]); //reset to 0 index
-                        }
-                    }
-                
-                    GUI.SetNextControlName(popupControl);
-                    int newCurrentFile = EditorGUILayout.Popup( 
-                        currentCurrentFile, 
-                        fileOptions.ToArray(), EditorStyles.toolbarDropDown);
-                
-                    if (currentCurrentFile != newCurrentFile || forceUpdateCurrentFile)
-                    {
-                        // change current file to new file
-                        var newFile = MerinoData.CurrentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
-                        
-                        currentFile = newFile;
-                        //data.TreeElements = MerinoCore.GetDataFromFile( currentFile, 1, useFastMode:true );
-                        shouldRepaint = true;
-                        forceUpdateCurrentFile = false;
-                    }
-                }
-                else
-                {
-                    //todo: implement into logic above, or just keep as a dummy popup i guess.
-                    var fileOptions = new string[] {"No Files Loaded"};
-                    GUI.SetNextControlName(popupControl);
-                    EditorGUILayout.Popup(0, fileOptions, EditorStyles.toolbarDropDown);
-                }
+//                if (MerinoData.CurrentFiles.Count > 0)
+//                {
+//                    var fileOptions = GetCurrentFileNames();
+//                    int currentCurrentFile = 0;
+//                    if (currentFile != null)
+//                    {
+//                        currentCurrentFile = fileOptions.IndexOf(currentFile.name);
+//                    }
+//                    else
+//                    {
+//                        if (!string.IsNullOrEmpty(previousFileName)) // was the previous file not deleted
+//                        {
+//                            if (fileOptions.Contains(previousFileName)) //is the file still loaded
+//                            {
+//                                currentCurrentFile = fileOptions.IndexOf(previousFileName);
+//                            }
+//                            else
+//                            {
+//                                currentCurrentFile = fileOptions.IndexOf(fileOptions[0]); // reset to 0 index
+//                            }
+//                        }
+//                        else
+//                        {
+//                            currentCurrentFile = fileOptions.IndexOf(fileOptions[0]); //reset to 0 index
+//                        }
+//                    }
+//                
+//                    GUI.SetNextControlName(popupControl);
+//                    int newCurrentFile = EditorGUILayout.Popup( 
+//                        currentCurrentFile, 
+//                        fileOptions.ToArray(), EditorStyles.toolbarDropDown);
+//                
+//                    if (currentCurrentFile != newCurrentFile || forceUpdateCurrentFile)
+//                    {
+//                        // change current file to new file
+//                        var newFile = MerinoData.CurrentFiles.Find(x => x.name == fileOptions[newCurrentFile]);
+//                        
+//                        currentFile = newFile;
+//                        //data.TreeElements = MerinoCore.GetDataFromFile( currentFile, 1, useFastMode:true );
+//                        shouldRepaint = true;
+//                        forceUpdateCurrentFile = false;
+//                    }
+//                }
+//                else
+//                {
+//                    //todo: implement into logic above, or just keep as a dummy popup i guess.
+//                    var fileOptions = new string[] {"No Files Loaded"};
+//                    GUI.SetNextControlName(popupControl);
+//                    EditorGUILayout.Popup(0, fileOptions, EditorStyles.toolbarDropDown);
+//                }
                 
                 GUILayout.FlexibleSpace();
             }
@@ -307,6 +307,11 @@ namespace Merino
         public void FocusNode(int id)
         {
             var node = GetNode(id);
+            
+            // dont focus on non-node leafs
+            if (node.leafType != MerinoTreeElement.LeafType.Node)
+                return;
+            
             if (zoom < 1) 
                 HandleZoom(1 - zoom, Vector2.one * 0.5f); // reset zoom to 1
             scrollPos = -node.nodeRect.center + position.size * 0.5f / zoom;
@@ -325,8 +330,8 @@ namespace Merino
             var nodes = new List<MerinoTreeElement>();
             foreach (var id in ids)
             {
-                var found = GetNode(id);
-                if (found != null) 
+                var found = GetNode(id);                
+                if (found != null && found.leafType == MerinoTreeElement.LeafType.Node) 
                     nodes.Add(found);
             }
 
@@ -348,6 +353,26 @@ namespace Merino
             center.y += position.height * 0.5f / zoom;
             scrollPos = center;
         }
+
+        public void SetSelectedNode(int id)
+        {
+            var node = MerinoData.GetNode(id);
+            
+            if (node.leafType == MerinoTreeElement.LeafType.Node)
+                SelectedNode = node;
+        }
+        
+        public void SetSelectedNode(List<int> ids)
+        {
+            selectedNodes.Clear();
+            foreach (var id in ids)
+            {
+                var node = MerinoData.GetNode(id);
+                
+                if (node.leafType == MerinoTreeElement.LeafType.Node)
+                    selectedNodes.Add(node);
+            }
+        }
         
         private bool GetAppendKeyDown()
         {
@@ -364,15 +389,15 @@ namespace Merino
         
         #region Prototyping Methods
 
-        public List<string> GetCurrentFileNames()
-        {
-            var list = new List<string>();
-
-            foreach (var file in MerinoData.CurrentFiles)
-                list.Add(file.name);
-
-            return list;
-        }
+//        public List<string> GetCurrentFileNames()
+//        {
+//            var list = new List<string>();
+//
+//            foreach (var file in MerinoData.CurrentFiles)
+//                list.Add(file.name);
+//
+//            return list;
+//        }
                 
         List<MerinoTreeElement> GetConnectedNodes(MerinoTreeElement baseNode)
         {

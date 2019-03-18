@@ -537,7 +537,9 @@ PlayerSettings:
   webGLUseEmbeddedResources: 0
   webGLCompressionFormat: 1
   webGLLinkerTarget: 1
-  scriptingDefineSymbols: {}
+  webGLThreadsSupport: 0
+  scriptingDefineSymbols:
+    1: MERINO_DEVELOPER
   platformArchitecture: {}
   scriptingBackend: {}
   il2cppCompilerConfiguration: {}

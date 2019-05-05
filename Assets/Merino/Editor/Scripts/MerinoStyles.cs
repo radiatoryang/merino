@@ -78,6 +78,10 @@ namespace Merino
 			bodyStyle.font = monoFont;
 			bodyStyle.margin = new RectOffset(lineDigits * 12 + 10, 4, 4, 4); // make room for the line numbers!!!
 			bodyStyle.richText = false;
+
+			// fix for Unity 2019.1 ... thanks Richard Pieterse!
+			var defaultStyle = new GUIStyle();
+			bodyStyle.fontSize = defaultStyle.fontSize;
 			
 			return bodyStyle;
 		}

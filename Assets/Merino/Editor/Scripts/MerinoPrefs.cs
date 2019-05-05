@@ -9,6 +9,8 @@ namespace Merino
 	public static class MerinoPrefs 
 	{
 		//editor prefs
+		public static bool useWindowsLineEnding = false;
+		public static string lineEnding { get { return useWindowsLineEnding ? "\r\n" : "\n"; } }
 		public static string newFileTemplatePath = "NewFileTemplate.yarn";
 		public static Color highlightComments = new Color(0.3f, 0.6f, 0.25f);
 		public static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -50,6 +52,10 @@ namespace Merino
 			
 			// Preferences GUI
 			GUILayout.Label("File Handling", EditorStyles.boldLabel);
+
+			// 5 May 2019: user-configurable line endings, fix for issue #26 https://github.com/radiatoryang/merino/issues/26
+			useWindowsLineEnding = EditorGUILayout.ToggleLeft(@" Use Windows line endings [\r\n]? false = [\n]", useWindowsLineEnding);
+
 			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
 			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
 			loggingLevel = (LoggingLevel) EditorGUILayout.EnumPopup("Logging Level", loggingLevel);
@@ -58,7 +64,7 @@ namespace Merino
 			// useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
 
 			// 23 Jan 2019: in reponse to GitHub issue #16, let user disable node validation? (even though I don't really see the point...)
-			validateNodeTitles = EditorGUILayout.ToggleLeft("Validate and correct duplicate node titles", validateNodeTitles);
+			validateNodeTitles = EditorGUILayout.ToggleLeft(" Validate and correct duplicate node titles", validateNodeTitles);
 
 			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
 			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
@@ -95,6 +101,7 @@ namespace Merino
 			loggingLevel = LoggingLevel.Error;
 			useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
+			useWindowsLineEnding = false;
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -129,6 +136,7 @@ namespace Merino
 			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int) LoggingLevel.Error);
 			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
+			useWindowsLineEnding = EditorPrefs.GetBool("MerinoUseWindowsLinesEnding", useWindowsLineEnding );
 
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
@@ -158,6 +166,7 @@ namespace Merino
 			EditorPrefs.SetInt("MerinoLoggingLevel", (int) loggingLevel);
 			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			EditorPrefs.SetBool("MerinoValidateNodeTitles", validateNodeTitles );
+			EditorPrefs.SetBool("MerinoWindowsLineEnding", useWindowsLineEnding );
 			
 			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
 			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );

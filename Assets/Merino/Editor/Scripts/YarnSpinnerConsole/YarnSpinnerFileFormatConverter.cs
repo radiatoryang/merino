@@ -198,15 +198,20 @@ namespace Merino
 
 					var header = string.Format("{0}: {1}", field, value);
 
-					sb.AppendLine(header);
+					sb.Append(MerinoPrefs.lineEnding + header);
 
 				}
 				// now write the body
-				sb.AppendLine("---");
 
-				sb.AppendLine(node.body);
+				// 5 May 2019, changed all AppendLine to use regular Append, with manual line breaks
+				// this is to preserve compatibility with the base Yarn Editor, which doesn't like "\r\n" (which AppendLine uses)
+				// see: https://github.com/radiatoryang/merino/issues/26
 
-				sb.AppendLine("===");
+				sb.Append(MerinoPrefs.lineEnding + "---");
+
+				sb.Append(MerinoPrefs.lineEnding + node.body);
+
+				sb.Append(MerinoPrefs.lineEnding + "===");
 
 			}
 

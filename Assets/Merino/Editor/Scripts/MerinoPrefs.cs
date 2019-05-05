@@ -1,6 +1,9 @@
 ﻿using UnityEditor;
 using UnityEngine;
 
+// disable warning about PreferenceItem being obsolete... will update later
+#pragma warning disable 618
+
 namespace Merino
 {
 	public static class MerinoPrefs 

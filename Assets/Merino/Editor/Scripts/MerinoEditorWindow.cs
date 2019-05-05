@@ -1476,6 +1476,9 @@ namespace Merino
 			MerinoData.ViewState.selectedIDs.Clear();
 			MerinoData.ViewState.selectedIDs.Add(nodeID);
 			// treeView.SetSelection(new List<int>() { nodeID });
+
+			// as of v0.5.3, we have a separate playtest editorWindow; if user clicks "View Source" without an open text editorWindow, it throws null reference
+			if ( treeView == null || treeView.treeModel == null ) return; 
 			
 			// grab the node, count the lines, and guess the line number
 			var node = treeView.treeModel.Find(nodeID);

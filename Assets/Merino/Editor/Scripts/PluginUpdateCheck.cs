@@ -7,6 +7,8 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEditor;
 
+// ignore warnings about unused vars
+#pragma warning disable 649
 // ignore warnings about WWW usage, we'll upgrade later
 #pragma warning disable 618
 // ignore warnings if displayReleaseNotes is false

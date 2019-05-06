@@ -19,6 +19,8 @@ namespace Merino
 		// public static Color highlightVariables;
 		public static bool useYarnSpinnerExperimentalMode = false;
 		public static bool validateNodeTitles = true;
+		public static int tabSize = 0;
+		public static bool useTabbedBackspace { get { return tabSize > 0; } }
 
 		//hidden prefs
 		public static bool stopOnDialogueEnd = true;
@@ -51,22 +53,30 @@ namespace Merino
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 			
 			// Preferences GUI
-			GUILayout.Label("File Handling", EditorStyles.boldLabel);
-
-			// 5 May 2019: user-configurable line endings, fix for issue #26 https://github.com/radiatoryang/merino/issues/26
-			useWindowsLineEnding = EditorGUILayout.ToggleLeft(@" Use Windows line endings [\r\n]? false = [\n]", useWindowsLineEnding);
+			GUILayout.Label("File Handling", EditorStyles.boldLabel); // =============================================================
 
 			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
 			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
 			loggingLevel = (LoggingLevel) EditorGUILayout.EnumPopup("Logging Level", loggingLevel);
 
-			// 14 Oct 2018: commented out experimental mode, it seems to have the same parser problem as before: can't read "---" sentinel, keeps looking for node header data  -RY
-			// useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
-
 			// 23 Jan 2019: in reponse to GitHub issue #16, let user disable node validation? (even though I don't really see the point...)
 			validateNodeTitles = EditorGUILayout.ToggleLeft(" Validate and correct duplicate node titles", validateNodeTitles);
+			
+			// 5 May 2019: user-configurable line endings, fix for issue #26 https://github.com/radiatoryang/merino/issues/26
+			useWindowsLineEnding = EditorGUILayout.ToggleLeft(@" Use Windows line endings [\r\n]? false = [\n]", useWindowsLineEnding);
 
-			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel);
+			GUILayout.Space(16);
+			GUILayout.Label("Experimental / kinda buggy", EditorStyles.boldLabel); // =============================================================
+
+			// 2 Feb 2019: added "tab size" setting, in response to issue #20
+			GUILayout.Label("Tab Size replaces all tabs with spaces, but for now it's buggy!\ndon't hold TAB or press TAB too fast, or else it can't catch up");
+			tabSize = EditorGUILayout.IntField("Size (<= 0: keep tabs)", tabSize );
+			
+			// 14 Oct 2018: commented out experimental mode, it seems to have the same parser problem as before: can't read "---" sentinel, keeps looking for node header data  -RY
+			useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
+
+			GUILayout.Space(16);
+			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel); // =============================================================
 			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
 			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
 			highlightNodeOptions = EditorGUILayout.ColorField("[[NodeOptions]]", highlightNodeOptions);
@@ -102,6 +112,7 @@ namespace Merino
 			useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
 			useWindowsLineEnding = false;
+			tabSize = 0;
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -137,6 +148,7 @@ namespace Merino
 			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			useWindowsLineEnding = EditorPrefs.GetBool("MerinoUseWindowsLinesEnding", useWindowsLineEnding );
+			tabSize = EditorPrefs.GetInt("MerinoTabSize", tabSize);
 
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightCommands"), out highlightCommands);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
@@ -167,6 +179,7 @@ namespace Merino
 			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			EditorPrefs.SetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			EditorPrefs.SetBool("MerinoWindowsLineEnding", useWindowsLineEnding );
+			EditorPrefs.SetInt("MerinoTabSize", tabSize );
 			
 			EditorPrefs.SetString("MerinoHighlightCommands", "#"+ColorUtility.ToHtmlStringRGB(highlightCommands) );
 			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );

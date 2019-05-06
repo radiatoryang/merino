@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions; // for Word Count
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
@@ -23,7 +24,10 @@ namespace Merino
 		public MerinoTreeView treeView {
 			get { return m_TreeView; }
 		}
-		// double lastTabTime = 0.0; // this is a really bad hack
+
+		// used for keyboard tab / space replacement
+		double lastTabTime = 0.0; 
+		bool moveCursorAfterTab = false;
 
 		const int margin = 10;
 		[SerializeField] Vector2 scrollPos;
@@ -79,7 +83,7 @@ namespace Merino
 		
 		// node management
 		private List<int> DeleteList = new List<int>();
-		int currentNodeIDEditing;
+		int currentNodeIDEditing, currentNodeWordCountCache;
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
@@ -278,6 +282,13 @@ namespace Merino
 			{
 				MerinoCore.ReimportFiles();
 				MerinoCore.LastSaveTime = EditorApplication.timeSinceStartup + 99999; // don't save again until SaveDataToFile resets the variable
+			}
+
+			// calculate and cache wordcount
+			if ( currentNodeIDEditing > -1 && treeView != null && treeView.treeModel != null && treeView.treeModel.Find(currentNodeIDEditing) != null && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node ) {
+				currentNodeWordCountCache = GetWordCount( treeView.treeModel.Find(currentNodeIDEditing).nodeBody );
+			} else {
+				currentNodeWordCountCache = -1;
 			}
 		}
 
@@ -962,7 +973,7 @@ namespace Merino
 					
 					// NODE BODY ======================================================================
 					var backupContentColor = GUI.contentColor;
-					string passage = m_TreeView.treeModel.Find(id).nodeBody;
+					string passage = DoKeyboardTabReplacement( m_TreeView.treeModel.Find(id).nodeBody );
 					float height = EditorStyles.textArea.CalcHeight(new GUIContent(passage), rect.width);
 					
 					// start preparing to draw the body
@@ -992,6 +1003,7 @@ namespace Merino
 					
 					// draw chunks as TextAreas, each with their own highlighting and line number overlays
 					var newBodies = new string[chunkCount];
+					bool forceSave = false; // a hack so that DoKeyboardTabReplacement() can force a save
 					for( int chunkIndex=0; chunkIndex<passageChunks.Length; chunkIndex++) {
 						int chunkStart = chunkIndex * chunkSize; // line number this chunk starts at
 						int chunkEnd = (chunkIndex + 1) * chunkSize; // line number this chunk ends at
@@ -1056,6 +1068,44 @@ namespace Merino
 							{
 								spaceWillIncrementUndo = true;
 							}
+
+
+                            // NEW APPROACH TO HANDLING KEYBOARD TABS: replace all tab characters with equivalent spaces, and move caret forward
+
+							// TODO: this is still very hacky, because I still don't know how exactly to time when the tab character gets inserted into TextArea
+							// so for now, this is just approximating the tab count with a timed delay... works OK as long as you don't hold down TAB?
+                            if (MerinoPrefs.tabSize > 0 && Event.current.type != EventType.Layout)
+                            {
+								// move keyboard caret forward
+                                if (moveCursorAfterTab)
+                                {
+                                    te.cursorIndex += MerinoPrefs.tabSize - 1;
+                                    te.selectIndex = te.cursorIndex;
+                                    forceSave = true;
+                                    moveCursorAfterTab = false;
+                                }
+
+                                // keyboard tab replacement:
+                                te.text = DoKeyboardTabReplacement(te.text);
+                                if ((Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') && te.text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.1)
+                                {
+                                    lastTabTime = EditorApplication.timeSinceStartup;
+                                    moveCursorAfterTab = true;
+                                    forceSave = true;
+                                }
+
+                                // keyboard tabbed backspace: delete X increments of consecutive spaces backwards
+                                if (MerinoPrefs.useTabbedBackspace && Event.current.keyCode == KeyCode.Backspace && EditorApplication.timeSinceStartup > lastTabTime + 0.1)
+                                {
+                                    if ( te.cursorIndex-MerinoPrefs.tabSize >= 0 && String.IsNullOrWhiteSpace( te.text.Substring(te.cursorIndex-MerinoPrefs.tabSize, MerinoPrefs.tabSize) ) ) {
+										te.selectIndex -= MerinoPrefs.tabSize-1;
+										te.DeleteSelection();
+										newBodies[chunkIndex] = te.text;
+									}
+                                    lastTabTime = EditorApplication.timeSinceStartup;
+                                    forceSave = true;
+                                }
+                            }
 
 							// now, anything that has to do with counting lines or word-level alignment
 							
@@ -1153,7 +1203,7 @@ namespace Merino
 					EditorGUILayout.Separator();
 					
 					// did user edit something?
-					if (EditorGUI.EndChangeCheck() )
+					if (EditorGUI.EndChangeCheck() || forceSave )
 					{
 						// remember last edited node, for the "playtest this" button in lower-right corner
 						currentNodeIDEditing = id;
@@ -1271,27 +1321,14 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 
-		// I can't believe I finally got this to work, wow
-		// only needed for GUILayout.TextArea
-//		string KeyboardTabSupport(string text, TextEditor te)
-//		{
-//			if ( GUIUtility.keyboardControl == te.controlID && Event.current.type != EventType.Layout && (Event.current.keyCode == KeyCode.Tab || Event.current.character == '\t') )
-//			{
-//				int cursorIndex = te.cursorIndex;
-//				GUI.FocusControl("TextArea");
-//				if (text.Length > te.cursorIndex && EditorApplication.timeSinceStartup > lastTabTime + 0.2)
-//				{
-//					lastTabTime = EditorApplication.timeSinceStartup;
-//					text = text.Insert(te.cursorIndex, "\t");
-//					te.cursorIndex = cursorIndex + 1;
-//					te.selectIndex = te.cursorIndex;
-//				}
-//
-//				Event.current.Use();
-//				GUI.FocusControl("TextArea");
-//			}
-//			return text;
-//		}
+        string DoKeyboardTabReplacement(string text)
+        {
+			if ( MerinoPrefs.tabSize > 0 ) {
+				string tabReplace = new string(' ', MerinoPrefs.tabSize);
+				text = text.Replace( "\t", tabReplace );
+			}
+            return text;
+		}
 
 		string DoSyntaxMarch(string text)
 		{
@@ -1456,6 +1493,11 @@ namespace Merino
 				}
 
 				GUILayout.FlexibleSpace ();
+
+				// word count, based on last node you touched
+				if ( currentNodeWordCountCache > -1 ) {
+					GUILayout.Label( currentNodeWordCountCache.ToString() + " words  " );
+				}
 				
 				// playtest button, based on the last node you touched
 				if (currentNodeIDEditing > -1 
@@ -1468,6 +1510,11 @@ namespace Merino
 			}
 
 			GUILayout.EndArea();
+		}
+
+		public static int GetWordCount(string text) {
+        	MatchCollection collection = Regex.Matches(text, @"[\S]+");
+        	return collection.Count;
 		}
 
 		// a lot of the logic for this is handled in OnGUI > DrawMainPane, this just sets variables to get read elsewhere

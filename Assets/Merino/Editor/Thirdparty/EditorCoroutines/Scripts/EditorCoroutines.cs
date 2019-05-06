@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System;
 using System.Reflection;
 
+#pragma warning disable 618
+
 namespace Merino.EditorCoroutines
 {
 	public class EditorCoroutines

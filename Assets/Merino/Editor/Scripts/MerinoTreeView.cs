@@ -18,7 +18,8 @@ namespace Merino
 		// corresponds to MerinoTreeElement.leafType
 		static Texture2D[] MerinoIcons =
 		{
-			(Texture2D)Resources.Load<Texture>("Merino_NodeIcon"),
+			//(Texture2D)Resources.Load<Texture>("Merino_NodeIcon"),
+			MerinoEditorResources.Node,
 			(Texture2D)EditorGUIUtility.IconContent ("TextAsset Icon").image, // FILE
 			EditorGUIUtility.FindTexture ("Folder Icon") // FOLDER
 		};

@@ -9,16 +9,18 @@ download and install from the [Releases page](https://github.com/radiatoryang/me
 - "minimal" .unitypackage is just Merino folder
 
 ## usage / help / how-to / documentation
-read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support... [changelog is here](https://github.com/radiatoryang/merino/wiki/Changelog)
+read the [wiki documentation](https://github.com/radiatoryang/merino/wiki) for info on writing with Yarn / troubleshooting and tech support... [full changelog is here](https://github.com/radiatoryang/merino/wiki/Changelog)
 
 ### roadmap
 - edit Yarn node tags
-- auto-complete typing
-- detect characters, functions, nodes, variables for auto-complete
-- inline syntax highlighting for variable names somehow
 - node map visualization
+- line tagging for localization (pending new Yarn Spinner update)
 
-### uses other peoples code
+## maintainers
+- Robert Yang @radiatoryang
+- Adrienne Lombardo @charblar
+
+### uses other peoples' code
 - Unity Editor Coroutines https://github.com/marijnz/unity-editor-coroutines
 - Yarn Spinner https://github.com/thesecretlab/YarnSpinner
 - Yarn https://github.com/InfiniteAmmoInc/Yarn

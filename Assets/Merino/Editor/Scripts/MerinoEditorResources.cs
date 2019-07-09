@@ -164,6 +164,10 @@ namespace Merino
                         else
                         {
                             prop.FindPropertyRelative("free").objectReferenceValue = texture;
+                            // if there isn't a pro version, then just use the free version
+                            if ( prop.FindPropertyRelative("pro").objectReferenceValue == null ) {
+                                prop.FindPropertyRelative("pro").objectReferenceValue = texture;
+                            }
                         }
                     }       
                 }

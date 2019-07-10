@@ -13,7 +13,7 @@ namespace Merino
 			{
 				if (_monoFont == null)
 				{
-					_monoFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Merino/Editor/Fonts/Inconsolata-Regular.ttf");
+					_monoFont = AssetDatabase.LoadAssetAtPath<Font>(MerinoCore.LocateMerinoFolder( relativeToProjectFolder:true ) + "/Editor/Fonts/Inconsolata-Regular.ttf");
 				}
 
 				return _monoFont;

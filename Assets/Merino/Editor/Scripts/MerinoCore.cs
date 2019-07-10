@@ -24,7 +24,9 @@ namespace Merino
             {
                 foreach (var file in MerinoData.DirtyFiles)
                 {
-                    AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
+					if (file != null) {
+                    	AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(file));
+					}
                 }
             }
 
@@ -44,13 +46,26 @@ namespace Merino
         {
             if (MerinoData.CurrentFiles.Count > 0 )
             {
-                foreach (var file in MerinoData.CurrentFiles)
+                for (int i = 0; i < MerinoData.CurrentFiles.Count; i++)
                 {
-	                if (MerinoData.FileToNodeID.ContainsKey(file))
+                    TextAsset file = MerinoData.CurrentFiles[i];
+                    if (MerinoData.FileToNodeID.ContainsKey(file))
 	                {
-		                File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString(MerinoData.FileToNodeID[file]));
-		                EditorUtility.SetDirty(file);
-		                LastSaveTime = EditorApplication.timeSinceStartup;
+						if ( file == null ) {
+							var missingDataID = MerinoData.FileToNodeID[file];
+							MerinoData.DirtyFiles.Remove(file); // wait how does this work? it's null, but the pointer isn't?
+							MerinoData.CurrentFiles.RemoveAt(i);
+							i--;
+							var missingFileName = MerinoData.GetNode(missingDataID) != null ? MerinoData.GetNode(missingDataID).name : "<cannot recover filename>";
+							if ( EditorUtility.DisplayDialog("Can't save file " + missingFileName, "The file has been deleted, moved outside of the project's assets folder, or otherwise hidden. Merino can't find it.", "Save backup of current data as new file", "Do nothing" ) ) {
+								MerinoEditorWindow.GetEditorWindow().CreateNewYarnFile( "YarnBackupOfFile", SaveAllNodesAsString(missingDataID) );
+							}
+							continue;
+						} else {
+		                	File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString(MerinoData.FileToNodeID[file]));
+		                	EditorUtility.SetDirty(file);
+		                	LastSaveTime = EditorApplication.timeSinceStartup;
+						}
 	                }
 	                else
 	                {
@@ -105,10 +120,10 @@ namespace Merino
 		}
 
 		// used internally for playtest preview
-		public static string SaveAllNodesAsString()
+		public static string SaveAllNodesAsString(int onlyWithFileID = -1)
 		{	
 			// gather data
-			if (MerinoPrefs.validateNodeTitles) 
+			if (MerinoPrefs.validateNodeTitles && onlyWithFileID == -1) 
 			{
 				ValidateNodeTitles();
 			}
@@ -116,20 +131,17 @@ namespace Merino
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
 
 			// save data to string
-			//todo: move back over to linq, we were getting null ref exception so using this for the time being
 			var treeNodes = new List<MerinoTreeElement>();
-			foreach (var merinoTreeElement in MerinoData.TreeElements)
-			{
-				if (merinoTreeElement.leafType == MerinoTreeElement.LeafType.Node)
-				{
-					treeNodes.Add(merinoTreeElement);
-				}
+
+			if ( onlyWithFileID >= 0) {
+				treeNodes = GetAllCachedChildren(onlyWithFileID);
+			} else {
+				treeNodes = MerinoData.TreeElements;
 			}
 			
 			foreach (var treeNode in treeNodes)
 			{
-				// skip the root
-				if (treeNode.depth == -1)
+				if (treeNode.depth == -1 || treeNode.leafType != MerinoTreeElement.LeafType.Node)
 				{
 					continue;
 				}
@@ -233,8 +245,20 @@ namespace Merino
 			}
 			
 		}
+
+		public static List<MerinoTreeElement> GetAllCachedChildren(int parentID) 
+		{
+			var search = new List<int>() { parentID };
+			var children = new List<MerinoTreeElement>();
+			while ( search.Count > 0) {
+				var newChildren = MerinoData.TreeElements.Where( e => e.cachedParentID == search[0]);
+				children.AddRange( newChildren );
+				search.AddRange( newChildren.Select( child => child.id) );
+				search.RemoveAt(0);
+			}
+			return children;
+		}
 	    
-		// FYI: TextAsset source basically does nothing right now, will be removed
 		public static IList<MerinoTreeElement> GetData()
 		{
 			// init variables, create global tree root
@@ -248,8 +272,17 @@ namespace Merino
 			// then go through each file and get nodes for it, adding folder nodes as appropriate
 			int nodeID = 1;
 
-			foreach (var yarnFile in MerinoData.CurrentFiles)
+            for (int i = 0; i < MerinoData.CurrentFiles.Count; i++)
 			{
+                var yarnFile = MerinoData.CurrentFiles[i];
+
+                // v0.5.4, handle if yarn file might've been deleted
+                if ( yarnFile == null) {
+					MerinoData.CurrentFiles.RemoveAt(i);
+					i--;
+					continue;
+				}
+
 				// all folders are now created, let's add the yarn data now
 				var yarnData = GetDataFromFile(yarnFile, nodeID);
 				
@@ -294,6 +327,13 @@ namespace Merino
 			}
 
 			// load nodes
+			
+			// if there's no header sentinel in the text file, then just return an empty list
+			if ( !source.text.Contains("---") ) {
+				return treeElements;
+			}
+
+			// otherwise, load nodes from file
 			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
 			var parents = new Dictionary<MerinoTreeElement, string>();
 			foreach (var node in nodes)
@@ -312,6 +352,7 @@ namespace Merino
 				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
 				{
 					newItem.parent = fileRoot;
+					newItem.cachedParentID = newItem.parent.id;
 					fileRoot.children.Add(newItem);
 				}
 				else
@@ -363,7 +404,7 @@ namespace Merino
 		/// <summary>
 		/// Returns the path of the Merino folder, based on the location of MerinoEditorWindow.cs since that should always be in there.
 		/// </summary>
-		private static string LocateMerinoFolder()
+		public static string LocateMerinoFolder(bool relativeToProjectFolder=false)
 		{
 			string[] results = Directory.GetFiles(Application.dataPath, "MerinoEditorWindow.cs", SearchOption.AllDirectories);
 			if (results.Length > 0)
@@ -372,6 +413,9 @@ namespace Merino
 				while (parent.Name != "Merino")
 					parent = parent.Parent;
 
+				if ( relativeToProjectFolder ) {
+					return "Assets" + parent.FullName.Substring(Application.dataPath.Length);
+				}
 				return parent.FullName;
 			}
 

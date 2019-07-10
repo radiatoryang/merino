@@ -145,6 +145,10 @@ namespace Merino
 		{
 			GetWindow<MerinoEditorWindow>(windowTitle, true);
 		}
+
+		public static MerinoEditorWindow GetEditorWindow() {
+			return GetWindow<MerinoEditorWindow>(windowTitle, true);
+		}
 		
 		void ResetMerino()
 		{
@@ -181,6 +185,11 @@ namespace Merino
 			{
 				string path =  EditorGUIUtility.isProSkin ? "icons/d_animation.prevkey.png" : "icons/animation.prevkey.png";
 				resetIcon = EditorGUIUtility.Load(path) as Texture;
+			}
+
+			if ( MerinoEditorResources.PageNew == null ) {
+				MerinoEditorResources.GenerateResourcesScript();
+				MerinoEditorResources.UpdateTextureReferences( MerinoEditorResources.Instance );
 			}
 		}
 		
@@ -405,14 +414,17 @@ namespace Merino
 				}
 			}
 		}
+
+		void CreateNewYarnFile() { // for the menu items and callbacks
+			CreateNewYarnFile("NewYarnFile");
+		}
 		
-		void CreateNewYarnFile()
+		public void CreateNewYarnFile(string defaultName = "NewYarnFile", string fileContents = "")
 		{
 			string defaultPath = Application.dataPath + "/";
-			string defaultName = "NewYarnFile";
-			if (MerinoData.CurrentFiles.Count > 0)
+			if (MerinoData.CurrentFiles.Where( file => file != null).Count() > 0)
 			{
-				var lastFile = MerinoData.CurrentFiles.Last();
+				var lastFile = MerinoData.CurrentFiles.Where( file => file != null).Last();
 				defaultPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6) + AssetDatabase.GetAssetPath(lastFile );
 				defaultName = lastFile.name.Substring(0, lastFile.name.Length - 5); // -5 because ignore ".yarn" at end of file name
 			}
@@ -429,8 +441,27 @@ namespace Merino
 				} 
 				else
 				{
-					var defaultData = GetDefaultData();
-					File.WriteAllText(fullFilePath, defaultData != null ? defaultData.text : "");
+					// v0.5.4, 9 July 2019: bug on MacOS results in warning dialog 'You cannot save this file with extension ".txt" at the end of the name. The required extension is ".yarn.txt".'
+					// and if user clicks "Use .yarn.txt" then the file name results in something absurd like "NewYarnFile.yarn.txt.yarn.yarn.txt"... if clicks "Use both" then results in "NewYarnFile.yarn.txt.yarn.txt.yarn.txt"
+					// so these are hacks to correct the file name
+					if ( fullFilePath.EndsWith(".yarn.txt.yarn.yarn.txt") ) {
+						fullFilePath = fullFilePath.Substring(0, fullFilePath.Length - ".yarn.yarn.txt".Length);
+					}
+					if ( fullFilePath.EndsWith(".yarn.txt.yarn.txt.yarn.txt") ) {
+						fullFilePath = fullFilePath.Substring(0, fullFilePath.Length - ".yarn.txt.yarn.txt".Length);
+					}
+					if ( fullFilePath.EndsWith(".yarn.yarn.txt") ) { // user tries to correct by removing extension, clicks "use .yarn.txt"
+						fullFilePath = fullFilePath.Substring(0, fullFilePath.Length - ".yarn.yarn.txt".Length) + ".yarn.txt";
+					}
+					if ( fullFilePath.EndsWith(".yarn.txt.yarn.txt") ) { // user tries to correct by removing extension, clicks "use both"
+						fullFilePath = fullFilePath.Substring(0, fullFilePath.Length - ".yarn.txt".Length);
+					}
+
+					if ( string.IsNullOrEmpty(fileContents) && GetDefaultData() != null) {
+						fileContents = GetDefaultData().text;
+					} 
+
+					File.WriteAllText(fullFilePath, fileContents);
 					AssetDatabase.Refresh();
 					var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets" + fullFilePath.Substring(Application.dataPath.Length));
 					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(newFile));
@@ -460,7 +491,10 @@ namespace Merino
 		
 		static bool IsProbablyYarnFile(TextAsset textAsset)
 		{
-			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
+			// v0.5.4, 9 June 2019: commented-out stricter .yarn.txt file checks, since Merino theoretically lets you delete all the nodes from the file
+			// for the discussion, see https://github.com/radiatoryang/merino/issues/28
+			// - RY
+			if ( AssetDatabase.GetAssetPath(textAsset).EndsWith(".yarn.txt") ) // && textAsset.text.Contains("---") && textAsset.text.Contains("===") && textAsset.text.Contains("title:") )
 			{
 				return true;
 			}
@@ -548,9 +582,12 @@ namespace Merino
 				newID = m_TreeView.treeModel.GenerateUniqueID();
 				var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
 				newNode.nodeBody = "Write here.\n";
-				m_TreeView.treeModel.AddElement(newNode, parent, 0);
+				newNode.cachedParentID = parent.id;
+				m_TreeView.treeModel.AddElement(newNode, parent, parent.children.Count);
 				m_TreeView.FrameItem(newID);
-				m_TreeView.SetSelection(new List<int>() {newID});
+				var newSelect = m_TreeView.GetSelection().ToList();
+				newSelect.Add( newID );
+				m_TreeView.SetSelection( newSelect );
 			}
 
 			// if creating only one node, then prompt user rename it (like Unity's Project tab)
@@ -566,7 +603,7 @@ namespace Merino
 			}
 		}
 
-		public void AddNodeToDelete(int id)
+		public void AddNodeToDelete(int id, bool fileWasDeletedOverride = false)
 		{
 			if (m_TreeView.treeModel.Find(id).leafType == MerinoTreeElement.LeafType.Node)
 			{
@@ -578,7 +615,10 @@ namespace Merino
 			}
 			else
 			{
-				if (!EditorUtility.DisplayDialog("Unload File?",
+				if ( fileWasDeletedOverride ) 
+				{
+					EditorUtility.DisplayDialog("Loaded file was deleted and/or cannot be found.", "The file " + m_TreeView.treeModel.Find(id).name + " was deleted. It will be unloaded from Merino.", "Ok, understood.");
+				} else if (!EditorUtility.DisplayDialog("Unload File?",
 					"Are you sure you want to unload file " + m_TreeView.treeModel.Find(id).name + "? Unsaved changes will be lost.", "Unload", "Cancel"))
 				{
 					return;
@@ -894,11 +934,18 @@ namespace Merino
 			int idToPreview = -1;
 			int idToZoomTo = -1;
 			if (MerinoData.ViewState.selectedIDs.Count > 0)
-			{
+			{ 
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 				
 				foreach (var id in MerinoData.ViewState.selectedIDs)
 				{
+					// if MerinoData.ViewState has been corrupted, then try to purge corrupt tree elements
+					if (m_TreeView.treeModel.Find(id) == null) {
+						MerinoData.ViewState.selectedIDs.Remove(id);
+						EditorGUILayout.EndScrollView();
+						break;
+					}
+
 					// DRAW FILE NODE ==================================================================
 					if (m_TreeView.treeModel.Find(id).leafType == MerinoTreeElement.LeafType.File)
 					{
@@ -909,28 +956,64 @@ namespace Merino
 						if (GUILayout.Button(new GUIContent(" Unload File", resetIcon), GUILayout.Width(110)))
 						{
 							AddNodeToDelete(id);
+							EditorGUILayout.EndHorizontal();
+							EditorGUILayout.EndVertical();
+							continue;
 						}
 						EditorGUILayout.EndHorizontal();
 
 						EditorGUILayout.BeginHorizontal();
-						var textAsset = GetTextAssetForNode(m_TreeView.treeModel.Find(id) );
-						
-						// if the file got renamed in Project tab, then we can refresh the node name here, at least
-						if (textAsset.name != m_TreeView.treeModel.Find(id).name)
-						{
-							m_TreeView.treeModel.Find(id).name = textAsset.name;
-							m_TreeView.Reload();
-						}
-						
-						GUI.enabled = false;
-						EditorGUILayout.ObjectField(textAsset, typeof(TextAsset), false);
-						GUI.enabled = true;
-						EditorGUILayout.SelectableLabel( AssetDatabase.GetAssetPath(textAsset) );
-						EditorGUILayout.EndHorizontal();
+						var fileNode = m_TreeView.treeModel.Find(id);
+						var textAsset = fileNode != null ? GetTextAssetForNode( fileNode ) : null;
 
-						GUI.enabled = false;
-						EditorGUILayout.TextArea(textAsset.text, MerinoStyles.GetBodyStyle(0) );
-						GUI.enabled = true;
+						// if the text asset got deleted, then unload it automatically
+						// if ( textAsset == null ) {
+						// 	AddNodeToDelete(id, true);
+						// 	EditorGUILayout.EndHorizontal();
+						// 	EditorGUILayout.EndVertical();
+						// 	continue;
+						// }
+						
+						if ( textAsset != null ) {
+							// if the file got renamed in Project tab, then we can refresh the node name here, at least
+							if (textAsset.name != m_TreeView.treeModel.Find(id).name)
+							{
+								m_TreeView.treeModel.Find(id).name = textAsset.name;
+								m_TreeView.Reload();
+							}
+							
+							GUI.enabled = false;
+							EditorGUILayout.ObjectField(textAsset, typeof(TextAsset), false);
+							GUI.enabled = true;
+							EditorGUILayout.SelectableLabel( AssetDatabase.GetAssetPath(textAsset) );
+							EditorGUILayout.EndHorizontal();
+
+							// if ( !MerinoPrefs.useAutosave) {
+								EditorGUILayout.HelpBox("Editing .yarn.txt files directly is disabled. To write, select a node in the left sidebar.", MessageType.Warning);
+							// }
+							GUI.enabled = false; //MerinoPrefs.useAutosave;
+							// EditorGUI.BeginChangeCheck();
+							string newText = EditorGUILayout.TextArea(textAsset.text, MerinoStyles.GetBodyStyle(0) );
+							// if ( EditorGUI.EndChangeCheck() ) {
+							// 	File.WriteAllText( AssetDatabase.GetAssetPath(textAsset), newText );
+							// 	MerinoData.Timestamp = EditorApplication.timeSinceStartup;
+							// 	MerinoCore.MarkFileDirty( textAsset );
+							// 	// save after commit if we're autosaving
+							// 	if (MerinoData.CurrentFiles.Count > 0 && MerinoPrefs.useAutosave)
+							// 	{
+							// 		MerinoCore.SaveDataToFiles();
+							// 		// TODO: how to update from text file?
+							// 		MerinoCore.GetDataFromFile( textAsset, MerinoData.FileToNodeID[textAsset]);
+							// 	}
+							// }
+							GUI.enabled = true;
+						} else {
+							EditorGUILayout.LabelField("Couldn't find the Text Asset; the file has been deleted or moved outside of the Assets folder.");
+							EditorGUILayout.EndHorizontal();
+							if ( GUILayout.Button("Save All + try to recover data and save as new .yarn.txt file") ) {
+								MerinoCore.SaveDataToFiles();
+							}
+						}
 						
 						EditorGUILayout.EndVertical();
 						EditorGUILayout.Space();
@@ -1041,6 +1124,9 @@ namespace Merino
 						
 						// syntax highlight via label overlay
 						Rect lastRect = new Rect(bodyRect);
+						// for v0.5.4, I explored a "display whitespace characters" option, but unfortunately IMGUI doesn't recognize the characters as spaces, so wordwrap gets broken
+						// so for now, this is unused, pending further research or need.  -RY, 9 July 2019
+						// .Replace(' ', '·')
 						string syntaxHighlight = DoSyntaxMarch(newBodies[chunkIndex]); // inserts richtext <color> tags to do highlighting
 						GUI.Label(lastRect, syntaxHighlight, MerinoStyles.GetHighlightStyle(lineDigits, 0.8f)); // drawn on top of actual TextArea
 					

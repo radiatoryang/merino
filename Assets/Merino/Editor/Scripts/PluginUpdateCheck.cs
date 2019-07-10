@@ -30,7 +30,7 @@ namespace Merino
         /// <summary>
         /// Version of the plugin, this will be compared against the latest release on GitHub.
         /// </summary>
-        private static readonly Version CurrentVersion = new Version("0.5.2");
+        private static readonly Version CurrentVersion = new Version("0.5.4");
         /// <summary>
         /// Github user/organization the repo belongs to.
         /// </summary>
@@ -180,7 +180,7 @@ namespace Merino
             Close();
         }
         
-        [MenuItem("Tools/" + pluginName + "/Check for Updates")]
+        [MenuItem(pluginName + "/Check for Updates")]
         private static void CheckForUpdates()
         {
             forceCheckVersion = true;

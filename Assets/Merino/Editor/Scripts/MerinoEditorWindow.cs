@@ -555,6 +555,8 @@ namespace Merino
 
 		public void AddNewNode(IList<int> parents=null)
 		{
+			Debug.Log( string.Join(", ", parents.Select( x => x.ToString()).ToArray() ) );
+
 			if (MerinoData.CurrentFiles.Count == 0)
 			{
 				return;
@@ -583,7 +585,7 @@ namespace Merino
 				var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
 				newNode.nodeBody = "Write here.\n";
 				newNode.cachedParentID = parent.id;
-				m_TreeView.treeModel.AddElement(newNode, parent, parent.children.Count);
+				m_TreeView.treeModel.AddElement(newNode, parent, parent.children != null ? parent.children.Count : 0);
 				m_TreeView.FrameItem(newID);
 				var newSelect = m_TreeView.GetSelection().ToList();
 				newSelect.Add( newID );

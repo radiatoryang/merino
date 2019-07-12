@@ -30,7 +30,7 @@ namespace Merino
         /// <summary>
         /// Version of the plugin, this will be compared against the latest release on GitHub.
         /// </summary>
-        private static readonly Version CurrentVersion = new Version("0.5.4");
+        private static readonly Version CurrentVersion = new Version("0.5.5");
         /// <summary>
         /// Github user/organization the repo belongs to.
         /// </summary>

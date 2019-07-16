@@ -557,7 +557,7 @@ namespace Merino
 
 		public void AddNewNode(IList<int> parents=null)
 		{
-			Debug.Log( string.Join(", ", parents.Select( x => x.ToString()).ToArray() ) );
+			// Debug.Log( string.Join(", ", parents.Select( x => x.ToString()).ToArray() ) );
 
 			if (MerinoData.CurrentFiles.Count == 0)
 			{

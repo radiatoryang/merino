@@ -61,7 +61,7 @@ namespace Merino
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin*2, margin, position.width-MerinoPrefs.sidebarWidth-margin*3, position.height-margin*2);} // was height-30
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin, 18, position.width-MerinoPrefs.sidebarWidth-margin*1.5f, position.height-margin*4.2f); }
 		}
 
 		Rect bottomToolbarRect

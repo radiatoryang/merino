@@ -141,6 +141,7 @@ namespace Merino
 		#region EditorWindowStuff
 
 		public const string windowTitle = " Merino (Yarn Editor)";
+		const string syntaxReference = "YARN SYNTAX:  [[GoToThisNodeName]]   [[OptionText|NodeName]]   ->ShortcutOptionText\n<<if $var is 1>>   <<elseif $var = 2>>   <<else>>  <<endif>>    <<set $var to 1>>";
 
 		[MenuItem("Window/Merino/Main Editor")]
 		static void MenuItem_GetWindow()
@@ -930,7 +931,9 @@ namespace Merino
 				}
 				GUILayout.Space(4);
 				EditorGUI.BeginChangeCheck();
-				MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("AutoSave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, EditorStyles.miniLabel, GUILayout.Width(80));
+				MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("Autosave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, EditorStyles.miniLabel, GUILayout.Width(80));
+				GUILayout.Space(4);
+				MerinoPrefs.showSyntaxReference = EditorGUILayout.ToggleLeft(new GUIContent("Show Syntax?", "if enabled, will show a little cheat sheet of common Yarn script commands"), MerinoPrefs.showSyntaxReference, EditorStyles.miniLabel, GUILayout.Width(100) );
 				if (EditorGUI.EndChangeCheck())
 				{
 					MerinoPrefs.SaveHiddenPrefs();
@@ -953,6 +956,11 @@ namespace Merino
 		{
 			GUILayout.BeginArea(rect);
 			GUILayout.Space(4);
+
+			// optional: show syntax reference
+			if ( MerinoPrefs.showSyntaxReference ) {
+				EditorGUILayout.SelectableLabel( syntaxReference, MerinoStyles.SmallMonoTextStyle );
+			}
 
 //			bool forceSave = false;
 			int idToPreview = -1;
@@ -1062,6 +1070,7 @@ namespace Merino
 					// node title
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
 					
+					// display in nodemap
 					if (GUILayout.Button(new GUIContent(MerinoEditorResources.Nodemap, "click to focus on this node in the nodemap\nnode position: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() ), GUILayout.Width(26), GUILayout.Height(18) )) 
 					{
 						var nodemap = MerinoNodemapWindow.GetNodemapWindow();
@@ -1614,7 +1623,7 @@ namespace Merino
 							EditorUtility.DisplayDialog("Merino Error Message!", "Merino error message:\n\n" + error.message, "Close");
 						}
 					}
-				}
+				} 
 
 				GUILayout.FlexibleSpace ();
 
@@ -1623,13 +1632,31 @@ namespace Merino
 					GUILayout.Label( currentNodeWordCountCache.ToString() + " words  " );
 				}
 				
-				// playtest button, based on the last node you touched
+				// contextual buttons, based on the last node you touched or edited
 				if (currentNodeIDEditing > -1 
 					&& treeView.treeModel.Find(currentNodeIDEditing) != null 
-				    && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node 
-				    && GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style))
+				    && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node
+				) 
 				{
-					MerinoPlaytestWindow.PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
+					// nodemap button
+					if (GUILayout.Button(
+						new GUIContent(
+							" Nodemap: " + treeView.treeModel.Find(currentNodeIDEditing).name, 
+							MerinoEditorResources.Nodemap, 
+							"click to focus on this node in the nodemap\nnode position: " + m_TreeView.treeModel.Find(currentNodeIDEditing).nodePosition.ToString() 
+						), 
+						GUILayout.Height(18) ) ) 
+					{
+						var nodemap = MerinoNodemapWindow.GetNodemapWindow();
+						nodemap.FocusNode(currentNodeIDEditing);
+						nodemap.SetSelectedNode(currentNodeIDEditing);
+					}
+
+					// playtest button
+					if (GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style))
+					{
+						MerinoPlaytestWindow.PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
+					}
 				}
 			}
 

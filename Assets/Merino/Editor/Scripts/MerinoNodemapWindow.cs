@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using Merino.EditorCoroutines;
 
 namespace Merino
 {
@@ -242,8 +244,12 @@ namespace Merino
             {
                 GUILayout.Space(2); //small space to mimic unity editor
 
-//                if (MerinoData.CurrentFiles.Count > 0)
-//                {
+                if (MerinoData.CurrentFiles.Count > 0)
+                {
+                    // if ( GUILayout.Button("Visualize Force-Direct") ) {
+                    //     this.StartCoroutine( VisualizeForceDirect() );
+                    // }
+                }
 //                    var fileOptions = GetCurrentFileNames();
 //                    int currentCurrentFile = 0;
 //                    if (currentFile != null)
@@ -315,7 +321,73 @@ namespace Merino
             Repaint();
         }
 
-        
+        // cleanup nodes using simple force-directed graph algorithm?
+        // not very useful yet, might need to do as more complicated algo
+
+        // adapted from pseudocode in "Simple Algorithms for Network Visualization" by MJ McGuffin
+        // https://pdfs.semanticscholar.org/9f0f/5a1507b83f96bcedbf2b8971fde21948b086.pdf
+        // IEnumerator VisualizeForceDirect() {
+        //     // this is o(n^2) but we expect only ~100 nodes at most in a yarn file imo
+        //     var nodes = MerinoData.TreeElements.Where( node => node.leafType == MerinoTreeElement.LeafType.Node ).ToArray();
+        //     var neighbors = new Dictionary<MerinoTreeElement, List<MerinoTreeElement>>(nodes.Length);
+        //     var forces = new Dictionary<MerinoTreeElement, Vector2>(nodes.Length);
+        //     foreach ( var node in nodes ) {
+        //         neighbors.Add( node, GetConnectedNodes(node, true) );
+        //         // forces.Add( node, Vector2.zero );
+        //     }
+            
+        //     // how many iterations to run? default is 50
+        //     for (int iterations=0; iterations<100; iterations++) {
+        //         forces.Clear();
+        //         foreach ( var node in nodes) {
+        //             forces.Add( node, Vector2.zero );
+        //         }
+
+        //         // repulsion between all pairs
+        //         for(int n1=0; n1<nodes.Length-1; n1++) {
+        //             for (int n2=n1+1; n2<nodes.Length; n2++) { // n2=n1+1 because only once per pair
+        //                 var rawDistance = new Vector2(nodes[n2].nodePosition.x - nodes[n1].nodePosition.x, nodes[n2].nodePosition.y - nodes[n1].nodePosition.y);
+        //                 Vector2 forceFinal = Vector3.zero;
+        //                 //if ( rawDistance.sqrMagnitude > 0.01f ) { // apply inverse square distance attenuation
+        //                 var neighborFactor = (neighbors[nodes[n1]].Count + neighbors[nodes[n2]].Count)/2;
+        //                     forceFinal = rawDistance.normalized * 1500f * neighborFactor / rawDistance.sqrMagnitude;
+        //                //} else { // if nodes are too close together, apply random force to make sure they don't stick
+        //                 //    forceFinal = UnityEngine.Random.insideUnitCircle;
+        //                 //}
+        //                 forces[nodes[n1]] -= forceFinal;
+        //                 forces[nodes[n2]] += forceFinal;
+        //             }
+        //         }
+
+        //         // attraction between linked nodes
+        //         for (int n1=0; n1<nodes.Length; n1++) {
+        //             var myNeighbors = neighbors[nodes[n1]];
+        //             for( int n2=0; n2<myNeighbors.Count; n2++) {
+        //                 if ( nodes[n1].id >= myNeighbors[n2].id ) { 
+        //                     continue; // only apply attraction once per pair though
+        //                 }
+        //                 var rawDistance = new Vector2(myNeighbors[n2].nodePosition.x - nodes[n1].nodePosition.x, myNeighbors[n2].nodePosition.y - nodes[n1].nodePosition.y);
+        //                 //Vector2 forceFinal = rawDistance.normalized * (rawDistance.magnitude - 5f);
+        //                 Vector2 forceFinal = rawDistance.normalized * 0.2f * Mathf.Log10( rawDistance.magnitude / 0.5f );
+        //                 forces[nodes[n1]] += forceFinal;
+        //                 forces[myNeighbors[n2]] -= forceFinal;
+        //             }
+        //         }
+
+        //         // apply force to node positions
+        //         const float deltaTime = 1f;
+        //         const float maxDisplacement = 100f;
+        //         foreach (var node in nodes) {
+        //             forces[node] *= deltaTime;
+        //             if ( (forces[node]).sqrMagnitude > maxDisplacement * maxDisplacement ) {
+        //                 forces[node] = forces[node].normalized * maxDisplacement * deltaTime;
+        //             }
+        //             node.nodePosition = Vector2Int.RoundToInt( forces[node] + node.nodePosition );
+        //         }
+        //         Repaint();
+        //         yield return new WaitForSeconds(0.01f);
+        //     }
+        // }
         
         MerinoTreeElement GetNodeAt(Vector2 point)
         {
@@ -428,26 +500,36 @@ namespace Merino
 //            return list;
 //        }
                 
-        List<MerinoTreeElement> GetConnectedNodes(MerinoTreeElement baseNode)
+        List<MerinoTreeElement> GetConnectedNodes(MerinoTreeElement baseNode, bool findIncomingLinksToo = false)
         {
             List<MerinoTreeElement> connected = new List<MerinoTreeElement>();
 
             // TODO: refactor to use regex
-            // parse body for node names
-            string[] splitBody = baseNode.nodeBody.Split('[', ']');
-            for (int i = 2; i < splitBody.Length; i = i + 4)
-            {
-                // remove delimiter and text prior to it if applicable
-                int delimiter = splitBody[i].IndexOf('|');
-                if (delimiter != -1) splitBody[i] = splitBody[i].Remove(0, delimiter + 1);
 
-                // skip options which link to the same node
-                if (splitBody[i] == baseNode.name) continue;
-				
-                // TODO: add a way to prevent drawing multiple of the same connection
-                // get and add connected node to list of connections
-                var node = MerinoData.GetNode(splitBody[i]);
-                if (node != null) connected.Add(node);
+            var nodeSearch = new List<MerinoTreeElement>();
+            if ( findIncomingLinksToo ) {
+                nodeSearch.AddRange( MerinoData.TreeElements.Where( node => node.leafType == MerinoTreeElement.LeafType.Node ) );
+            } else {
+                nodeSearch.Add( baseNode );
+            }
+            // parse body for node names
+            foreach ( var searchNode in nodeSearch ) {
+                string[] splitBody = searchNode.nodeBody.Split('[', ']');
+                for (int i = 2; i < splitBody.Length; i = i + 4)
+                {
+                    // remove delimiter and text prior to it if applicable
+                    int delimiter = splitBody[i].IndexOf('|');
+                    if (delimiter != -1) splitBody[i] = splitBody[i].Remove(0, delimiter + 1);
+
+                    // skip options which link to the same node
+                    if (baseNode == searchNode && splitBody[i] == baseNode.name) continue;
+                    
+                    // get and add connected node to list of connections
+                    var node = MerinoData.GetNode(splitBody[i]);
+                    if (node != null && !connected.Contains(node) ) {
+                        connected.Add(node);
+                    }
+                }
             }
 
             return connected;

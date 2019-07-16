@@ -27,6 +27,7 @@ namespace Merino
 		public static bool useAutoAdvance = false;
 		public static bool useAutosave = true;
 		public static float sidebarWidth = 180f;
+		public static bool showSyntaxReference = true;
 		
 		//window specific
 		private static bool prefsLoaded = false;
@@ -128,6 +129,7 @@ namespace Merino
 			useAutoAdvance = false;
 			useAutosave = true;
 			sidebarWidth = 180f;
+			showSyntaxReference = true;
 			
 			SaveHiddenPrefs();
 		}
@@ -166,6 +168,7 @@ namespace Merino
 			useAutoAdvance = EditorPrefs.GetBool("MerinoAutoAdvance");
 			useAutosave = EditorPrefs.GetBool("MerinoAutosave");
 			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
+			showSyntaxReference = EditorPrefs.GetBool("MerinoShowSyntax");
 		}
 
 		#endregion
@@ -193,6 +196,7 @@ namespace Merino
 			EditorPrefs.SetBool("MerinoAutoAdvance", useAutoAdvance);
 			EditorPrefs.SetBool("MerinoAutosave", useAutosave);
 			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
+			EditorPrefs.SetBool("MerinoShowSyntax", showSyntaxReference);
 		}
 
 		#endregion

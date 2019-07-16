@@ -59,6 +59,23 @@ namespace Merino
 				return nameStyle;
 			}
 		}
+
+		public static GUIStyle SmallMonoTextStyle
+		{
+			get 
+			{
+				var smallMonoStyle = new GUIStyle(EditorStyles.helpBox);
+
+				smallMonoStyle.font = monoFont;
+				smallMonoStyle.fontSize = 11;
+				smallMonoStyle.normal.textColor *= 0.69f;
+				smallMonoStyle.focused.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.active.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.hover.textColor = smallMonoStyle.normal.textColor;
+
+				return smallMonoStyle;
+			}
+		}
 		
 		public static GUIStyle ButtonStyle
 		{

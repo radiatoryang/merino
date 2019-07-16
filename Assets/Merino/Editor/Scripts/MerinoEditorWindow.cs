@@ -510,6 +510,7 @@ namespace Merino
 			if (MerinoData.CurrentFiles.Contains(newFile) == false)
 			{
 				MerinoData.CurrentFiles.Add(newFile);
+				EditorUtility.SetDirty( MerinoData.Instance );
 			}
 			else
 			{
@@ -541,6 +542,7 @@ namespace Merino
 				EditorUtility.DisplayDialog("Merino: no Yarn.txt files found", "No valid Yarn.txt files were found at the path " + path, "Close");
 			}
 
+			EditorUtility.SetDirty( MerinoData.Instance );
 			return files;
 		}
 
@@ -1305,6 +1307,7 @@ namespace Merino
 						MerinoData.EditedID = id;
 						MerinoData.Timestamp = EditorApplication.timeSinceStartup;
 						MerinoCore.MarkFileDirty( GetTextAssetForNode( m_TreeView.treeModel.Find(id) ) );
+						EditorUtility.SetDirty( MerinoData.Instance );
 						
 						// log the undo data
 						undoData.Add( new MerinoUndoLog(id, EditorApplication.timeSinceStartup, newBody) );

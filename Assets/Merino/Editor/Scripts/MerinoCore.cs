@@ -72,6 +72,7 @@ namespace Merino
 		                MerinoDebug.Log(LoggingLevel.Warning, file.name + " has not been mapped to a NodeID and cannot be saved, reload the file and try again.");
 	                }
                 }
+				EditorUtility.SetDirty( MerinoData.Instance );
             }
         }
 

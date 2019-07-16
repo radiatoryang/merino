@@ -140,9 +140,9 @@ namespace Merino
 		
 		#region EditorWindowStuff
 
-		public const string windowTitle = "Merino (Yarn Editor)";
+		public const string windowTitle = " Merino (Yarn Editor)";
 
-		[MenuItem("Window/Merino (Yarn Editor)")]
+		[MenuItem("Window/Merino/Main Editor")]
 		static void MenuItem_GetWindow()
 		{
 			GetWindow<MerinoEditorWindow>(windowTitle, true);
@@ -150,6 +150,10 @@ namespace Merino
 
 		public static MerinoEditorWindow GetEditorWindow() {
 			return GetWindow<MerinoEditorWindow>(windowTitle, true);
+		}
+
+		void OnEnable() {
+			GetEditorWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Node );
 		}
 		
 		void ResetMerino()
@@ -1057,12 +1061,20 @@ namespace Merino
 					
 					// node title
 					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
+					
+					if (GUILayout.Button(new GUIContent(MerinoEditorResources.Nodemap, "click to focus on this node in the nodemap\nnode position: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() ), GUILayout.Width(26), GUILayout.Height(18) )) 
+					{
+						var nodemap = MerinoNodemapWindow.GetNodemapWindow();
+						nodemap.FocusNode(id);
+						nodemap.SetSelectedNode(id);
+					}
 					GUILayout.FlexibleSpace();
 
-#if MERINO_DEVELOPER
-					// display node position
-					GUILayout.Label( "Debug NodePosition: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() );
-#endif
+// node position now visible in nodemap button tooltip
+// #if MERINO_DEVELOPER
+// 					// display node position
+// 					GUILayout.Label( "Pos: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() );
+// #endif
 					
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));

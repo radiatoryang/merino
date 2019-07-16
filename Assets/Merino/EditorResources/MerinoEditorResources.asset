@@ -25,6 +25,9 @@ MonoBehaviour:
   node_edit:
     free: {fileID: 2800000, guid: 1e7568c926ac7b54089818d6fffb17b7, type: 3}
     pro: {fileID: 2800000, guid: 1e7568c926ac7b54089818d6fffb17b7, type: 3}
+  nodemap:
+    free: {fileID: 2800000, guid: 9e645d703ac5740d9923891c9136841b, type: 3}
+    pro: {fileID: 2800000, guid: 9e645d703ac5740d9923891c9136841b, type: 3}
   page:
     free: {fileID: 2800000, guid: 75b00a6c479ed42488cafaf0b517fd85, type: 3}
     pro: {fileID: 2800000, guid: 75b00a6c479ed42488cafaf0b517fd85, type: 3}

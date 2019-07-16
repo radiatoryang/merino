@@ -33,7 +33,7 @@ namespace Merino
 		private Texture errorIcon;
 
 		const float textSpeed = 0.01f;
-		const string windowTitle = "Merino Playtest";
+		const string windowTitle = "▶ Merino Playtest";
 		const string popupControl = "nodeJumpPopup";
 
 		private bool IsDialogueRunning

@@ -8,12 +8,12 @@ namespace Merino
 {
     public class MerinoNodemapWindow : MerinoEventWindow
     {
-        public const string windowTitle = "Merino (Nodemap)";
+        public const string windowTitle = " Merino (Nodemap)";
         private const string popupControl = "currentFilePopup";
 
         [SerializeField] private TextAsset currentFile; // the current file we are displaying a nodemap for. we only display one of the loaded files at a time.
         [NonSerialized] private bool shouldRepaint; //use for "delayed" repaints, call Repaint directly for instant refresh
-        [NonSerialized] private bool forceUpdateCurrentFile;
+        // [NonSerialized] private bool forceUpdateCurrentFile;
         [NonSerialized] private string previousFileName;
 
         [SerializeField] Vector2 scrollPos;
@@ -42,14 +42,19 @@ namespace Merino
         Vector2 startSelectionBoxPos = -Vector2.one;
         List<MerinoTreeElement> boxSelectionNodes;
 
-        [MenuItem("Window/Merino/Nodemap", priority = 1)]
+        [MenuItem("Window/Merino/Nodemap")]
         static void MenuItem_GetWindow()
         {
             GetWindow<MerinoNodemapWindow>(windowTitle, true);
         }
 
+        public static MerinoNodemapWindow GetNodemapWindow() {
+			return GetWindow<MerinoNodemapWindow>(windowTitle, true);
+		}
+
         private void OnEnable()
         {
+            GetWindow<MerinoNodemapWindow>(windowTitle, true).titleContent = new GUIContent( windowTitle, MerinoEditorResources.Nodemap);
             MerinoEditorWindow.OnFileLoaded += FileLoadedHandler;
             MerinoEditorWindow.OnFileUnloaded += FileUnloadedHandler;
         }
@@ -72,12 +77,31 @@ namespace Merino
                     GUI.Box(selectionBox, "", GUI.skin.FindStyle("SelectionRect"));
             }
 
+            DrawHelpbox();
+
             HandleEvents(Event.current);
             
             if (shouldRepaint)
             {
                 Repaint();
                 shouldRepaint = false;
+            }
+        }
+
+        private void DrawHelpbox()
+        {
+            if ( MerinoData.CurrentFiles.Count > 0 && MerinoData.TreeElements != null && MerinoData.TreeElements.Count > 0 ) {
+                GUILayout.BeginArea( new Rect(10, 24, 192, 64));
+                EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nRight-click (hold): Pan view", MessageType.Info );
+                GUILayout.EndArea();
+            } else {
+                GUILayout.BeginArea( new Rect(position.width/2 - 128, position.height/2 - 48, 256, 96) );
+                EditorGUILayout.HelpBox( "No files / nodes are loaded into Merino yet, so there's nothing to display.", MessageType.Warning, true);
+                var content = new GUIContent( "Open Merino (Yarn Editor) Window", MerinoEditorResources.Node, "click to open the main Merino editor window" );
+                if ( GUILayout.Button(content) ) {
+                    MerinoEditorWindow.GetEditorWindow();
+                }
+                GUILayout.EndArea();
             }
         }
 
@@ -165,7 +189,9 @@ namespace Merino
                     end.x += scrollPos.x;
                     end.y += scrollPos.y;
 
-                    Handles.DrawLine(start.center, end.center);
+                    //Handles.DrawLine(start.center, end.center);
+                    //Handles.DrawDottedLine(start.center, end.center, 1f);
+                    Handles.DrawAAPolyLine( 3f, start.center, end.center );
                 }
                 Handles.color = Color.white;
             }
@@ -191,10 +217,11 @@ namespace Merino
                     }
                 }
 
-                GUIStyle style = GUI.skin.GetStyle(isSelected ? "flow node 1 on" : "flow node 1");
+                GUIStyle style = GUI.skin.GetStyle(isSelected ? "flow node 1 on" : "flow node 0");
                 style.alignment = TextAnchor.MiddleCenter;
                 
-                GUI.Box(windowRect, node.name, style);
+                GUIContent content = new GUIContent(node.name, node.nodeBody.Substring(0, Mathf.Min(96, node.nodeBody.Length)) + "..." );
+                GUI.Box(windowRect, content, style);
             }
         }
 
@@ -287,6 +314,8 @@ namespace Merino
         {
             Repaint();
         }
+
+        
         
         MerinoTreeElement GetNodeAt(Vector2 point)
         {
@@ -449,7 +478,7 @@ namespace Merino
                 previousFileName = null;
             
             currentFile = null;
-            forceUpdateCurrentFile = true;
+            // forceUpdateCurrentFile = true;
         }
 
         #endregion
@@ -477,10 +506,15 @@ namespace Merino
                         }
                         else
                         {
-                            if (!selectedNodes.Contains(node))
-                                SelectedNode = node;
-							
-                            dragNode = node;
+                            // if double-click, then zoom to the node in the text editor...
+                            if ( e.clickCount >= 2) {
+                                MerinoEditorWindow.GetEditorWindow().SelectNodeAndZoomToLine(node.id, -1);
+                            } else { // otherwise, select and move node in nodemap
+                                if (!selectedNodes.Contains(node))
+                                    SelectedNode = node;
+                                
+                                dragNode = node;
+                            }
                         }
 						
                         e.Use();
@@ -609,7 +643,16 @@ namespace Merino
                     // release dragged node
                     if (dragNode != null)
                     {
-                        dragNode = null;
+                        // save changes to nodemap
+                        EditorUtility.SetDirty( MerinoData.Instance );
+
+                        // if autosave is on, save changes
+                        if ( MerinoPrefs.useAutosave ) {
+                            MerinoCore.SaveDataToFiles();
+                        }
+
+                        // clean-up
+                        dragNode = null; 
                         e.Use();
                     }
                     
@@ -620,8 +663,6 @@ namespace Merino
                         selectedNodes = boxSelectionNodes;
                         selectedNodes = tempList;
                     }
-                    
-                    //TODO: autosave changes made to nodemap
                     break;
                 }
             }

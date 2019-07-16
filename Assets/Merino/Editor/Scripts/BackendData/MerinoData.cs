@@ -19,9 +19,11 @@ namespace Merino
 				{
 					return instance;
 				}
+
+				var tempPath = MerinoCore.GetTempDataPath();
 				
 				// attempt to get instance from disk.
-				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoData>(MerinoPrefs.tempDataPath);
+				var possibleTempData = AssetDatabase.LoadAssetAtPath<MerinoData>(tempPath);
 				if (possibleTempData != null && possibleTempData.treeElements != null)
 				{
 					instance = possibleTempData;
@@ -30,7 +32,7 @@ namespace Merino
 				
 				// no instance exists, create a new instance.
 				instance = CreateInstance<MerinoData>();
-				AssetDatabase.CreateAsset(instance, MerinoPrefs.tempDataPath);
+				AssetDatabase.CreateAsset(instance, tempPath);
 				AssetDatabase.SaveAssets();
 				return instance;
 			}

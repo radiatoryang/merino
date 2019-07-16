@@ -150,7 +150,7 @@ namespace Merino
 		{
 			if (reset)
 			{
-				MerinoYarnEditorWindow.errorLog.Clear();
+				MerinoEditorWindow.errorLog.Clear();
 				dialogue.Stop();
 				dialogue.UnloadAll();
 				varStorage.ResetToDefaults();
@@ -222,7 +222,7 @@ namespace Merino
 					if (matchingNode != null)
 					{
 						// display in yarn editor window
-						var window = GetWindow<MerinoYarnEditorWindow>(MerinoYarnEditorWindow.windowTitle, true);
+						var window = GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true);
 						window.SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
 					}
 					else
@@ -297,7 +297,7 @@ namespace Merino
 		
 		void DrawBottomToolBar (Rect rect)
 		{
-			if (MerinoYarnEditorWindow.errorLog == null || MerinoYarnEditorWindow.errorLog.Count <= 0) return;
+			if (MerinoEditorWindow.errorLog == null || MerinoEditorWindow.errorLog.Count <= 0) return;
 			
 			GUILayout.BeginArea (rect);
 
@@ -307,15 +307,15 @@ namespace Merino
 
 				GUILayout.FlexibleSpace();
 
-				if (MerinoYarnEditorWindow.errorLog != null && MerinoYarnEditorWindow.errorLog.Count > 0)
+				if (MerinoEditorWindow.errorLog != null && MerinoEditorWindow.errorLog.Count > 0)
 				{
-					var error = MerinoYarnEditorWindow.errorLog[MerinoYarnEditorWindow.errorLog.Count - 1];
+					var error = MerinoEditorWindow.errorLog[MerinoEditorWindow.errorLog.Count - 1];
 					var node = MerinoData.GetNode(error.nodeID);
 					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} at line {1}", node.name, error.lineNumber, error.message )), style, GUILayout.MaxWidth(position.width * 0.31f) ))
 					{
 						if (node != null)
 						{
-							GetWindow<MerinoYarnEditorWindow>(MerinoYarnEditorWindow.windowTitle).SelectNodeAndZoomToLine(error.nodeID, error.lineNumber);
+							GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle).SelectNodeAndZoomToLine(error.nodeID, error.lineNumber);
 						}
 						else
 						{
@@ -476,7 +476,7 @@ namespace Merino
 			
 			// also output to Unity console
 			var nodeRef = MerinoData.TreeElements.Find(x => x.name == nodeName);
-			MerinoYarnEditorWindow.errorLog.Add(new MerinoYarnEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
+			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
 			MerinoDebug.Log(LoggingLevel.Error, message);
 		}
 		

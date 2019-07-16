@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Merino
 {
-    public class MerinoNodemapWindow : MerinoEditorWindow
+    public class MerinoNodemapWindow : MerinoEventWindow
     {
         public const string windowTitle = "Merino (Nodemap)";
         private const string popupControl = "currentFilePopup";
@@ -50,14 +50,14 @@ namespace Merino
 
         private void OnEnable()
         {
-            MerinoYarnEditorWindow.OnFileLoaded += FileLoadedHandler;
-            MerinoYarnEditorWindow.OnFileUnloaded += FileUnloadedHandler;
+            MerinoEditorWindow.OnFileLoaded += FileLoadedHandler;
+            MerinoEditorWindow.OnFileUnloaded += FileUnloadedHandler;
         }
 
         private void OnDisable()
         {
-            MerinoYarnEditorWindow.OnFileLoaded -= FileLoadedHandler;
-            MerinoYarnEditorWindow.OnFileUnloaded -= FileUnloadedHandler;
+            MerinoEditorWindow.OnFileLoaded -= FileLoadedHandler;
+            MerinoEditorWindow.OnFileUnloaded -= FileUnloadedHandler;
         }
 
         void OnGUI()

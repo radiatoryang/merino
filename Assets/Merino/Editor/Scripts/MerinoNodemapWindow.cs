@@ -23,6 +23,7 @@ namespace Merino
         const float minZoom = 0.2f;
         const float maxZoom = 1f;
 
+        Dictionary<MerinoTreeElement, Rect> actualNodeRects = new Dictionary<MerinoTreeElement, Rect>();
         [NonSerialized] MerinoTreeElement dragNode;
         List<MerinoTreeElement> selectedNodes = new List<MerinoTreeElement>();
         MerinoTreeElement SelectedNode
@@ -38,6 +39,8 @@ namespace Merino
                 selectedNodes.Add(value);
             }
         }
+        [NonSerialized] MerinoTreeElement currentLinkingNode;
+        Vector2 currentLinkTarget;
 
         // selection box
         Rect selectionBox;
@@ -56,9 +59,10 @@ namespace Merino
 
         private void OnEnable()
         {
-            GetWindow<MerinoNodemapWindow>(windowTitle, true).titleContent = new GUIContent( windowTitle, MerinoEditorResources.Nodemap);
+            GetNodemapWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Nodemap);
             MerinoEditorWindow.OnFileLoaded += FileLoadedHandler;
             MerinoEditorWindow.OnFileUnloaded += FileUnloadedHandler;
+            currentLinkingNode = null;
         }
 
         private void OnDisable()
@@ -69,6 +73,7 @@ namespace Merino
 
         void OnGUI()
         {
+            wantsMouseMove = currentLinkingNode != null;
             DrawNodemap();
             DrawToolbar(Event.current);
             
@@ -94,7 +99,15 @@ namespace Merino
         {
             if ( MerinoData.CurrentFiles.Count > 0 && MerinoData.TreeElements != null && MerinoData.TreeElements.Count > 0 ) {
                 GUILayout.BeginArea( new Rect(10, 24, 192, 64));
-                EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nRight-click (hold): Pan view", MessageType.Info );
+                if ( currentLinkingNode != null) {
+                    EditorGUILayout.HelpBox( "Left-click: Link node [" + currentLinkingNode.name + "] to another node.", MessageType.Info );
+                } else {
+#if UNITY_EDITOR_WIN
+                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLeft-click (drag) + Alt: Pan view\nRight-click (drag): Pan view", MessageType.Info );
+#else
+                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLeft-click (drag) + Option: Pan view\nRight-click (drag): Pan view", MessageType.Info );
+#endif
+                }
                 GUILayout.EndArea();
             } else {
                 GUILayout.BeginArea( new Rect(position.width/2 - 128, position.height/2 - 48, 256, 96) );
@@ -176,27 +189,58 @@ namespace Merino
             for (int i = 0; i < MerinoData.TreeElements.Count; i++)
             {
                 var node = MerinoData.TreeElements[i];
-                if (node.depth == -1) continue; // skip root node and non-yarn node nodes
-
-                Handles.color = Color.white;
+                if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
                 var connectedNodes = GetConnectedNodes(node);
+
                 foreach (var connectedNode in connectedNodes)
                 {
-                    //get position to draw connections between
-                    Rect start = new Rect(node.nodeRect);
-                    start.x += scrollPos.x;
-                    start.y += scrollPos.y;
+                    if ( selectedNodes.Contains(node) ) {
+                        Handles.color = new Color( 0.25f, 0.6f, 1f, 1f);
+                    } else if ( selectedNodes.Contains( connectedNode )) {
+                        Handles.color = new Color( 0.9f, 0.95f, 1f, 1f);
+                    } else {
+                        Handles.color = new Color( 0.4f, 0.4f, 0.4f, 1f);
+                    }
 
-                    Rect end = new Rect(connectedNode.nodeRect);
-                    end.x += scrollPos.x;
-                    end.y += scrollPos.y;
-
-                    //Handles.DrawLine(start.center, end.center);
-                    //Handles.DrawDottedLine(start.center, end.center, 1f);
-                    Handles.DrawAAPolyLine( 3f, start.center, end.center );
+                    var offset = node.nodePosition.x + node.nodePosition.y < connectedNode.nodePosition.x + connectedNode.nodePosition.y ? Vector2.left * 10f : Vector2.right * 10f;
+                    DrawLineConnection( 
+                        node.nodeRect.center + offset, 
+                        connectedNode.nodeRect.RayIntersectToCenter(node.nodeRect.center, 15f) + offset, 
+                        Mathf.Clamp01( Mathf.Min(
+                            Mathf.Abs(node.nodePosition.x - connectedNode.nodePosition.x), 
+                            Mathf.Abs(node.nodePosition.y - connectedNode.nodePosition.y)
+                        ) / 60f) 
+                    );          
                 }
                 Handles.color = Color.white;
             }
+
+            // if in link / connect mode, then draw that too
+            if ( currentLinkingNode != null ) {
+                DrawLineConnection( currentLinkingNode.nodeRect.center, currentLinkTarget );
+            }
+        }
+        
+        void DrawLineConnection( Vector2 start, Vector2 end, float curvature = 1f) {
+            var offset = start.y > end.y ? Vector2.down : Vector2.up;
+            offset += start.x > end.x ? Vector2.left : Vector2.right;
+            var points = Handles.MakeBezierPoints( start + scrollPos, end + scrollPos, start + scrollPos + offset * 55 * curvature, end + scrollPos, 16);
+            Handles.DrawAAPolyLine( 6f, points); //start + scrollPos, end + scrollPos );
+            // Handles.DrawBezier( start + scrollPos, end + scrollPos, Vector2.zero, Vector2.zero, Color.white, Texture2D.whiteTexture, 3f);
+            // DrawConnectTriangle( points[3], points[3] - points[2]);
+            //DrawConnectTriangle( points[5], points[5] - points[4]);
+            // DrawConnectTriangle( points[7], points[7] - points[6]);
+            //DrawConnectTriangle( points[9], points[9] - points[8]);
+            DrawConnectTriangle( points[15], points[15] - points[14]);
+        }
+
+
+        void DrawConnectTriangle( Vector2 center, Vector2 direction ) {
+            const float triSize = 8f;
+            direction.Normalize();
+            var width = Vector2.Perpendicular( direction );
+            direction *= 1.38f;
+            Handles.DrawAAConvexPolygon( center + direction * triSize, center - (direction - width) * triSize, center - (direction + width) * triSize );
         }
         
         private void DrawNodes()
@@ -206,7 +250,7 @@ namespace Merino
                 var node = MerinoData.TreeElements[i];
                 if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
 
-                Rect windowRect = new Rect(node.nodeRect); //todo: adjust size
+                Rect windowRect = new Rect(node.nodeRect);
                 windowRect.position += scrollPos;
 
                 bool isSelected = false;
@@ -219,11 +263,48 @@ namespace Merino
                     }
                 }
 
-                GUIStyle style = GUI.skin.GetStyle(isSelected ? "flow node 1 on" : "flow node 0");
-                style.alignment = TextAnchor.MiddleCenter;
-                
-                GUIContent content = new GUIContent(node.name, node.nodeBody.Substring(0, Mathf.Min(96, node.nodeBody.Length)) + "..." );
-                GUI.Box(windowRect, content, style);
+                GUIStyle style = GUI.skin.GetStyle("flow node 0");
+                if ( isSelected ) {
+                    style = GUI.skin.GetStyle("flow node 1 on");
+                } else if ( node.name.StartsWith("Start") ) {
+                    if ( isSelected ) {
+                        style = GUI.skin.GetStyle("flow node 5 on");
+                    } else {
+                        style = GUI.skin.GetStyle("flow node 5");
+                    }
+                }
+                // cache node size
+                node.cachedSize = Mathf.CeilToInt(Mathf.Max(100f, GUI.skin.GetStyle("flow node 0").CalcSize( new GUIContent(node.name)).x + 8f));
+
+                if ( MerinoPlaytestWindow.CurrentNode != null && MerinoPlaytestWindow.CurrentNode == node.name) {
+                    if ( isSelected ) {
+                        style = GUI.skin.GetStyle("flow node 3 on");
+                    } else {
+                        style = GUI.skin.GetStyle("flow node 3");
+                    }
+                    Repaint();
+                }
+
+                style.alignment = TextAnchor.UpperCenter;
+                GUI.Box(windowRect, node.name, style);
+
+                // if node is selected, show playtest button
+                if (isSelected) {
+                    var buttonRect = new Rect(windowRect);
+                    buttonRect.y -= 20;
+                    buttonRect.height = 20;
+                    if (GUI.Button(buttonRect, "▶ Playtest"))
+					{
+						MerinoPlaytestWindow.PlaytestFrom( node.name );
+					}
+                }
+
+                // node body preview
+                windowRect.x += 5;
+                windowRect.y += 25;
+                windowRect.width -= 10;
+                windowRect.height -= 30f;
+                GUI.Box( windowRect, node.nodeBody.Substring(0, Mathf.Min(128, node.nodeBody.Length)), MerinoStyles.SmallMonoTextStyle );
             }
         }
 
@@ -246,9 +327,9 @@ namespace Merino
 
                 if (MerinoData.CurrentFiles.Count > 0)
                 {
-                    // if ( GUILayout.Button("Visualize Force-Direct") ) {
-                    //     this.StartCoroutine( VisualizeForceDirect() );
-                    // }
+                    if ( GUILayout.Button("Unwrap Nodes") ) {
+                        this.StartCoroutine( UnknotNodes() );
+                    }
                 }
 //                    var fileOptions = GetCurrentFileNames();
 //                    int currentCurrentFile = 0;
@@ -321,73 +402,111 @@ namespace Merino
             Repaint();
         }
 
-        // cleanup nodes using simple force-directed graph algorithm?
-        // not very useful yet, might need to do as more complicated algo
-
+        // cleanup nodes using simple force-directed graph algorithm
         // adapted from pseudocode in "Simple Algorithms for Network Visualization" by MJ McGuffin
         // https://pdfs.semanticscholar.org/9f0f/5a1507b83f96bcedbf2b8971fde21948b086.pdf
-        // IEnumerator VisualizeForceDirect() {
-        //     // this is o(n^2) but we expect only ~100 nodes at most in a yarn file imo
-        //     var nodes = MerinoData.TreeElements.Where( node => node.leafType == MerinoTreeElement.LeafType.Node ).ToArray();
-        //     var neighbors = new Dictionary<MerinoTreeElement, List<MerinoTreeElement>>(nodes.Length);
-        //     var forces = new Dictionary<MerinoTreeElement, Vector2>(nodes.Length);
-        //     foreach ( var node in nodes ) {
-        //         neighbors.Add( node, GetConnectedNodes(node, true) );
-        //         // forces.Add( node, Vector2.zero );
-        //     }
+        IEnumerator UnknotNodes(List<MerinoTreeElement> nodes = null) {
+            // this is o(n^2) but we expect only ~100 nodes at most in a yarn file imo
+
+            Vector2 center = Vector2.zero;
+            if ( nodes != null && nodes.Count > 0) {
+                // get local center of these nodes
+                foreach (var node in nodes) {
+                    center += node.nodeRect.center;
+                }
+                center /= nodes.Count;
+            } else {
+                nodes = MerinoData.TreeElements.Where( node => node.depth > 0 && node.leafType == MerinoTreeElement.LeafType.Node ).ToList();
+            }
+            var neighbors = new Dictionary<MerinoTreeElement, List<MerinoTreeElement>>(nodes.Count);
+            var forces = new Dictionary<MerinoTreeElement, Vector2>(nodes.Count);
+            foreach ( var node in nodes ) {
+                neighbors.Add( node, GetConnectedNodes(node, false) );
+                // forces.Add( node, Vector2.zero );
+            }
+
+            // randomly place nodes based on their connections
+            int width = Mathf.CeilToInt( Mathf.Sqrt(nodes.Count));
+            for( int i=0; i<nodes.Count; i++) {
+                nodes[i].nodePosition = Vector2Int.RoundToInt(center + UnityEngine.Random.insideUnitCircle.normalized * 200f * width / Mathf.Max(1, neighbors[nodes[i]].Count) );
+            }
+            // put 1-neighbor nodes next to their neighbor
+            for (int i=0; i<nodes.Count; i++) {
+                if ( neighbors[nodes[i]].Count == 1) {
+                    nodes[i].nodePosition = neighbors[nodes[i]][0].nodePosition;
+                    nodes[i].nodePosition += Vector2Int.RoundToInt( new Vector2( nodes[i].nodePosition.x, nodes[i].nodePosition.y ).normalized * 50f);
+                }
+            }
             
-        //     // how many iterations to run? default is 50
-        //     for (int iterations=0; iterations<100; iterations++) {
-        //         forces.Clear();
-        //         foreach ( var node in nodes) {
-        //             forces.Add( node, Vector2.zero );
-        //         }
+            // how many iterations to run
+            for (int iterations=0; iterations<500; iterations++) {
+                forces.Clear();
+                foreach ( var node in nodes) {
+                    forces.Add( node, Vector2.zero );
+                }
 
-        //         // repulsion between all pairs
-        //         for(int n1=0; n1<nodes.Length-1; n1++) {
-        //             for (int n2=n1+1; n2<nodes.Length; n2++) { // n2=n1+1 because only once per pair
-        //                 var rawDistance = new Vector2(nodes[n2].nodePosition.x - nodes[n1].nodePosition.x, nodes[n2].nodePosition.y - nodes[n1].nodePosition.y);
-        //                 Vector2 forceFinal = Vector3.zero;
-        //                 //if ( rawDistance.sqrMagnitude > 0.01f ) { // apply inverse square distance attenuation
-        //                 var neighborFactor = (neighbors[nodes[n1]].Count + neighbors[nodes[n2]].Count)/2;
-        //                     forceFinal = rawDistance.normalized * 1500f * neighborFactor / rawDistance.sqrMagnitude;
-        //                //} else { // if nodes are too close together, apply random force to make sure they don't stick
-        //                 //    forceFinal = UnityEngine.Random.insideUnitCircle;
-        //                 //}
-        //                 forces[nodes[n1]] -= forceFinal;
-        //                 forces[nodes[n2]] += forceFinal;
-        //             }
-        //         }
+                // repulsion between all pairs
+                for(int n1=0; n1<nodes.Count-1; n1++) {
+                    for (int n2=n1+1; n2<nodes.Count; n2++) { // n2=n1+1 because only once per pair
+                        var rawDistance = new Vector2(nodes[n2].nodePosition.x - nodes[n1].nodePosition.x, nodes[n2].nodePosition.y - nodes[n1].nodePosition.y);
+                        if ( rawDistance.sqrMagnitude > 200000f && (neighbors[nodes[n1]].Count == 0 || neighbors[nodes[n2]].Count == 0) ) {
+                            continue;
+                        }
+                        Vector2 forceFinal = Vector3.zero;
+                        forceFinal = rawDistance.normalized * 69000f / Mathf.Max(1f, rawDistance.sqrMagnitude);
+                        forces[nodes[n1]] -= forceFinal;
+                        forces[nodes[n2]] += forceFinal;
+                    }
+                }
 
-        //         // attraction between linked nodes
-        //         for (int n1=0; n1<nodes.Length; n1++) {
-        //             var myNeighbors = neighbors[nodes[n1]];
-        //             for( int n2=0; n2<myNeighbors.Count; n2++) {
-        //                 if ( nodes[n1].id >= myNeighbors[n2].id ) { 
-        //                     continue; // only apply attraction once per pair though
-        //                 }
-        //                 var rawDistance = new Vector2(myNeighbors[n2].nodePosition.x - nodes[n1].nodePosition.x, myNeighbors[n2].nodePosition.y - nodes[n1].nodePosition.y);
-        //                 //Vector2 forceFinal = rawDistance.normalized * (rawDistance.magnitude - 5f);
-        //                 Vector2 forceFinal = rawDistance.normalized * 0.2f * Mathf.Log10( rawDistance.magnitude / 0.5f );
-        //                 forces[nodes[n1]] += forceFinal;
-        //                 forces[myNeighbors[n2]] -= forceFinal;
-        //             }
-        //         }
+                // attraction between linked nodes and second degree neighbors
+                for (int n1=0; n1<nodes.Count; n1++) {
+                    var myNeighbors = neighbors[nodes[n1]];
+                    // Debug.Log( nodes[n1].name + " has " + myNeighbors.Count);
+                    for( int n2=0; n2<myNeighbors.Count; n2++) {
+                        // if ( nodes[n1].id >= myNeighbors[n2].id ) { 
+                        //     continue; // only apply attraction once per pair though
+                        // }
+                        var rawDistance = new Vector2(myNeighbors[n2].nodePosition.x - nodes[n1].nodePosition.x, myNeighbors[n2].nodePosition.y - nodes[n1].nodePosition.y);
+                        Vector2 forceFinal = rawDistance.normalized * Mathf.Log10( Mathf.Max(1f, rawDistance.magnitude - 300f) );
+                        var neighborPull = Mathf.Pow(Mathf.Max(1, 4 - myNeighbors.Count), 4);
+                        forces[nodes[n1]] += forceFinal * neighborPull;
 
-        //         // apply force to node positions
-        //         const float deltaTime = 1f;
-        //         const float maxDisplacement = 100f;
-        //         foreach (var node in nodes) {
-        //             forces[node] *= deltaTime;
-        //             if ( (forces[node]).sqrMagnitude > maxDisplacement * maxDisplacement ) {
-        //                 forces[node] = forces[node].normalized * maxDisplacement * deltaTime;
-        //             }
-        //             node.nodePosition = Vector2Int.RoundToInt( forces[node] + node.nodePosition );
-        //         }
-        //         Repaint();
-        //         yield return new WaitForSeconds(0.01f);
-        //     }
-        // }
+                        if ( nodes.Contains(myNeighbors[n2])) { // don't change neighbors if they're not part of the selection
+                            forces[myNeighbors[n2]] -= forceFinal * neighborPull * 2;
+                        }
+
+                    }
+                }
+
+                // apply force to node positions
+                float iterationEnergy = 0f;
+                const float deltaTime = 1.6f;
+                const float maxDisplacement = 100f;
+                foreach (var node in nodes) {
+                    forces[node] *= deltaTime;
+                    if ( (forces[node]).sqrMagnitude > maxDisplacement * maxDisplacement ) {
+                        forces[node] = forces[node].normalized * maxDisplacement;
+                    }
+                    node.nodePosition = Vector2Int.RoundToInt( forces[node] + node.nodePosition );
+                    iterationEnergy += forces[node].sqrMagnitude;
+                }
+
+                if ( iterations % 10 == 0) {
+                    Repaint();
+                    HandleZoom( -999f, Vector2.one * 0.5f );
+                    yield return new WaitForSeconds(0.01f);
+                }
+
+                if ( iterationEnergy < 5f ) {
+                    Debug.Log("ended early");
+                    Repaint();
+                    yield break;
+                }
+            }
+            Repaint();
+            // save?
+        }
         
         MerinoTreeElement GetNodeAt(Vector2 point)
         {
@@ -577,8 +696,13 @@ namespace Merino
                 {
                     if (node != null)
                     {
-                        // handle hit node
-                        if (GetAppendKeyDown())
+                        if ( currentLinkingNode != null ) {
+                            // connect node with new node
+                            currentLinkingNode.nodeBody += string.Format("\n[[Go to {0}|{0}]]", node.name);
+                            currentLinkingNode = null;
+                            EditorUtility.SetDirty( MerinoData.Instance );
+                        }  
+                        else if (GetAppendKeyDown())
                         {
                             // add or remove node from selection
                             if (selectedNodes.Contains(node))
@@ -616,8 +740,58 @@ namespace Merino
                     }
                     break;
                 }
+                case MouseButton.Right:
+                {
+                    var menu = new GenericMenu();
+                    if ( node != null ) {
+                        menu.AddItem( new GUIContent("Link This Node To..."), false, OnRightClickStartConnectNode, node);
+                    } else {
+                        var content = new GUIContent("Create New Node Here");
+                        if ( MerinoData.CurrentFiles.Count > 0) {
+                            menu.AddItem( content, false, OnRightClickCreateNode, e.mousePosition );
+                        } else {
+                            menu.AddDisabledItem( content, false );
+                        }
+                    }
+                    menu.ShowAsContext();
+                    break;
+                }
+
             }
         }
+
+        void OnRightClickStartConnectNode (object node) {
+            var startNode = (MerinoTreeElement)node;
+            currentLinkingNode = startNode;
+            SetSelectedNode( startNode.id );
+        }
+
+        void OnRightClickCreateNode(object mousePosition ) {
+            var createPos = (Vector2)mousePosition;
+
+            var newNode = MerinoEditorWindow.GetEditorWindow(false).AddNewNode(null, false)[0];
+            newNode.nodePosition = Vector2Int.RoundToInt( createPos / zoom - scrollPos );
+            SetSelectedNode( newNode.id );
+            EditorUtility.SetDirty( MerinoData.Instance );
+        }
+
+        protected override void OnRawMouseMove(Event e)
+        {
+             // if linking / connecting a node, then draw a line to there too
+            if ( currentLinkingNode != null) {
+                // Debug.Log( e.mousePosition / zoom - scrollPos );
+                // get node, and snap to it if close enough
+                var node = GetNodeAt( e.mousePosition );
+                if (node == null) {
+                    currentLinkTarget = e.mousePosition / zoom - scrollPos;
+                } else {
+                    currentLinkTarget = node.nodeRect.center;
+                }
+                Repaint();
+            }
+        }
+
+  
 
         protected override void OnMouseDrag(Event e)
 		{

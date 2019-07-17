@@ -149,8 +149,8 @@ namespace Merino
 			GetWindow<MerinoEditorWindow>(windowTitle, true);
 		}
 
-		public static MerinoEditorWindow GetEditorWindow() {
-			return GetWindow<MerinoEditorWindow>(windowTitle, true);
+		public static MerinoEditorWindow GetEditorWindow(bool focus=true) {
+			return GetWindow<MerinoEditorWindow>(windowTitle, focus);
 		}
 
 		void OnEnable() {
@@ -568,18 +568,19 @@ namespace Merino
 		
 		#region NodeManagement
 
+		// used by GenericMenu
 		void AddNewNode()
 		{
 			AddNewNode(null);
 		}
 
-		public void AddNewNode(IList<int> parents=null)
+		public List<MerinoTreeElement> AddNewNode(IList<int> parents=null, bool focusWindow = true)
 		{
 			// Debug.Log( string.Join(", ", parents.Select( x => x.ToString()).ToArray() ) );
 
 			if (MerinoData.CurrentFiles.Count == 0)
 			{
-				return;
+				return null;
 			}
 
 			if (parents == null || parents.Count == 0)
@@ -597,23 +598,36 @@ namespace Merino
 			}
 
 			int newID = -1;
+			var newNodes = new List<MerinoTreeElement>();
 			foreach (var parentID in parents)
 			{
 				var parent = treeView.treeModel.Find(parentID);
 				
 				newID = m_TreeView.treeModel.GenerateUniqueID();
-				var newNode = new MerinoTreeElement("NewNode" + newID.ToString(), 0, newID);
+
+				// just to be safe, also run a check of all existing node names
+				int nameID = newID;
+				var newNodeName = "NewNode" + nameID.ToString();
+				while ( MerinoData.TreeElements.Find( node => node.name == newNodeName ) != null ) {
+					nameID++;
+					newNodeName = "NewNode" + nameID.ToString();
+				}
+
+				var newNode = new MerinoTreeElement(newNodeName, 0, newID);
 				newNode.nodeBody = "Write here.\n";
 				newNode.cachedParentID = parent.id;
 				m_TreeView.treeModel.AddElement(newNode, parent, parent.children != null ? parent.children.Count : 0);
-				m_TreeView.FrameItem(newID);
-				var newSelect = m_TreeView.GetSelection().ToList();
-				newSelect.Add( newID );
-				m_TreeView.SetSelection( newSelect );
+				if ( focusWindow ) {
+					m_TreeView.FrameItem(newID);
+					var newSelect = m_TreeView.GetSelection().ToList();
+					newSelect.Add( newID );
+					m_TreeView.SetSelection( newSelect );
+				}
+				newNodes.Add(newNode);
 			}
 
 			// if creating only one node, then prompt user rename it (like Unity's Project tab)
-			if (parents.Count == 1)
+			if (parents.Count == 1 && focusWindow)
 			{
 				var newViewItem = m_TreeView.GetRows().Where(x => x.id == newID).First();
 				m_TreeView.BeginRename(newViewItem);
@@ -623,6 +637,8 @@ namespace Merino
 			{
 				MerinoCore.SaveDataToFiles();
 			}
+
+			return newNodes;
 		}
 
 		public void AddNodeToDelete(int id, bool fileWasDeletedOverride = false)
@@ -957,16 +973,16 @@ namespace Merino
 			GUILayout.BeginArea(rect);
 			GUILayout.Space(4);
 
-			// optional: show syntax reference
-			if ( MerinoPrefs.showSyntaxReference ) {
-				EditorGUILayout.SelectableLabel( syntaxReference, MerinoStyles.SmallMonoTextStyle );
-			}
-
 //			bool forceSave = false;
 			int idToPreview = -1;
 			int idToZoomTo = -1;
 			if (MerinoData.ViewState.selectedIDs.Count > 0)
 			{ 
+				// optional: show syntax reference
+				if ( MerinoPrefs.showSyntaxReference ) {
+					EditorGUILayout.SelectableLabel( syntaxReference, MerinoStyles.SmallMonoTextStyle );
+				}
+
 				scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 				
 				foreach (var id in MerinoData.ViewState.selectedIDs)

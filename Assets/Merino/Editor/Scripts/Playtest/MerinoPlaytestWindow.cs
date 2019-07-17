@@ -36,7 +36,7 @@ namespace Merino
 		const string windowTitle = "▶ Merino Playtest";
 		const string popupControl = "nodeJumpPopup";
 
-		private bool IsDialogueRunning
+		public bool IsDialogueRunning
 		{
 			get
 			{
@@ -46,6 +46,9 @@ namespace Merino
 				return dialogue.currentNode != null;
 			}
 		}
+
+		// this is a cache for MerinoNodemapWindow visualization... otherwise, GetWindow opens the window, even if the dialogue isn't running
+		public static string CurrentNode;
 		
 		const int margin = 10;
 		Rect bottomToolbarRect
@@ -58,6 +61,11 @@ namespace Merino
 			InitIfNeeded();
 		}
 
+		void OnDisable()
+		{
+			CurrentNode = null;
+		}
+
 		private void InitIfNeeded()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
@@ -67,6 +75,8 @@ namespace Merino
 			// setup the logging system.
 			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, message);
 			dialogue.LogErrorMessage = PlaytestErrorLog;
+
+			CurrentNode = null;
 			
 			// icons
 			if (errorIcon == null)
@@ -116,6 +126,10 @@ namespace Merino
 		
 		#region Public Static Methods and their "Internal" versions
 
+		public static MerinoPlaytestWindow GetPlaytestWindow(bool focus) {
+			return GetWindow<MerinoPlaytestWindow>(windowTitle, focus);
+		}
+
 		public static void StopPlaytest(bool force = false)
 		{
 			if (EditorUtils.HasWindow<MerinoPlaytestWindow>())
@@ -138,6 +152,7 @@ namespace Merino
 			
 				Close();
 			}
+			CurrentNode = null;
 		}
 
 		public static void PlaytestFrom(string startPassageName)
@@ -340,6 +355,7 @@ namespace Merino
             // Get lines, options and commands from the Dialogue object, one at a time.
             foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
             {
+				CurrentNode = dialogue.currentNode;
                 if (step is Yarn.Dialogue.LineResult) 
                 {
                     // Wait for line to finish displaying
@@ -362,6 +378,7 @@ namespace Merino
             }
 	        
 			MerinoDebug.Log(LoggingLevel.Info, "Reached the end of the dialogue.");
+			CurrentNode = null;
 	        
             // No more results! The dialogue is done.
 	        yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);

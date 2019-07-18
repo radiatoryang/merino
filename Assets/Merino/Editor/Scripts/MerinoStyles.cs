@@ -88,6 +88,47 @@ namespace Merino
 			}
 		}
 
+		public static GUIStyle ButtonLeft
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonLeft);
+				buttonStyle.fontSize = 11;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle ButtonMid
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonMid);
+				buttonStyle.fontSize = 11;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle ButtonRight
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonRight);
+				buttonStyle.fontSize = 11;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle DropdownRightOverlay
+		{
+			get {
+				var buttonStyle = GUI.skin.GetStyle("IN Dropdown");
+				buttonStyle.fontSize = 11;
+				buttonStyle.normal.textColor = GUI.skin.button.normal.textColor;
+				buttonStyle.focused.textColor = GUI.skin.button.focused.textColor;
+				buttonStyle.hover.textColor = GUI.skin.button.hover.textColor;
+				buttonStyle.padding = new RectOffset(4,4,0,0);		
+				return buttonStyle;
+			}
+		}
+
+
 		public static GUIStyle GetBodyStyle(int lineDigits)
 		{
 			var bodyStyle = new GUIStyle(EditorStyles.textArea);

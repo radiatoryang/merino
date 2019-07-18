@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions; // for Word Count
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
@@ -141,7 +141,7 @@ namespace Merino
 		#region EditorWindowStuff
 
 		public const string windowTitle = " Merino (Yarn Editor)";
-		const string syntaxReference = "YARN SYNTAX:  [[GoToThisNodeName]]   [[OptionText|NodeName]]   ->ShortcutOptionText\n<<if $var is 1>>   <<elseif $var = 2>>   <<else>>  <<endif>>    <<set $var to 1>>";
+		const string syntaxReference = "YARN API:  [[GoToThisNodeName]]   [[OptionText|NodeName]]   ->ShortcutOptionText\n<<if $var is 1>>   <<elseif $var = 2>>   <<else>>  <<endif>>    <<set $var to 1>>";
 
 		[MenuItem("Window/Merino/Main Editor")]
 		static void MenuItem_GetWindow()
@@ -949,7 +949,7 @@ namespace Merino
 				EditorGUI.BeginChangeCheck();
 				MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("Autosave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, EditorStyles.miniLabel, GUILayout.Width(80));
 				GUILayout.Space(4);
-				MerinoPrefs.showSyntaxReference = EditorGUILayout.ToggleLeft(new GUIContent("Show Syntax?", "if enabled, will show a little cheat sheet of common Yarn script commands"), MerinoPrefs.showSyntaxReference, EditorStyles.miniLabel, GUILayout.Width(100) );
+				MerinoPrefs.showSyntaxReference = EditorGUILayout.ToggleLeft(new GUIContent("Show API?", "if enabled, will show a little cheat sheet of common Yarn script commands"), MerinoPrefs.showSyntaxReference, EditorStyles.miniLabel, GUILayout.Width(100) );
 				if (EditorGUI.EndChangeCheck())
 				{
 					MerinoPrefs.SaveHiddenPrefs();
@@ -1078,22 +1078,15 @@ namespace Merino
 					EditorGUILayout.BeginHorizontal();
 					
 					// add "Play" button
-					if (GUILayout.Button(new GUIContent("▶", "click to playtest this node"), GUILayout.Width(24) ) )
-					{
-						idToPreview = id;
-					}
+					string oldName = m_TreeView.treeModel.Find(id).name;
+					DrawPlaytestButton(id, oldName, true );
 					
 					// node title
-					string newName = EditorGUILayout.TextField(m_TreeView.treeModel.Find(id).name, MerinoStyles.NameStyle);
-					
-					// display in nodemap
-					if (GUILayout.Button(new GUIContent(MerinoEditorResources.Nodemap, "click to focus on this node in the nodemap\nnode position: " + m_TreeView.treeModel.Find(id).nodePosition.ToString() ), GUILayout.Width(26), GUILayout.Height(18) )) 
-					{
-						var nodemap = MerinoNodemapWindow.GetNodemapWindow();
-						nodemap.FocusNode(id);
-						nodemap.SetSelectedNode(id);
-					}
-					GUILayout.FlexibleSpace();
+					string newName = EditorGUILayout.TextField(oldName, MerinoStyles.NameStyle);
+					newName = MerinoCore.CleanNodeTitle(newName); // in v0.6, we strip forbidden characters from node titles
+
+					// v0.6, button to focus on node in nodemap
+					DrawNodemapButton( id, newName, EditorStyles.miniButton );
 
 // node position now visible in nodemap button tooltip
 // #if MERINO_DEVELOPER
@@ -1103,13 +1096,15 @@ namespace Merino
 					
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));
-					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", GUI.skin.button, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
+					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", EditorStyles.miniButton, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
 					{
 						idToZoomTo = fileParent.id;
 					}
+
+					GUILayout.FlexibleSpace();
 					
 					// delete button
-					if ( FluidGUIButtonIcon(" Delete Node", deleteIcon, "click to delete this node", GUI.skin.button, GUILayout.Width(110) ) )
+					if ( GUILayout.Button(new GUIContent(deleteIcon, "click to delete this node"), GUILayout.Width(26), GUILayout.Height(20) ) )
 					{
 						AddNodeToDelete(id);
 					}
@@ -1335,14 +1330,16 @@ namespace Merino
 
 					// bottom of node container: playtest button and +add new node button
 					GUILayout.BeginHorizontal();
-					if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
-					{
-						idToPreview = id;
-					}
-					if (GUILayout.Button(new GUIContent(" Add New Node", MerinoEditorResources.NodeAdd, "click to add a new node with the same parent (sibling)"), GUILayout.Height(18), GUILayout.Width(120) ) )
+					// if (GUILayout.Button(new GUIContent("▶ Playtest", "click to playtest this node"), GUILayout.Width(80) ) )
+					// {
+					// 	idToPreview = id;
+					// }
+					if (FluidGUIButtonIcon(" Add New Node", MerinoEditorResources.NodeAdd, "click to add a new node with the same parent (sibling)", GUI.skin.button, GUILayout.Height(18), GUILayout.Width(120) ) )
 					{
 						AddNewNode( new List<int> {treeView.treeModel.Find(id).parent.id} );
 					}
+					GUILayout.FlexibleSpace();
+					DrawPlaytestButton( id );
 					GUILayout.EndHorizontal();
 					
 					// close out node container				
@@ -1522,10 +1519,11 @@ namespace Merino
 			}
 		}
 
+		const int fluidGUIThreshold = 500;
 		bool FluidGUIButtonIcon(string buttonTitle, Texture buttonIcon, string buttonTooltip, GUIStyle buttonStyle, params GUILayoutOption[] longParams)
 		{
-			return (position.width-MerinoPrefs.sidebarWidth <= 400 && GUILayout.Button(new GUIContent(buttonIcon, buttonTooltip), buttonStyle, GUILayout.Height(20), GUILayout.Width(24)))
-			       || (position.width-MerinoPrefs.sidebarWidth > 400 && GUILayout.Button(new GUIContent(buttonTitle, buttonIcon, buttonTooltip), buttonStyle, longParams) );
+			return (position.width-MerinoPrefs.sidebarWidth <= fluidGUIThreshold && GUILayout.Button(new GUIContent(buttonIcon, buttonTooltip), buttonStyle, GUILayout.Height(20), GUILayout.Width(24)))
+			       || (position.width-MerinoPrefs.sidebarWidth > fluidGUIThreshold && GUILayout.Button(new GUIContent(buttonTitle, buttonIcon, buttonTooltip), buttonStyle, longParams) );
 		}
 
 		string SanitizeRichText(string lineText)
@@ -1628,7 +1626,7 @@ namespace Merino
 				{
 					var error = errorLog[errorLog.Count - 1];
 					var node = treeView.treeModel.Find(error.nodeID);
-					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} at line {1}", node.name, error.lineNumber, error.message )), style, GUILayout.MaxWidth(position.width * 0.31f) ))
+					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} near line {1}", node.name, error.lineNumber, error.message )), EditorStyles.miniButton, GUILayout.MaxWidth(position.width * 0.31f) ))
 					{
 						if (node != null)
 						{
@@ -1654,29 +1652,77 @@ namespace Merino
 				    && treeView.treeModel.Find(currentNodeIDEditing).leafType == MerinoTreeElement.LeafType.Node
 				) 
 				{
-					// nodemap button
-					if (GUILayout.Button(
-						new GUIContent(
-							" Nodemap: " + treeView.treeModel.Find(currentNodeIDEditing).name, 
-							MerinoEditorResources.Nodemap, 
-							"click to focus on this node in the nodemap\nnode position: " + m_TreeView.treeModel.Find(currentNodeIDEditing).nodePosition.ToString() 
-						), 
-						GUILayout.Height(18) ) ) 
-					{
-						var nodemap = MerinoNodemapWindow.GetNodemapWindow();
-						nodemap.FocusNode(currentNodeIDEditing);
-						nodemap.SetSelectedNode(currentNodeIDEditing);
-					}
-
-					// playtest button
-					if (GUILayout.Button("▶ Playtest node " + treeView.treeModel.Find(currentNodeIDEditing).name, style))
-					{
-						MerinoPlaytestWindow.PlaytestFrom( treeView.treeModel.Find(currentNodeIDEditing).name );
-					}
+					string nodeName = treeView.treeModel.Find(currentNodeIDEditing).name;
+					DrawNodemapButton( currentNodeIDEditing, nodeName, GUI.skin.button );
+					DrawPlaytestButton( currentNodeIDEditing, nodeName );
+					GUILayout.Space(16);
 				}
 			}
 
 			GUILayout.EndArea();
+		}
+
+		void DrawNodemapButton(int nodeID, string nodeName, GUIStyle style) { 
+			if ( FluidGUIButtonIcon(
+				" Map: " + nodeName, 
+				MerinoEditorResources.Nodemap, 
+				"click to focus on node " + nodeName + " in the nodemap\nnode position: " + m_TreeView.treeModel.Find(nodeID).nodePosition.ToString(),
+				style,
+				GUILayout.Height(20) ) ) 
+			{
+				var nodemap = MerinoNodemapWindow.GetNodemapWindow();
+				nodemap.FocusNode(currentNodeIDEditing);
+				nodemap.SetSelectedNode(currentNodeIDEditing);
+			}
+		}
+
+		void DrawPlaytestButton(int playtestNodeID, string nodeName = null, bool iconButton = false ) {
+			// playtest button
+			int playtestParentID = -1;
+			if ( string.IsNullOrEmpty(nodeName) )
+				nodeName = treeView.treeModel.Find(playtestNodeID).name;
+
+			string label = "▶";
+			if ( !iconButton ) {
+				label = "▶ " + nodeName;
+			}
+			var content = new GUIContent(label, "click to playtest " + nodeName );
+			switch ( MerinoPrefs.playtestScope ) {
+				case MerinoPrefs.PlaytestScope.AllFiles:
+					//content.text += " (+ All Nodes)";
+					content.tooltip += " (and also include all currently loaded nodes)";
+				break;
+				case MerinoPrefs.PlaytestScope.SameFile:
+					//content.text += " (+ File Nodes)";
+					content.tooltip += " (and also include all other nodes in the same .yarn.txt file)";
+					playtestParentID = GetFileParent( treeView.treeModel.Find(playtestNodeID) ).id;
+				break;
+				case MerinoPrefs.PlaytestScope.NodeOnly:
+					//content.text += " (Only)";
+					content.tooltip += " (playtest only this node, and no other nodes)";
+					playtestParentID = playtestNodeID;
+				break;
+			}
+			if (GUILayout.Button(content, iconButton ? GUI.skin.button : MerinoStyles.ButtonLeft, GUILayout.Width( 22 ), GUILayout.MaxWidth( iconButton ? 22 : MerinoStyles.ButtonLeft.CalcSize(content).x), GUILayout.Height(20) ))
+			{
+				MerinoPlaytestWindow.PlaytestFrom( nodeName, playtestParentID );
+			}
+			
+			if ( iconButton ) {
+				return;
+			}
+
+			GUI.changed = false;
+			EditorGUI.BeginChangeCheck();
+			GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(80), GUILayout.Height(20) );
+			var enumRect = GUILayoutUtility.GetLastRect();
+			enumRect.x += 4;
+			enumRect.width -= 8;
+			enumRect.y += 2;
+			MerinoPrefs.playtestScope = (MerinoPrefs.PlaytestScope)EditorGUI.EnumPopup(enumRect, MerinoPrefs.playtestScope, MerinoStyles.DropdownRightOverlay );
+			if ( EditorGUI.EndChangeCheck() ) {
+				MerinoPrefs.SaveHiddenPrefs();
+			}
 		}
 
 		public static int GetWordCount(string text) {

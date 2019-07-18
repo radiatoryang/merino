@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using Yarn;
@@ -10,6 +11,7 @@ namespace Merino
     internal static class MerinoCore
     {
 	    public static double LastSaveTime;
+		const string forbiddenCharactersInNodeTitles_regex = @"[\[<>\]{}\|:\s#\$]";
 
         public static void ReimportFiles(bool forceReimportAll = false)
         {
@@ -121,31 +123,18 @@ namespace Merino
 		}
 
 		// used internally for playtest preview
-		public static string SaveAllNodesAsString(int onlyWithFileID = -1)
+		public static string SaveAllNodesAsString(int onlyWithParentID = -1)
 		{	
-			// gather data
-			if (MerinoPrefs.validateNodeTitles && onlyWithFileID == -1) 
-			{
-				ValidateNodeTitles();
-			}
+			var treeNodes = onlyWithParentID >= 0 ? GetAllCachedChildren(onlyWithParentID) : MerinoData.TreeElements;
+
+			if (MerinoPrefs.validateNodeTitles) 
+				ValidateNodeTitles(treeNodes);
 			
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-
-			// save data to string
-			var treeNodes = new List<MerinoTreeElement>();
-
-			if ( onlyWithFileID >= 0) {
-				treeNodes = GetAllCachedChildren(onlyWithFileID);
-			} else {
-				treeNodes = MerinoData.TreeElements;
-			}
-			
 			foreach (var treeNode in treeNodes)
 			{
 				if (treeNode.depth == -1 || treeNode.leafType != MerinoTreeElement.LeafType.Node)
-				{
 					continue;
-				}
 
 				nodeInfo.Add( TreeNodeToYarnNode(treeNode) );
 			}
@@ -174,6 +163,18 @@ namespace Merino
 			}
 
 			return info;
+		}
+
+		// strip forbidden characters from node titles
+		public static string CleanNodeTitle(string newName) {
+			// v0.6, added regex to disallow forbidden characters in node titles
+			string newNameClean = Regex.Replace( newName, forbiddenCharactersInNodeTitles_regex, "");
+			if ( newName.Length != newNameClean.Length ) {
+				// GUI.Label( GUILayoutUtility.GetLastRect(), new GUIContent("Yarn node titles cannot use <>[]{}|:#$ or whitespace", helpIcon), EditorStyles.helpBox );
+				MerinoDebug.Log(LoggingLevel.Verbose, "Merino stripped forbidden characters <>[]{}|:#$ (and whitespace) from your node title.\n" + newName + " ... " + newNameClean);
+				return newNameClean;
+			}
+			return newName;
 		}
 
 		// ensure unique node titles, very important for YarnSpinner
@@ -251,6 +252,9 @@ namespace Merino
 		{
 			var search = new List<int>() { parentID };
 			var children = new List<MerinoTreeElement>();
+			if ( MerinoData.GetNode(parentID).leafType == MerinoTreeElement.LeafType.Node ) {
+				children.Add( MerinoData.GetNode(parentID) );
+			}
 			while ( search.Count > 0) {
 				var newChildren = MerinoData.TreeElements.Where( e => e.cachedParentID == search[0]);
 				children.AddRange( newChildren );

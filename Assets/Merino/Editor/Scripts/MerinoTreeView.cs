@@ -296,7 +296,7 @@ namespace Merino
 			if (args.acceptedRename)
 			{
 				var element = treeModel.Find(args.itemID);
-				element.name = args.newName;
+				element.name = MerinoCore.CleanNodeTitle(args.newName); // v0.6, clean up name (only node titles can be edited)
 				Reload();
 			}
 		}

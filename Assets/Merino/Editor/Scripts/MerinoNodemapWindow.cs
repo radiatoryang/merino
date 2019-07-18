@@ -225,12 +225,7 @@ namespace Merino
             var offset = start.y > end.y ? Vector2.down : Vector2.up;
             offset += start.x > end.x ? Vector2.left : Vector2.right;
             var points = Handles.MakeBezierPoints( start + scrollPos, end + scrollPos, start + scrollPos + offset * 55 * curvature, end + scrollPos, 16);
-            Handles.DrawAAPolyLine( 6f, points); //start + scrollPos, end + scrollPos );
-            // Handles.DrawBezier( start + scrollPos, end + scrollPos, Vector2.zero, Vector2.zero, Color.white, Texture2D.whiteTexture, 3f);
-            // DrawConnectTriangle( points[3], points[3] - points[2]);
-            //DrawConnectTriangle( points[5], points[5] - points[4]);
-            // DrawConnectTriangle( points[7], points[7] - points[6]);
-            //DrawConnectTriangle( points[9], points[9] - points[8]);
+            Handles.DrawAAPolyLine( 6f, points);
             DrawConnectTriangle( points[15], points[15] - points[14]);
         }
 

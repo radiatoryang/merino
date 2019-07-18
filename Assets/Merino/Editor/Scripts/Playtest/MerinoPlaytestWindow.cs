@@ -9,7 +9,6 @@ using UnityEngine;
 namespace Merino
 {
 	//todo: mark if the dialogue loaded in the playtest window is "stale" and that the user should restart if they wish to see the latest changes.
-	//todo: replace "<input>" in parsing errors with the name of the file instead.
 	public class MerinoPlaytestWindow : EventWindow
 	{
 		[NonSerialized] Yarn.Dialogue dialogue;
@@ -155,13 +154,13 @@ namespace Merino
 			CurrentNode = null;
 		}
 
-		public static void PlaytestFrom(string startPassageName)
+		public static void PlaytestFrom(string startPassageName, int onlyFromThisNodeID = -1)
 		{
 			var window = GetWindow<MerinoPlaytestWindow>(windowTitle, true);
-			window.PlaytestFrom_Internal(startPassageName);
+			window.PlaytestFrom_Internal(startPassageName, true, onlyFromThisNodeID );
 		}
 
-		void PlaytestFrom_Internal(string startPassageName, bool reset = true)
+		void PlaytestFrom_Internal(string startPassageName, bool reset = true, int onlyFromThisNodeID = -1)
 		{
 			if (reset)
 			{
@@ -172,10 +171,14 @@ namespace Merino
 				
 				try
 				{
-					var program = MerinoCore.SaveAllNodesAsString();
+					var program = MerinoCore.SaveAllNodesAsString(onlyFromThisNodeID);
 					if (!string.IsNullOrEmpty(program))
 					{
-						dialogue.LoadString(program);
+						string filename = MerinoData.CurrentFiles.Count > 1 ? "<input>" : MerinoData.CurrentFiles[0].name;
+						if ( MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
+							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
+						}
+						dialogue.LoadString(program, filename );
 					}
 				}
 				catch (Exception ex)
@@ -491,8 +494,20 @@ namespace Merino
 				int.TryParse(numberLog, out lineNumber);
 			}
 			
-			// also output to Unity console
 			var nodeRef = MerinoData.TreeElements.Find(x => x.name == nodeName);
+
+			// v0.6, resolved: "todo: replace "<input>" in parsing errors with the name of the file instead."
+			// if filename is default "<input>" then guess filename via cached parentID data in TreeElements
+			if ( fileName == "<input>" && nodeRef != null ) {
+				int giveupCounter = 0;
+				var parent = nodeRef;
+				while ( parent.depth > 0 && parent.cachedParentID > 0 && giveupCounter < 10) {
+					parent = MerinoData.TreeElements.Find( x => x.id == parent.cachedParentID);
+					giveupCounter++;
+				}
+				fileName = parent.name;
+			}
+
 			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
 			MerinoDebug.Log(LoggingLevel.Error, message);
 		}

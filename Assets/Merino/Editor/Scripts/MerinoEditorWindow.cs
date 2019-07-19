@@ -174,6 +174,7 @@ namespace Merino
 			InitIfNeeded(true);
 		}
 
+		// TODO: need to move the rest of these icons to MerinoEditorResources?
 		void InitIcons()
 		{
 			if (helpIcon == null) 
@@ -197,6 +198,7 @@ namespace Merino
 				resetIcon = EditorGUIUtility.Load(path) as Texture;
 			}
 
+			// TODO: put this type of check into the getters / setters in MerinoEditorResources?
 			if ( MerinoEditorResources.PageNew == null ) {
 				MerinoEditorResources.GenerateResourcesScript();
 				MerinoEditorResources.UpdateTextureReferences( MerinoEditorResources.Instance );
@@ -250,6 +252,16 @@ namespace Merino
 		void OnTreeChanged()
 		{
 			lastTreeChangeTime = EditorApplication.timeSinceStartup;
+			// just in case, let's update all the cachedParentIDs
+			UpdateCachedParentIDs();
+		}
+
+		void UpdateCachedParentIDs () {
+			foreach ( var node in MerinoData.TreeElements ) {
+				if ( node != null && node.depth > 0 && node.leafType == MerinoTreeElement.LeafType.Node ) {
+					node.cachedParentID = treeView.treeModel.GetAncestors(node.id)[0];
+				}
+			}
 		}
 
 		// called when something get selected in Project tab
@@ -692,6 +704,7 @@ namespace Merino
 			// Undo.RecordObject(treeData, "Merino: Delete Nodes");
 			
 			m_TreeView.treeModel.RemoveElements(DeleteList);
+			var newDeleteList = new List<int>();
 			foreach (var id in DeleteList)
 			{
 				// remove from selection
@@ -703,6 +716,13 @@ namespace Merino
 				// remove any files from file lists
 				if (MerinoData.FileToNodeID.ContainsValue(id))
 				{
+					// remove any nodes that claimed this file node as a parent
+					var nodes = MerinoData.TreeElements.Where( node => node.cachedParentID == id );
+					foreach ( var node in nodes ) {
+						newDeleteList.Add(node.id);
+						MerinoData.TreeElements.Remove(node); // I don't actually understand when it gets removed though
+					}
+
 					var fileToRemove = MerinoData.FileToNodeID.Where(x => x.Value == id).Select(x => x.Key).First();
 					MerinoData.FileToNodeID.Remove(fileToRemove);
 					MerinoData.CurrentFiles.Remove(fileToRemove);
@@ -714,6 +734,8 @@ namespace Merino
 			}
 
 			DeleteList.Clear();
+			DeleteList.AddRange(newDeleteList);
+
 			TreeElementUtility.UpdateDepthValues(m_TreeView.treeModel.root);
 			
 			if (MerinoPrefs.useAutosave)

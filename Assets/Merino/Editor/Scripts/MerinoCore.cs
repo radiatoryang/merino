@@ -367,7 +367,7 @@ namespace Merino
 				{
 					// tell child about it's parent
 					kvp.Key.parent = parent;
-					kvp.Key.cachedParentID = kvp.Key.id;
+					kvp.Key.cachedParentID = parent.id;
 					// tell parent about it's child
 					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
 					{

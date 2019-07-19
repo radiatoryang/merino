@@ -257,7 +257,7 @@ namespace Merino
                 for (int i = 0; i < currentNodes.Count; i++)
                 {
                     var node = MerinoData.GetNode(currentNodes[i]);
-                    if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
+                    if (node == null || node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
                     var connectedNodes = GetConnectedNodes(node);
 
                     foreach (var connectedNode in connectedNodes)
@@ -271,7 +271,8 @@ namespace Merino
                             Handles.color = new Color( 0.4f, 0.4f, 0.4f, 1f);
                         }
 
-                        var offset = node.nodePosition.x + node.nodePosition.y < connectedNode.nodePosition.x + connectedNode.nodePosition.y ? Vector2.left * 10f : Vector2.right * 10f;
+                        var offset = node.nodePosition.x < connectedNode.nodePosition.x ? Vector2.left * 10f : Vector2.right * 10f;
+                        offset += node.nodePosition.y < connectedNode.nodePosition.y ? Vector2.up * 5f : Vector2.down * 5f;
                         DrawLineConnection( 
                             node.nodeRect.center + offset, 
                             connectedNode.nodeRect.RayIntersectToCenter(node.nodeRect.center, 15f) + offset, 
@@ -332,7 +333,7 @@ namespace Merino
                     string displayName = node.name;
 
                     GUIStyle style = new GUIStyle( GUI.skin.GetStyle("flow node 0") );
-                    GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.2f, 1f);
+                    GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.16f, 1f);
                     if ( isSelected ) {
                         GUI.backgroundColor = oldBGColor;
                         style = new GUIStyle( GUI.skin.GetStyle("flow node 1 on") );

@@ -499,13 +499,7 @@ namespace Merino
 			// v0.6, resolved: "todo: replace "<input>" in parsing errors with the name of the file instead."
 			// if filename is default "<input>" then guess filename via cached parentID data in TreeElements
 			if ( fileName == "<input>" && nodeRef != null ) {
-				int giveupCounter = 0;
-				var parent = nodeRef;
-				while ( parent.depth > 0 && parent.cachedParentID > 0 && giveupCounter < 10) {
-					parent = MerinoData.TreeElements.Find( x => x.id == parent.cachedParentID);
-					giveupCounter++;
-				}
-				fileName = parent.name;
+				fileName = MerinoData.GetFileParent(nodeRef.id).name;
 			}
 
 			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));

@@ -722,6 +722,7 @@ namespace Merino
 			}
 		}
 
+		// TODO: there's a duplicate of this functionality in MerinoData.GetFileParent... should reconcile
 		MerinoTreeElement GetFileParent(MerinoTreeElement treeNode)
 		{
 			return treeNode.leafType == MerinoTreeElement.LeafType.Node ? m_TreeView.treeModel.GetAncestors(treeNode.id).Select( id => m_TreeView.treeModel.Find(id)).Where(x => x.leafType == MerinoTreeElement.LeafType.File).First() : treeNode;
@@ -1712,6 +1713,7 @@ namespace Merino
 				return;
 			}
 
+			bool oldGUIChanged = GUI.changed;
 			GUI.changed = false;
 			EditorGUI.BeginChangeCheck();
 			GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(80), GUILayout.Height(20) );
@@ -1723,6 +1725,7 @@ namespace Merino
 			if ( EditorGUI.EndChangeCheck() ) {
 				MerinoPrefs.SaveHiddenPrefs();
 			}
+			GUI.changed = oldGUIChanged;
 		}
 
 		public static int GetWordCount(string text) {

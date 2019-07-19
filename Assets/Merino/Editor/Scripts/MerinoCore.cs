@@ -125,7 +125,7 @@ namespace Merino
 		// used internally for playtest preview
 		public static string SaveAllNodesAsString(int onlyWithParentID = -1)
 		{	
-			var treeNodes = onlyWithParentID >= 0 ? GetAllCachedChildren(onlyWithParentID) : MerinoData.TreeElements;
+			var treeNodes = onlyWithParentID >= 0 ? MerinoData.GetAllCachedChildren(onlyWithParentID) : MerinoData.TreeElements;
 
 			if (MerinoPrefs.validateNodeTitles) 
 				ValidateNodeTitles(treeNodes);
@@ -247,22 +247,6 @@ namespace Merino
 			}
 			
 		}
-
-		public static List<MerinoTreeElement> GetAllCachedChildren(int parentID) 
-		{
-			var search = new List<int>() { parentID };
-			var children = new List<MerinoTreeElement>();
-			if ( MerinoData.GetNode(parentID).leafType == MerinoTreeElement.LeafType.Node ) {
-				children.Add( MerinoData.GetNode(parentID) );
-			}
-			while ( search.Count > 0) {
-				var newChildren = MerinoData.TreeElements.Where( e => e.cachedParentID == search[0]);
-				children.AddRange( newChildren );
-				search.AddRange( newChildren.Select( child => child.id) );
-				search.RemoveAt(0);
-			}
-			return children;
-		}
 	    
 		public static IList<MerinoTreeElement> GetData()
 		{
@@ -361,7 +345,7 @@ namespace Merino
 				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
 				{
 					newItem.parent = fileRoot;
-					newItem.cachedParentID = newItem.parent.id;
+					newItem.cachedParentID = fileRoot.id;
 					fileRoot.children.Add(newItem);
 				}
 				else
@@ -374,15 +358,16 @@ namespace Merino
 			// second pass: now that all nodes have been created, we can finally assign parents
 			foreach (var kvp in parents )
 			{
-				var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
-				if (parent.Length == 0)
+				var parent = treeElements.Find(x => x.name == kvp.Value);
+				if (parent == null)
 				{
 					MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
 				}
 				else
 				{
 					// tell child about it's parent
-					kvp.Key.parent = parent[0];
+					kvp.Key.parent = parent;
+					kvp.Key.cachedParentID = kvp.Key.id;
 					// tell parent about it's child
 					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
 					{

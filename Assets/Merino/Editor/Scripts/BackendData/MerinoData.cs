@@ -152,6 +152,58 @@ namespace Merino
 			return files;
 		}
 
+		internal static MerinoTreeElement GetFileParent (int nodeID) {
+			int giveupCounter = 0;
+			var parent = GetNode(nodeID);
+			while ( parent.depth > 0 && parent.cachedParentID > 0 && giveupCounter < 10) {
+				parent = MerinoData.TreeElements.Find( x => x.id == parent.cachedParentID);
+				giveupCounter++;
+			}
+			return parent;
+		}
+
+		internal static List<MerinoTreeElement> GetAllCachedChildren(int parentID) 
+		{
+			var search = new List<int>() { parentID };
+			var children = new List<MerinoTreeElement>();
+			if ( MerinoData.GetNode(parentID).leafType == MerinoTreeElement.LeafType.Node ) {
+				children.Add( MerinoData.GetNode(parentID) );
+			}
+			// search for all children, and children of children, etc
+			for( int i=0; i<search.Count; i++) {
+				var newChildren = MerinoData.TreeElements.Where( e => e.cachedParentID == search[i]);
+				foreach ( var child in newChildren ) {
+					if ( !children.Contains(child)) {
+						children.Add(child);
+					}
+					if ( !search.Contains(child.id)) {
+						search.Add(child.id);
+					}
+				}
+			}
+			return children;
+		}
+
+		internal static MerinoTreeElement TextAssetToNode (TextAsset asset) {
+			MerinoData.Instance.RegenerateFileToNodeIDIfNeeded();
+			return GetNode( FileToNodeID[asset] );
+			// return TreeElements.Find( node => node.leafType == MerinoTreeElement.LeafType.File && node.name == asset.name );
+		}
+
+		internal static TextAsset NodeIDToTextAsset(int nodeID) {
+			MerinoData.Instance.RegenerateFileToNodeIDIfNeeded();
+			return MerinoData.CurrentFiles.Find(x => MerinoData.FileToNodeID[x] == nodeID);
+		}
+
+		public void RegenerateFileToNodeIDIfNeeded () {
+			if ( FileToNodeID == null || FileToNodeID.Count == 0) {
+				FileToNodeID = new Dictionary<TextAsset, int>();
+				foreach ( var file in currentFiles ) {
+					FileToNodeID.Add( file, TreeElements.Find( node => node.leafType == MerinoTreeElement.LeafType.File && node.name == file.name ).id );
+				}
+			}
+		}
+
 		#region Util Methods
 
 		internal static MerinoTreeElement GetNode(int id)

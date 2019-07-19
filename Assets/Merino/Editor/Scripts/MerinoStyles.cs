@@ -72,6 +72,7 @@ namespace Merino
 				smallMonoStyle.focused.textColor = smallMonoStyle.normal.textColor;
 				smallMonoStyle.active.textColor = smallMonoStyle.normal.textColor;
 				smallMonoStyle.hover.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.richText = false;
 
 				return smallMonoStyle;
 			}

@@ -13,22 +13,25 @@ namespace Merino
         public const string windowTitle = " Merino (Nodemap)";
         private const string popupControl = "currentFilePopup";
 
-        // [SerializeField] private TextAsset currentFile; // the current file we are displaying a nodemap for. we only display one of the loaded files at a time.
         [NonSerialized] private bool shouldRepaint; //use for "delayed" repaints, call Repaint directly for instant refresh
         // [NonSerialized] private bool forceUpdateCurrentFile;
         [NonSerialized] private string previousFileName;
 
-        static double lastTimestampUpdate;
+        double lastTimestampUpdate;
+
         // for ease of use, int key = file node ID... *not* MerinoData.CurrentFiles index
-        static Dictionary<int, List<MerinoTreeElement>> nodeManifest = new Dictionary<int, List<MerinoTreeElement>>();
-        static List<MerinoTreeElement> allNodes = new List<MerinoTreeElement>();
+        //Dictionary<int, List<MerinoTreeElement>> nodeManifest = new Dictionary<int, List<MerinoTreeElement>>();
+        [SerializeField] NodeManifest nodeManifest = new NodeManifest(); 
+
+        [System.Serializable] class NodeManifest : SerializableDictionary<int, ManifestList> { }
+
+        [SerializeField] List<int> allNodes = new List<int>(); 
 
         [SerializeField] Vector2 scrollPos;
         [SerializeField] float zoom = maxZoom;
         const float minZoom = 0.2f;
         const float maxZoom = 1f;
 
-        // List<MerinoTreeElement> currentNodes = new List<MerinoTreeElement>();
         [NonSerialized] MerinoTreeElement dragNode;
         List<MerinoTreeElement> selectedNodes = new List<MerinoTreeElement>();
         MerinoTreeElement SelectedNode
@@ -55,19 +58,18 @@ namespace Merino
         [MenuItem("Window/Merino/Nodemap")]
         static void MenuItem_GetWindow()
         {
-            GetWindow<MerinoNodemapWindow>(windowTitle, true);
-            UpdateNodeManifest();
-            
+            GetWindow<MerinoNodemapWindow>(windowTitle, true).UpdateNodeManifest();
         }
 
         public static MerinoNodemapWindow GetNodemapWindow() {
-            UpdateNodeManifest();
-			return GetWindow<MerinoNodemapWindow>(windowTitle, true);
+            var window = GetWindow<MerinoNodemapWindow>(windowTitle, true);
+            window.UpdateNodeManifest();
+			return window;
 		}
 
         private void OnEnable()
         {
-            GetNodemapWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Nodemap);
+            // GetNodemapWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Nodemap);
             MerinoEditorWindow.OnFileLoaded += FileLoadedHandler;
             MerinoEditorWindow.OnFileUnloaded += FileUnloadedHandler;
             currentLinkingNode = null;
@@ -83,7 +85,7 @@ namespace Merino
         void OnGUI()
         {
             wantsMouseMove = currentLinkingNode != null;
-            ValidateNodeManifest();
+            // ValidateNodeManifest(); 
             DrawNodemap();
             DrawToolbar(Event.current);
             
@@ -111,8 +113,10 @@ namespace Merino
             }
         }
 
-        static void ValidateNodeManifest() {
+        void ValidateNodeManifest() {
             lastTimestampUpdate = MerinoData.Timestamp;
+
+            // Debug.Log("ValidateNodeManifest: " + nodeManifest.Count);
 
             // validate all keys
             var removeKeys = new List<int>();
@@ -129,22 +133,22 @@ namespace Merino
             }
         }
 
-        static void UpdateNodeManifest() {
+        public void UpdateNodeManifest() {
             ValidateNodeManifest();
 
             // ok, now reload all children into the manifest
             var keys = nodeManifest.Keys.ToList();
             foreach ( var key in keys ) {
-                nodeManifest[key] = MerinoData.GetAllCachedChildren( key );
+                nodeManifest[key].internalList = MerinoData.GetAllCachedChildren( key ).Select( c => c.id).ToList();
             }
 
             UpdateAllNodes();
         }
 
-        static void UpdateAllNodes () {
+        void UpdateAllNodes () {
             allNodes.Clear();
             foreach ( var kvp in nodeManifest ) {
-                allNodes.AddRange( kvp.Value );
+                allNodes.AddRange( kvp.Value.internalList );
             }
         }
 
@@ -164,7 +168,11 @@ namespace Merino
                 GUILayout.EndArea();
             } else {
                 GUILayout.BeginArea( new Rect(position.width/2 - 128, position.height/2 - 48, 256, 96) );
-                EditorGUILayout.HelpBox( "No files / nodes are loaded into Merino yet, so there's nothing to display.", MessageType.Warning, true);
+                if ( MerinoData.CurrentFiles.Count == 0) {
+                    EditorGUILayout.HelpBox( "No files / nodes are loaded into Merino yet, so there's nothing to display.", MessageType.Warning, true);
+                } else {
+                    EditorGUILayout.HelpBox( "Files have been loaded into Merino. Use the dropdown in the top-left to show nodes.", MessageType.Warning, true);
+                }
                 var content = new GUIContent( "Open Merino (Yarn Editor) Window", MerinoEditorResources.Node, "click to open the main Merino editor window" );
                 if ( GUILayout.Button(content) ) {
                     MerinoEditorWindow.GetEditorWindow();
@@ -196,7 +204,7 @@ namespace Merino
             float y = scrollPos.y % smallGridSize;
 			
             //draw small grid
-            Handles.color = new Color(0, 0, 0, 0.5f);
+            Handles.color = new Color(0, 0, 0, 0.25f);
             if (zoom > maxZoom / 2)
             {
                 while (x < width)
@@ -218,7 +226,7 @@ namespace Merino
             //draw large grid
             x = scrollPos.x % gridSize;
             y = scrollPos.y % gridSize;
-            Handles.color = Color.black;
+            Handles.color = new Color(0,0,0, 0.4f);
             while (x < width)
             {
                 Handles.DrawLine(new Vector2(x, 0), new Vector2(x, height));
@@ -248,12 +256,13 @@ namespace Merino
                 var currentNodes = nodeManifest[manifest.Key];
                 for (int i = 0; i < currentNodes.Count; i++)
                 {
-                    var node = currentNodes[i];
+                    var node = MerinoData.GetNode(currentNodes[i]);
                     if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
                     var connectedNodes = GetConnectedNodes(node);
 
                     foreach (var connectedNode in connectedNodes)
                     {
+
                         if ( selectedNodes.Contains(node) ) {
                             Handles.color = new Color( 0.25f, 0.6f, 1f, 1f);
                         } else if ( selectedNodes.Contains( connectedNode )) {
@@ -294,14 +303,17 @@ namespace Merino
             Handles.DrawAAConvexPolygon( center + direction * triSize, center - (direction - width) * triSize, center - (direction + width) * triSize );
         }
         
+        const int colorCount = 10;
         private void DrawNodes()
         {
+            int colorIndex = 0;
+            var oldBGColor = GUI.backgroundColor;
             foreach ( var manifest in nodeManifest ) {
                 var currentNodes = nodeManifest[manifest.Key];
                 var filename = MerinoData.GetNode(manifest.Key).name;
                 for (int i = 0; i < currentNodes.Count; ++i)
                 {
-                    var node = currentNodes[i];
+                    var node = MerinoData.GetNode(currentNodes[i]);
                     if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
 
                     Rect windowRect = new Rect(node.nodeRect);
@@ -310,7 +322,7 @@ namespace Merino
                     bool isSelected = false;
                     foreach (var selectedNode in selectedNodes)
                     {
-                        if (selectedNode.name == node.name)
+                        if (selectedNode.id == node.id)
                         {
                             isSelected = true;
                             break;
@@ -318,12 +330,11 @@ namespace Merino
                     }
 
                     string displayName = node.name;
-                    if ( nodeManifest.Count > 1 ) { // if more than 1 file loaded, then display filename too
-                        displayName = "<size=8>" + filename + "</size>\n" + displayName;
-                    }
 
                     GUIStyle style = new GUIStyle( GUI.skin.GetStyle("flow node 0") );
+                    GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.2f, 1f);
                     if ( isSelected ) {
+                        GUI.backgroundColor = oldBGColor;
                         style = new GUIStyle( GUI.skin.GetStyle("flow node 1 on") );
                     } 
                     // else if ( node.name.StartsWith("Start") ) {
@@ -346,21 +357,29 @@ namespace Merino
                     // }
 
                     style.alignment = TextAnchor.UpperCenter;
-                    // if ( nodeManifest.Count > 1 ) {
-                    //     style.richText = true;
-                    //     style.padding.top -= 2;
-                    // }
-                    GUI.Box(windowRect, displayName, style);
+                    if ( nodeManifest.Count > 1 ) {
+                        displayName = "<size=8>" + filename + "</size>\n" + displayName;
+                        style.richText = true;
+                        style.padding.top -= 2;
+                    }
+
+                    var isThereBrokenNode = GetConnectedNodes(node, false, true).Where( n => n == null).Count() > 0;
+                    if (isThereBrokenNode ) {
+                        GUI.Box(windowRect, new GUIContent(displayName, MerinoEditorResources.Error, "This node has a broken link.\n- check your node names\n- the other node could be in a different file"), style);
+                    } else {
+                        GUI.Box(windowRect, displayName, style);
+                    }
 
                     // if node is selected, show playtest button
-                    if (isSelected) {
+                    if (isSelected && currentLinkingNode == null) {
                         var buttonRect = new Rect(windowRect);
                         buttonRect.y -= 20;
                         buttonRect.height = 20;
-                        if (GUI.Button(buttonRect, "▶ Playtest"))
-                        {
-                            MerinoPlaytestWindow.PlaytestFrom( node.name );
-                        }
+                        GUILayout.BeginArea( buttonRect );
+                        GUILayout.BeginHorizontal();
+                        MerinoEditorWindow.DrawPlaytestButton( node.id, node.name, true, true );
+                        GUILayout.EndHorizontal();
+                        GUILayout.EndArea();
                     }
 
                     // node body preview
@@ -369,8 +388,22 @@ namespace Merino
                     windowRect.width -= 10;
                     windowRect.height -= nodeManifest.Count > 1 ? 40 : 30;
                     GUI.Box( windowRect, node.nodeBody.Substring(0, Mathf.Min(128, node.nodeBody.Length)), MerinoStyles.SmallMonoTextStyle );
+                
+                    // if node is selected, show link button
+                    if ( isSelected && currentLinkingNode == null ) {
+                        windowRect.x += 10;
+                        windowRect.y += 30;
+                        windowRect.width -= 20;
+                        windowRect.height = 20;
+                        if ( GUI.Button( windowRect, "+ New Link") ) {
+                            OnRightClickStartConnectNode( node );
+                        }
+                    }
+                
                 }
+                colorIndex = (colorIndex+1) % colorCount;
             }
+            GUI.backgroundColor = oldBGColor;
         }
 
         void HandleZoom(float delta, Vector2 center)
@@ -392,7 +425,7 @@ namespace Merino
 
                 if (MerinoData.CurrentFiles.Count > 0)
                 {
-                    if ( EditorGUILayout.DropdownButton( new GUIContent(nodeManifest.Count + " Files Loaded"), FocusType.Passive, EditorStyles.toolbarDropDown ) ) {
+                    if ( EditorGUILayout.DropdownButton( new GUIContent(nodeManifest.Count + " Files Loaded"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.Width(120) ) ) {
                         var menu = new GenericMenu();
 
                         var fileOptions = GetCurrentFileNames();
@@ -405,6 +438,24 @@ namespace Merino
                         menu.DropDown( GUILayoutUtility.GetLastRect() );
                     }
 
+                    GUILayout.Space(2); //small space to mimic unity editor
+
+                    if ( GUILayout.Button("Refresh", EditorStyles.toolbarButton) ) {
+                        var refreshList = nodeManifest.Keys.ToList();
+                        foreach ( var key in refreshList ) {
+                            nodeManifest[key] = null;
+                        }
+                        allNodes.Clear();
+                        UpdateNodeManifest();
+                    }
+
+                    if ( GUILayout.Button("Reset Node Map", EditorStyles.toolbarButton) ) {
+                        scrollPos = Vector2.zero;
+                        zoom = 1f;
+                        nodeManifest.Clear();
+                        allNodes.Clear();
+                        lastTimestampUpdate = 0.0;
+                    }
 
                 //    var fileOptions = GetCurrentFileNames();
                 //    int currentCurrentFile = 0;
@@ -447,10 +498,29 @@ namespace Merino
 
                     GUILayout.FlexibleSpace();
 
+                    if (!MerinoPrefs.useAutosave && GUILayout.Button( new GUIContent(" Save All", MerinoEditorResources.Save, "save all changes to all files"), EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70)))
+                    {
+                        MerinoCore.SaveDataToFiles();
+                        MerinoCore.ReimportFiles(true);
+                    }
+
+                    EditorGUI.BeginChangeCheck();
+                    MerinoPrefs.useAutosave = EditorGUILayout.ToggleLeft(new GUIContent("Autosave?", "if enabled, will automatically save every change"), MerinoPrefs.useAutosave, EditorStyles.miniLabel, GUILayout.Width(80));
+                    GUILayout.Space(4);
+                    MerinoPrefs.allowLinksAcrossFiles = EditorGUILayout.ToggleLeft( new GUIContent("Show Links Across Different Files", "If enabled, the node map will show links between nodes in different files. If disabled, it will mark them as broken."), MerinoPrefs.allowLinksAcrossFiles, EditorStyles.miniLabel );
+                    if ( EditorGUI.EndChangeCheck() ) {
+                        MerinoPrefs.SaveHiddenPrefs();
+                    }
+
+                    GUILayout.FlexibleSpace();
+
                     if ( GUILayout.Button("Unwrap Nodes", EditorStyles.toolbarButton) ) {
                         this.StartCoroutine( UnknotNodes() );
                     }
+                } else {
+                    GUILayout.FlexibleSpace();
                 }
+
             }
             EditorGUILayout.EndHorizontal();
             
@@ -479,7 +549,7 @@ namespace Merino
             if ( !state && nodeManifest.ContainsKey(id) ) {
                 nodeManifest.Remove(id);
             } else if (state && !nodeManifest.ContainsKey(id) ){
-                nodeManifest.Add(id, new List<MerinoTreeElement>() );
+                nodeManifest.Add(id, new ManifestList() );
             }
 
             if ( updateManifest ) {
@@ -501,7 +571,7 @@ namespace Merino
             foreach (var manifest in nodeManifest ) {
                 Vector2 center = Vector2.zero;
 
-                var nodes = nodeManifest[manifest.Key].Where( node => node.depth > 0 && node.leafType == MerinoTreeElement.LeafType.Node ).ToList();
+                var nodes = nodeManifest[manifest.Key].internalList.Select( nodeID => MerinoData.GetNode(nodeID)).Where( node => node.depth > 0 && node.leafType == MerinoTreeElement.LeafType.Node ).ToList();
 
                 var neighbors = new Dictionary<MerinoTreeElement, List<MerinoTreeElement>>(nodes.Count);
                 var forces = new Dictionary<MerinoTreeElement, Vector2>(nodes.Count);
@@ -584,9 +654,8 @@ namespace Merino
                     }
 
                     if ( iterationEnergy < 5f ) {
-                        Debug.Log("ended early");
                         Repaint();
-                        yield break;
+                        continue;
                     }
                 }
             }
@@ -600,7 +669,7 @@ namespace Merino
                 var currentNodes = nodeManifest[manifest.Key];
                 for (int i = currentNodes.Count - 1; i >= 0; i--) // reverse for loop so we get the nodes on top first
                 {
-                    var node = currentNodes[i];
+                    var node = MerinoData.GetNode(currentNodes[i]);
                     if (node.depth == -1 || node.leafType != MerinoTreeElement.LeafType.Node) continue; // skip root node and non-yarn node nodes
 
                     var rect = node.nodeRect;
@@ -722,21 +791,29 @@ namespace Merino
            return list;
        }
                 
-        List<MerinoTreeElement> GetConnectedNodes(MerinoTreeElement baseNode, bool findIncomingLinksToo = false)
+        List<MerinoTreeElement> GetConnectedNodes(MerinoTreeElement baseNode, bool findIncomingLinksToo = false, bool includeNullLinks = false)
         {
             List<MerinoTreeElement> connected = new List<MerinoTreeElement>();
 
-            // TODO: refactor to use regex
+            int fileID = MerinoData.GetFileParent(baseNode.id).id;
 
-            var currentNodes = nodeManifest[ MerinoData.GetFileParent(baseNode.id).id ];
+            // this shouldn't happen... this is bad... but I don't know when / why this happens
+            if ( !nodeManifest.ContainsKey( fileID ) ) {
+                ValidateNodeManifest();
+                AddSetFileToManifest(fileID, true);
+            }
+            
+            var currentNodes = nodeManifest[fileID];
             var nodeSearch = new List<MerinoTreeElement>();
             if ( findIncomingLinksToo ) {
-                nodeSearch.AddRange( currentNodes.Where( node => node.leafType == MerinoTreeElement.LeafType.Node ) );
+                nodeSearch.AddRange( currentNodes.internalList.Select( id => MerinoData.GetNode(id)).Where( node => node.leafType == MerinoTreeElement.LeafType.Node ) );
             } else {
                 nodeSearch.Add( baseNode );
             }
             // parse body for node names
             foreach ( var searchNode in nodeSearch ) {
+
+                 // TODO: refactor to use regex
                 string[] splitBody = searchNode.nodeBody.Split('[', ']');
                 for (int i = 2; i < splitBody.Length; i = i + 4)
                 {
@@ -748,9 +825,15 @@ namespace Merino
                     if (baseNode == searchNode && splitBody[i] == baseNode.name) continue;
                     
                     // get and add connected node to list of connections
-                    var node = MerinoData.GetNode(splitBody[i]);
-                    if (node != null && !connected.Contains(node) ) {
-                        connected.Add(node);
+                    var nodeList = (MerinoPrefs.allowLinksAcrossFiles ? allNodes : currentNodes.internalList ).Select( id => MerinoData.GetNode(id)).Where( node => node.name == splitBody[i] );
+                    foreach ( var node in nodeList ) {
+                        if (node != null ) {
+                            if ( !connected.Contains(node) ) {
+                                connected.Add(node); 
+                            }
+                        } else if ( includeNullLinks ) {
+                            connected.Add(null);
+                        }
                     }
                 }
             }
@@ -807,6 +890,7 @@ namespace Merino
                             currentLinkingNode.nodeBody += string.Format("\n[[Go to {0}|{0}]]", node.name);
                             currentLinkingNode = null;
                             EditorUtility.SetDirty( MerinoData.Instance );
+                            UpdateNodeManifest();
                         }  
                         else if (GetAppendKeyDown())
                         {
@@ -850,9 +934,11 @@ namespace Merino
                 {
                     var menu = new GenericMenu();
                     if ( node != null ) {
-                        menu.AddItem( new GUIContent("Link This Node To..."), false, OnRightClickStartConnectNode, node);
+                        menu.AddItem( new GUIContent("Edit Node \"" + node.name + "\""), false, OnRightClickOpenNode, node);
+                        menu.AddItem( new GUIContent("Playtest \"" + node.name + "\" + " + MerinoPrefs.playtestScope.ToString() ), false, OnRightClickOpenNode, node);
+                        menu.AddItem( new GUIContent("Link \"" + node.name + "\" to..."), false, OnRightClickStartConnectNode, node);
                     } else {
-                        var content = new GUIContent("Create New Node Here");
+                        var content = new GUIContent("Create New Node Here " + e.mousePosition.ToString() );
                         if ( MerinoData.CurrentFiles.Count > 0) {
                             menu.AddItem( content, false, OnRightClickCreateNode, e.mousePosition );
                         } else {
@@ -866,9 +952,20 @@ namespace Merino
             }
         }
 
+        void OnRightClickOpenNode(object node) {
+            var thisNode = (MerinoTreeElement)node;
+            MerinoEditorWindow.GetEditorWindow().SelectNodeAndZoomToLine(thisNode.id, -1);
+        }
+
+        void OnRightClickPlaytest(object node) {
+            var playNode = (MerinoTreeElement)node;
+            MerinoPlaytestWindow.PlaytestFrom( playNode.name, MerinoCore.GetPlaytestParentID(playNode.id) );
+        }
+
         void OnRightClickStartConnectNode (object node) {
             var startNode = (MerinoTreeElement)node;
             currentLinkingNode = startNode;
+            currentLinkTarget = startNode.nodeRect.center / zoom - scrollPos;
             SetSelectedNode( startNode.id );
         }
 
@@ -877,8 +974,10 @@ namespace Merino
 
             var newNode = MerinoEditorWindow.GetEditorWindow(false).AddNewNode(null, false)[0];
             newNode.nodePosition = Vector2Int.RoundToInt( createPos / zoom - scrollPos );
+            Focus();
             SetSelectedNode( newNode.id );
             EditorUtility.SetDirty( MerinoData.Instance );
+            UpdateNodeManifest();
         }
 
         protected override void OnRawMouseMove(Event e)
@@ -937,8 +1036,9 @@ namespace Merino
 			            zoomSelectionBox.position /= zoom;
 			            zoomSelectionBox.size /= zoom;
 
-			            foreach (var node in allNodes)
+			            foreach (var id in allNodes)
 			            {
+                            var node = MerinoData.GetNode(id);
 			                if (zoomSelectionBox.Overlaps(node.nodeRect))
 			                {
 			                    // the selection box overlaps node

@@ -154,7 +154,7 @@ namespace Merino
 		}
 
 		void OnEnable() {
-			GetEditorWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Node );
+			// GetEditorWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Node );
 		}
 		
 		void ResetMerino()
@@ -1080,7 +1080,7 @@ namespace Merino
 					
 					// add "Play" button
 					string oldName = m_TreeView.treeModel.Find(id).name;
-					DrawPlaytestButton(id, oldName, true );
+					DrawPlaytestButton(id, oldName, true, false );
 					
 					// node title
 					string newName = EditorGUILayout.TextField(oldName, MerinoStyles.NameStyle);
@@ -1641,11 +1641,6 @@ namespace Merino
 				} 
 
 				GUILayout.FlexibleSpace ();
-
-				// word count, based on last node you touched
-				if ( currentNodeWordCountCache > -1 ) {
-					GUILayout.Label( currentNodeWordCountCache.ToString() + " words  " );
-				}
 				
 				// contextual buttons, based on the last node you touched or edited
 				if (currentNodeIDEditing > -1 
@@ -1656,7 +1651,15 @@ namespace Merino
 					string nodeName = treeView.treeModel.Find(currentNodeIDEditing).name;
 					DrawNodemapButton( currentNodeIDEditing, nodeName, GUI.skin.button );
 					DrawPlaytestButton( currentNodeIDEditing, nodeName );
-					GUILayout.Space(16);
+
+					// lower-right corner is reserved for resizing the window, so don't put buttons here
+					// word count, based on last node you touched
+					if ( currentNodeWordCountCache > -1 ) {
+						var wcStyle = new GUIStyle( GUI.skin.label );
+						wcStyle.fontSize = 8;
+						wcStyle.alignment = TextAnchor.MiddleRight;
+						GUILayout.Label( currentNodeWordCountCache.ToString() + " words  ", wcStyle, GUILayout.Width(55), GUILayout.Height(20) );
+					}
 				}
 			}
 
@@ -1677,11 +1680,10 @@ namespace Merino
 			}
 		}
 
-		void DrawPlaytestButton(int playtestNodeID, string nodeName = null, bool iconButton = false ) {
-			// playtest button
-			int playtestParentID = -1;
+		// also used in node map, but mostly in the editor window still
+		public static void DrawPlaytestButton(int playtestNodeID, string nodeName = null, bool iconButton = false, bool includeDropdown = true ) {
 			if ( string.IsNullOrEmpty(nodeName) )
-				nodeName = treeView.treeModel.Find(playtestNodeID).name;
+				nodeName = MerinoData.GetNode(playtestNodeID).name;
 
 			string label = "▶";
 			if ( !iconButton ) {
@@ -1690,42 +1692,37 @@ namespace Merino
 			var content = new GUIContent(label, "click to playtest " + nodeName );
 			switch ( MerinoPrefs.playtestScope ) {
 				case MerinoPrefs.PlaytestScope.AllFiles:
-					//content.text += " (+ All Nodes)";
 					content.tooltip += " (and also include all currently loaded nodes)";
 				break;
 				case MerinoPrefs.PlaytestScope.SameFile:
-					//content.text += " (+ File Nodes)";
 					content.tooltip += " (and also include all other nodes in the same .yarn.txt file)";
-					playtestParentID = GetFileParent( treeView.treeModel.Find(playtestNodeID) ).id;
 				break;
 				case MerinoPrefs.PlaytestScope.NodeOnly:
-					//content.text += " (Only)";
 					content.tooltip += " (playtest only this node, and no other nodes)";
-					playtestParentID = playtestNodeID;
 				break;
 			}
-			if (GUILayout.Button(content, iconButton ? GUI.skin.button : MerinoStyles.ButtonLeft, GUILayout.Width( 22 ), GUILayout.MaxWidth( iconButton ? 22 : MerinoStyles.ButtonLeft.CalcSize(content).x), GUILayout.Height(20) ))
+			if (GUILayout.Button(content, !includeDropdown ? GUI.skin.button : MerinoStyles.ButtonLeft, GUILayout.Width( 20 ), GUILayout.MaxWidth( iconButton ? 20 : MerinoStyles.ButtonLeft.CalcSize(content).x), GUILayout.Height(20) ))
 			{
-				MerinoPlaytestWindow.PlaytestFrom( nodeName, playtestParentID );
-			}
-			
-			if ( iconButton ) {
-				return;
+				MerinoPlaytestWindow.PlaytestFrom( nodeName, MerinoCore.GetPlaytestParentID(playtestNodeID) );
 			}
 
-			bool oldGUIChanged = GUI.changed;
-			GUI.changed = false;
-			EditorGUI.BeginChangeCheck();
-			GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(80), GUILayout.Height(20) );
-			var enumRect = GUILayoutUtility.GetLastRect();
-			enumRect.x += 4;
-			enumRect.width -= 8;
-			enumRect.y += 2;
-			MerinoPrefs.playtestScope = (MerinoPrefs.PlaytestScope)EditorGUI.EnumPopup(enumRect, MerinoPrefs.playtestScope, MerinoStyles.DropdownRightOverlay );
-			if ( EditorGUI.EndChangeCheck() ) {
-				MerinoPrefs.SaveHiddenPrefs();
+			if ( includeDropdown ) {
+				bool oldGUIChanged = GUI.changed;
+				// EditorGUI.BeginChangeCheck();
+				GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(80), GUILayout.Height(20) );
+				var enumRect = GUILayoutUtility.GetLastRect();
+				enumRect.x += 4;
+				enumRect.width -= 8;
+				enumRect.y += 2;
+				var newPrefs = (MerinoPrefs.PlaytestScope)EditorGUI.EnumPopup(enumRect, MerinoPrefs.playtestScope, MerinoStyles.DropdownRightOverlay );
+				// if ( EditorGUI.EndChangeCheck() ) {
+				if ( newPrefs != MerinoPrefs.playtestScope ) {
+					MerinoPrefs.playtestScope = newPrefs;
+					MerinoPrefs.SaveHiddenPrefs();
+				}
+				// }
+				GUI.changed = oldGUIChanged;
 			}
-			GUI.changed = oldGUIChanged;
 		}
 
 		public static int GetWordCount(string text) {

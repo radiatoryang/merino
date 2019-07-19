@@ -379,6 +379,19 @@ namespace Merino
 			return treeElements;
 		}
 
+		public static int GetPlaytestParentID (int playtestNodeID) {
+			switch ( MerinoPrefs.playtestScope ) {
+				case MerinoPrefs.PlaytestScope.AllFiles:
+					return -1;
+				case MerinoPrefs.PlaytestScope.SameFile:
+					return MerinoData.GetFileParent( playtestNodeID ).id;
+				case MerinoPrefs.PlaytestScope.NodeOnly:
+					return playtestNodeID;
+				default:
+					return -1;
+			}
+		}
+
 		/// <summary>
 	    /// Calls Refresh() on all MerinoEditorWindows.
 	    /// </summary>

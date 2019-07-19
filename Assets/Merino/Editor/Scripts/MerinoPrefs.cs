@@ -30,6 +30,7 @@ namespace Merino
 		public static bool showSyntaxReference = true;
 		public enum PlaytestScope { AllFiles, SameFile, NodeOnly }
 		public static PlaytestScope playtestScope = PlaytestScope.AllFiles;
+		public static bool allowLinksAcrossFiles = false;
 
 		
 		//window specific
@@ -134,6 +135,7 @@ namespace Merino
 			sidebarWidth = 180f;
 			showSyntaxReference = true;
 			playtestScope = PlaytestScope.AllFiles;
+			allowLinksAcrossFiles = false;
 			
 			SaveHiddenPrefs();
 		}
@@ -174,6 +176,7 @@ namespace Merino
 			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
 			showSyntaxReference = EditorPrefs.GetBool("MerinoShowSyntax");
 			playtestScope = (PlaytestScope)EditorPrefs.GetInt("MerinoPlaytestScope");
+			allowLinksAcrossFiles = EditorPrefs.GetBool("MerinoAllowCrossFile");
 		}
 
 		#endregion
@@ -203,6 +206,7 @@ namespace Merino
 			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
 			EditorPrefs.SetBool("MerinoShowSyntax", showSyntaxReference);
 			EditorPrefs.SetInt("MerinoPlaytestScope", (int)playtestScope );
+			EditorPrefs.SetBool("MerinoAllowCrossFile", allowLinksAcrossFiles );
 		}
 
 		#endregion

@@ -997,7 +997,7 @@ namespace Merino
 			GUILayout.Space(4);
 
 //			bool forceSave = false;
-			int idToPreview = -1;
+			// int idToPreview = -1;
 			int idToZoomTo = -1;
 			if (MerinoData.ViewState.selectedIDs.Count > 0)
 			{ 
@@ -1422,10 +1422,10 @@ namespace Merino
 				}
 				
 				// detect if we need to do play preview
-				if (idToPreview > -1)
-				{
-					MerinoPlaytestWindow.PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name);
-				}
+				// if (idToPreview > -1)
+				// {
+				// 	MerinoPlaytestWindow.PlaytestFrom( m_TreeView.treeModel.Find(idToPreview).name);
+				// }
 				
 				// detect if we need to zoom to a different node ID (can't zoom while in the foreach, that modifies the collection)
 				if (idToZoomTo > -1)

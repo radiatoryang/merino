@@ -337,25 +337,17 @@ namespace Merino
                     if ( isSelected ) {
                         GUI.backgroundColor = oldBGColor;
                         style = new GUIStyle( GUI.skin.GetStyle("flow node 1 on") );
+                    } // highlight current playtest node
+                    else if ( MerinoPlaytestWindow.CurrentNode != null && MerinoPlaytestWindow.CurrentNode == node.name && (MerinoPlaytestWindow.lastFileParent <= 0 || MerinoPlaytestWindow.lastFileParent == manifest.Key) ) {
+                        GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.5f + Mathf.PingPong(System.Convert.ToSingle(EditorApplication.timeSinceStartup), 0.5f), 1f);
+                        Repaint();
+                    } // highlight start nodes
+                    else if ( node.name.Contains("Start") ) {
+                        GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.4f, 1f);
                     } 
-                    // else if ( node.name.StartsWith("Start") ) {
-                    //     if ( isSelected ) {
-                    //         style = GUI.skin.GetStyle("flow node 5 on");
-                    //     } else {
-                    //         style = GUI.skin.GetStyle("flow node 5");
-                    //     }
-                    // }
+
                     // cache node size
                     node.cachedSize = Mathf.CeilToInt(Mathf.Max(100f, GUI.skin.GetStyle("flow node 0").CalcSize( new GUIContent(displayName)).x + 8f));
-
-                    // if ( MerinoPlaytestWindow.CurrentNode != null && MerinoPlaytestWindow.CurrentNode == node.name) {
-                    //     if ( isSelected ) {
-                    //         style = GUI.skin.GetStyle("flow node 3 on");
-                    //     } else {
-                    //         style = GUI.skin.GetStyle("flow node 3");
-                    //     }
-                    //     Repaint();
-                    // }
 
                     style.alignment = TextAnchor.UpperCenter;
                     if ( nodeManifest.Count > 1 ) {

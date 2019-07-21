@@ -48,6 +48,7 @@ namespace Merino
 
 		// this is a cache for MerinoNodemapWindow visualization... otherwise, GetWindow opens the window, even if the dialogue isn't running
 		public static string CurrentNode;
+		public static int lastFileParent = -1;
 		
 		const int margin = 10;
 		Rect bottomToolbarRect
@@ -63,6 +64,7 @@ namespace Merino
 		void OnDisable()
 		{
 			CurrentNode = null;
+			lastFileParent = -1;
 		}
 
 		private void InitIfNeeded()
@@ -157,6 +159,7 @@ namespace Merino
 		public static void PlaytestFrom(string startPassageName, int onlyFromThisNodeID = -1)
 		{
 			var window = GetWindow<MerinoPlaytestWindow>(windowTitle, true);
+			lastFileParent = onlyFromThisNodeID;
 			window.PlaytestFrom_Internal(startPassageName, true, onlyFromThisNodeID );
 		}
 
@@ -231,21 +234,40 @@ namespace Merino
 				}
 				GUILayout.Space(6);
 			
-				// view node source button
-				GUI.enabled = IsDialogueRunning; //disable if dialogue isn't running
-				if (GUILayout.Button(new GUIContent("View Node Source", "Click to see Yarn script code for this node."), EditorStyles.toolbarButton))
+				GUI.enabled = IsDialogueRunning; // disable if dialogue isn't running
+				// attempt to get current node
+				var matchingNode = MerinoData.GetNode(dialogue.currentNode);
+				if ( lastFileParent > 0 ) { // if we know the file where the playtest started, we can be more specific
+					matchingNode = MerinoData.GetAllCachedChildren(lastFileParent).Find( node => node.name == dialogue.currentNode );
+					// ok if that search failed for some reason, then just give up and fallback
+					if ( matchingNode == null ) {
+						matchingNode = MerinoData.GetNode(dialogue.currentNode);
+					}
+				}
+				var content = new GUIContent(" View Node Source", MerinoEditorResources.TextAsset, "Click to see Yarn script code for this node.");
+				if (GUILayout.Button(content, EditorStyles.toolbarButton, GUILayout.Width(EditorStyles.toolbarButton.CalcSize(content).x - 40 ) ))
 				{
-					// attempt to get current node
-					var matchingNode = MerinoData.GetNode(dialogue.currentNode);
+
 					if (matchingNode != null)
 					{
 						// display in yarn editor window
-						var window = GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true);
-						window.SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
+						GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true).
+							SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
 					}
 					else
 					{
-						MerinoDebug.LogFormat(LoggingLevel.Warning, "Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino culdn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+					}
+				}
+				if (GUILayout.Button(new GUIContent(" View in Node Map", MerinoEditorResources.Nodemap, "Click to see this node in the node map window."), EditorStyles.toolbarButton))
+				{
+					if ( matchingNode != null ) 
+					{
+						MerinoNodemapWindow.GetNodemapWindow().FocusNode( matchingNode.id );
+					} 
+					else 
+					{
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino couldn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
 					}
 				}
 				GUI.enabled = true;

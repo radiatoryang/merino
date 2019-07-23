@@ -94,6 +94,7 @@ namespace Merino
 			get {
 				var buttonStyle = new GUIStyle(EditorStyles.miniButtonLeft);
 				buttonStyle.fontSize = 11;
+				buttonStyle.alignment = TextAnchor.MiddleLeft;
 				return buttonStyle;
 			}
 		}

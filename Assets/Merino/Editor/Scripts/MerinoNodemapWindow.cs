@@ -139,7 +139,8 @@ namespace Merino
             // ok, now reload all children into the manifest
             var keys = nodeManifest.Keys.ToList();
             foreach ( var key in keys ) {
-                nodeManifest[key].internalList = MerinoData.GetAllCachedChildren( key ).Select( c => c.id).ToList();
+                 // Debug.Log( nodeManifest != null && nodeManifest.Count > 0 && nodeManifest.ContainsKey(key) && nodeManifest[key].internalList != null );
+                nodeManifest[key].internalList = new List<int>( MerinoData.GetAllCachedChildren( key ).Select( c => c.id).ToList() );
             }
 
             UpdateAllNodes();
@@ -204,7 +205,7 @@ namespace Merino
             float y = scrollPos.y % smallGridSize;
 			
             //draw small grid
-            Handles.color = new Color(0, 0, 0, 0.25f);
+            Handles.color = EditorGUIUtility.isProSkin ? new Color(1,1,1,0.06f) : new Color(0, 0, 0, 0.25f);
             if (zoom > maxZoom / 2)
             {
                 while (x < width)
@@ -226,7 +227,7 @@ namespace Merino
             //draw large grid
             x = scrollPos.x % gridSize;
             y = scrollPos.y % gridSize;
-            Handles.color = new Color(0,0,0, 0.4f);
+            Handles.color = EditorGUIUtility.isProSkin ? new Color(1,1,1,0.1f) : new Color(0,0,0, 0.4f);
             while (x < width)
             {
                 Handles.DrawLine(new Vector2(x, 0), new Vector2(x, height));
@@ -268,7 +269,7 @@ namespace Merino
                         } else if ( selectedNodes.Contains( connectedNode )) {
                             Handles.color = new Color( 0.9f, 0.95f, 1f, 1f);
                         } else {
-                            Handles.color = new Color( 0.4f, 0.4f, 0.4f, 1f);
+                            Handles.color = new Color( 0.5f, 0.5f, 0.5f, 1f);
                         }
 
                         var offset = node.nodePosition.x < connectedNode.nodePosition.x ? Vector2.left * 10f : Vector2.right * 10f;
@@ -333,7 +334,7 @@ namespace Merino
                     string displayName = node.name;
 
                     GUIStyle style = new GUIStyle( GUI.skin.GetStyle("flow node 0") );
-                    GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.16f, 1f);
+                    GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.1f, 1f);
                     if ( isSelected ) {
                         GUI.backgroundColor = oldBGColor;
                         style = new GUIStyle( GUI.skin.GetStyle("flow node 1 on") );
@@ -343,7 +344,7 @@ namespace Merino
                         Repaint();
                     } // highlight start nodes
                     else if ( node.name.Contains("Start") ) {
-                        GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.4f, 1f);
+                        GUI.backgroundColor = Color.HSVToRGB( 1f * colorIndex / colorCount, 0.25f, 1f);
                     } 
 
                     // cache node size
@@ -370,7 +371,7 @@ namespace Merino
                         buttonRect.height = 20;
                         GUILayout.BeginArea( buttonRect );
                         GUILayout.BeginHorizontal();
-                        MerinoEditorWindow.DrawPlaytestButton( node.id, node.name, true, true );
+                        MerinoEditorWindow.DrawPlaytestButton( node.id, node.name, true, true, buttonRect.width - 24 );
                         GUILayout.EndHorizontal();
                         GUILayout.EndArea();
                     }
@@ -385,10 +386,10 @@ namespace Merino
                     // if node is selected, show link button
                     if ( isSelected && currentLinkingNode == null ) {
                         windowRect.x += 10;
-                        windowRect.y += 30;
+                        windowRect.y += windowRect.height;
                         windowRect.width -= 20;
                         windowRect.height = 20;
-                        if ( GUI.Button( windowRect, "+ New Link") ) {
+                        if ( GUI.Button( windowRect, "+ New Link", EditorStyles.miniButton) ) {
                             OnRightClickStartConnectNode( node );
                         }
                     }
@@ -436,7 +437,7 @@ namespace Merino
                     if ( GUILayout.Button("Refresh", EditorStyles.toolbarButton) ) {
                         var refreshList = nodeManifest.Keys.ToList();
                         foreach ( var key in refreshList ) {
-                            nodeManifest[key] = null;
+                            nodeManifest[key].internalList.Clear();
                         }
                         allNodes.Clear();
                         UpdateNodeManifest();
@@ -507,9 +508,9 @@ namespace Merino
 
                     GUILayout.FlexibleSpace();
 
-                    if ( GUILayout.Button("Unwrap Nodes", EditorStyles.toolbarButton) ) {
-                        this.StartCoroutine( UnknotNodes() );
-                    }
+                    // if ( GUILayout.Button("Unwrap Nodes", EditorStyles.toolbarButton) ) {
+                    //     this.StartCoroutine( UnknotNodes() );
+                    // }
                 } else {
                     GUILayout.FlexibleSpace();
                 }

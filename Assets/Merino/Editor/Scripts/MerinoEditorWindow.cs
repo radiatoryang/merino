@@ -1649,7 +1649,7 @@ namespace Merino
 				{
 					var error = errorLog[errorLog.Count - 1];
 					var node = treeView.treeModel.Find(error.nodeID);
-					if (GUILayout.Button(new GUIContent( node == null ? " ERROR!" : " ERROR: " + node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} near line {1}", node.name, error.lineNumber, error.message )), EditorStyles.miniButton, GUILayout.MaxWidth(position.width * 0.31f) ))
+					if (GUILayout.Button(new GUIContent( node == null ? error.message : node.name + ":" + error.lineNumber.ToString(), errorIcon, node == null ? error.message : string.Format("{2}\n\nclick to open node {0} near line {1}", node.name, error.lineNumber, error.message )), EditorStyles.miniButtonLeft, GUILayout.MaxWidth(position.width * 0.31f), GUILayout.Height(15) ))
 					{
 						if (node != null)
 						{
@@ -1659,6 +1659,9 @@ namespace Merino
 						{
 							EditorUtility.DisplayDialog("Merino Error Message!", "Merino error message:\n\n" + error.message, "Close");
 						}
+					} // dismiss error dialog
+					if (GUILayout.Button("x", EditorStyles.miniButtonRight ) ) {
+						errorLog.Clear();
 					}
 				} 
 
@@ -1703,7 +1706,7 @@ namespace Merino
 		}
 
 		// also used in node map, but mostly in the editor window still
-		public static void DrawPlaytestButton(int playtestNodeID, string nodeName = null, bool iconButton = false, bool includeDropdown = true ) {
+		public static void DrawPlaytestButton(int playtestNodeID, string nodeName = null, bool iconButton = false, bool includeDropdown = true, float dropdownFlexWidth = 78 ) {
 			if ( string.IsNullOrEmpty(nodeName) )
 				nodeName = MerinoData.GetNode(playtestNodeID).name;
 
@@ -1723,15 +1726,14 @@ namespace Merino
 					content.tooltip += " (playtest only this node, and no other nodes)";
 				break;
 			}
-			if (GUILayout.Button(content, !includeDropdown ? GUI.skin.button : MerinoStyles.ButtonLeft, GUILayout.Width( 20 ), GUILayout.MaxWidth( iconButton ? 20 : MerinoStyles.ButtonLeft.CalcSize(content).x), GUILayout.Height(20) ))
+			if (GUILayout.Button(content, !includeDropdown ? GUI.skin.button : MerinoStyles.ButtonLeft, GUILayout.MinWidth(22), GUILayout.Width( 22 ), GUILayout.MaxWidth( iconButton ? 22 : MerinoStyles.ButtonLeft.CalcSize(content).x), GUILayout.Height(20) ))
 			{
 				MerinoPlaytestWindow.PlaytestFrom( nodeName, MerinoCore.GetPlaytestParentID(playtestNodeID) );
 			}
 
 			if ( includeDropdown ) {
 				bool oldGUIChanged = GUI.changed;
-				// EditorGUI.BeginChangeCheck();
-				GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(80), GUILayout.Height(20) );
+				GUILayout.Box("", MerinoStyles.ButtonRight, GUILayout.Width(dropdownFlexWidth), GUILayout.Height(20) );
 				var enumRect = GUILayoutUtility.GetLastRect();
 				enumRect.x += 4;
 				enumRect.width -= 8;

@@ -178,7 +178,7 @@ namespace Merino
 					if (!string.IsNullOrEmpty(program))
 					{
 						string filename = MerinoData.CurrentFiles.Count > 1 ? "<input>" : MerinoData.CurrentFiles[0].name;
-						if ( MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
+						if ( onlyFromThisNodeID > 0 && MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
 							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
 						}
 						dialogue.LoadString(program, filename );

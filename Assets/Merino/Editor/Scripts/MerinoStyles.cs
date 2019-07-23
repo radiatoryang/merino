@@ -59,6 +59,24 @@ namespace Merino
 				return nameStyle;
 			}
 		}
+
+		public static GUIStyle SmallMonoTextStyle
+		{
+			get 
+			{
+				var smallMonoStyle = new GUIStyle(EditorStyles.helpBox);
+
+				smallMonoStyle.font = monoFont;
+				smallMonoStyle.fontSize = 11;
+				smallMonoStyle.normal.textColor *= 0.69f;
+				smallMonoStyle.focused.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.active.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.hover.textColor = smallMonoStyle.normal.textColor;
+				smallMonoStyle.richText = false;
+
+				return smallMonoStyle;
+			}
+		}
 		
 		public static GUIStyle ButtonStyle
 		{
@@ -70,6 +88,48 @@ namespace Merino
 				return buttonStyle;
 			}
 		}
+
+		public static GUIStyle ButtonLeft
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonLeft);
+				buttonStyle.fontSize = 11;
+				buttonStyle.alignment = TextAnchor.MiddleLeft;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle ButtonMid
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonMid);
+				buttonStyle.fontSize = 11;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle ButtonRight
+		{
+			get {
+				var buttonStyle = new GUIStyle(EditorStyles.miniButtonRight);
+				buttonStyle.fontSize = 11;
+				return buttonStyle;
+			}
+		}
+
+		public static GUIStyle DropdownRightOverlay
+		{
+			get {
+				var buttonStyle = GUI.skin.GetStyle("IN Dropdown");
+				buttonStyle.fontSize = 11;
+				buttonStyle.normal.textColor = GUI.skin.button.normal.textColor;
+				buttonStyle.focused.textColor = GUI.skin.button.focused.textColor;
+				buttonStyle.hover.textColor = GUI.skin.button.hover.textColor;
+				buttonStyle.padding = new RectOffset(4,4,0,0);		
+				return buttonStyle;
+			}
+		}
+
 
 		public static GUIStyle GetBodyStyle(int lineDigits)
 		{

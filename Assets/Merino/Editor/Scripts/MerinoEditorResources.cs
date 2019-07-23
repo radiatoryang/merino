@@ -30,6 +30,14 @@ namespace Merino
             }
         }
 
+        public static Texture Error { 
+            get { return EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture; }
+        }
+
+        public static Texture TextAsset {
+            get { return EditorGUIUtility.IconContent("TextAsset Icon").image; }
+        }
+
         private static MerinoEditorResources instance;
         private static readonly string editorResourcesFolderName = "\"EditorResources\"";
         private static readonly string PartialEditorResourcesPath = System.IO.Path.Combine("Merino", "EditorResources");

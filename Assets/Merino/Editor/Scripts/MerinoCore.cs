@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using Yarn;
@@ -10,6 +11,7 @@ namespace Merino
     internal static class MerinoCore
     {
 	    public static double LastSaveTime;
+		const string forbiddenCharactersInNodeTitles_regex = @"[\[<>\]{}\|:\s#\$]";
 
         public static void ReimportFiles(bool forceReimportAll = false)
         {
@@ -72,6 +74,7 @@ namespace Merino
 		                MerinoDebug.Log(LoggingLevel.Warning, file.name + " has not been mapped to a NodeID and cannot be saved, reload the file and try again.");
 	                }
                 }
+				EditorUtility.SetDirty( MerinoData.Instance );
             }
         }
 
@@ -120,31 +123,18 @@ namespace Merino
 		}
 
 		// used internally for playtest preview
-		public static string SaveAllNodesAsString(int onlyWithFileID = -1)
+		public static string SaveAllNodesAsString(int onlyWithParentID = -1)
 		{	
-			// gather data
-			if (MerinoPrefs.validateNodeTitles && onlyWithFileID == -1) 
-			{
-				ValidateNodeTitles();
-			}
+			var treeNodes = onlyWithParentID >= 0 ? MerinoData.GetAllCachedChildren(onlyWithParentID) : MerinoData.TreeElements;
+
+			if (MerinoPrefs.validateNodeTitles) 
+				ValidateNodeTitles(treeNodes);
 			
 			var nodeInfo = new List<YarnSpinnerLoader.NodeInfo>();
-
-			// save data to string
-			var treeNodes = new List<MerinoTreeElement>();
-
-			if ( onlyWithFileID >= 0) {
-				treeNodes = GetAllCachedChildren(onlyWithFileID);
-			} else {
-				treeNodes = MerinoData.TreeElements;
-			}
-			
 			foreach (var treeNode in treeNodes)
 			{
 				if (treeNode.depth == -1 || treeNode.leafType != MerinoTreeElement.LeafType.Node)
-				{
 					continue;
-				}
 
 				nodeInfo.Add( TreeNodeToYarnNode(treeNode) );
 			}
@@ -173,6 +163,18 @@ namespace Merino
 			}
 
 			return info;
+		}
+
+		// strip forbidden characters from node titles
+		public static string CleanNodeTitle(string newName) {
+			// v0.6, added regex to disallow forbidden characters in node titles
+			string newNameClean = Regex.Replace( newName, forbiddenCharactersInNodeTitles_regex, "");
+			if ( newName.Length != newNameClean.Length ) {
+				// GUI.Label( GUILayoutUtility.GetLastRect(), new GUIContent("Yarn node titles cannot use <>[]{}|:#$ or whitespace", helpIcon), EditorStyles.helpBox );
+				MerinoDebug.Log(LoggingLevel.Verbose, "Merino stripped forbidden characters <>[]{}|:#$ (and whitespace) from your node title.\n" + newName + " ... " + newNameClean);
+				return newNameClean;
+			}
+			return newName;
 		}
 
 		// ensure unique node titles, very important for YarnSpinner
@@ -245,19 +247,6 @@ namespace Merino
 			}
 			
 		}
-
-		public static List<MerinoTreeElement> GetAllCachedChildren(int parentID) 
-		{
-			var search = new List<int>() { parentID };
-			var children = new List<MerinoTreeElement>();
-			while ( search.Count > 0) {
-				var newChildren = MerinoData.TreeElements.Where( e => e.cachedParentID == search[0]);
-				children.AddRange( newChildren );
-				search.AddRange( newChildren.Select( child => child.id) );
-				search.RemoveAt(0);
-			}
-			return children;
-		}
 	    
 		public static IList<MerinoTreeElement> GetData()
 		{
@@ -306,11 +295,15 @@ namespace Merino
 			return MerinoData.TreeElements;
 		}
 	    
-		public static IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1)
+		public static IList<MerinoTreeElement> GetDataFromFile(TextAsset source, int startID = 1, bool useFastMode=false)
 		{
 			var treeElements = new List<MerinoTreeElement>();
-			AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
-			//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+
+            if (!useFastMode)
+            {
+                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(source)); // TODO: only reload assets that need it? how to do that
+            	//var format = YarnSpinnerLoader.GetFormatFromFileName(AssetDatabase.GetAssetPath(currentFile)); // TODO: add JSON and ByteCode support?
+            }
 			
 			// ROOT: create a root node for the file itself
 			var fileRoot = new MerinoTreeElement(source.name, 0, startID);
@@ -352,7 +345,7 @@ namespace Merino
 				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
 				{
 					newItem.parent = fileRoot;
-					newItem.cachedParentID = newItem.parent.id;
+					newItem.cachedParentID = fileRoot.id;
 					fileRoot.children.Add(newItem);
 				}
 				else
@@ -365,15 +358,16 @@ namespace Merino
 			// second pass: now that all nodes have been created, we can finally assign parents
 			foreach (var kvp in parents )
 			{
-				var parent = treeElements.Where(x => x.name == kvp.Value).ToArray();
-				if (parent.Length == 0)
+				var parent = treeElements.Find(x => x.name == kvp.Value);
+				if (parent == null)
 				{
 					MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
 				}
 				else
 				{
 					// tell child about it's parent
-					kvp.Key.parent = parent[0];
+					kvp.Key.parent = parent;
+					kvp.Key.cachedParentID = parent.id;
 					// tell parent about it's child
 					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
 					{
@@ -385,6 +379,30 @@ namespace Merino
 			return treeElements;
 		}
 
+		public static int GetPlaytestParentID (int playtestNodeID) {
+			switch ( MerinoPrefs.playtestScope ) {
+				case MerinoPrefs.PlaytestScope.AllFiles:
+					return -1;
+				case MerinoPrefs.PlaytestScope.SameFile:
+					return MerinoData.GetFileParent( playtestNodeID ).id;
+				case MerinoPrefs.PlaytestScope.NodeOnly:
+					return playtestNodeID;
+				default:
+					return -1;
+			}
+		}
+
+		/// <summary>
+	    /// Calls Refresh() on all MerinoEditorWindows.
+	    /// </summary>
+	    public static void RefreshWindows()
+	    {
+		    if (EditorUtils.HasWindow<MerinoEditorWindow>())
+			    EditorWindow.GetWindow<MerinoEditorWindow>().Refresh();
+		    if (EditorUtils.HasWindow<MerinoNodemapWindow>())
+			    EditorWindow.GetWindow<MerinoNodemapWindow>().Refresh();
+	    }
+	    
 		#region TempData
 				
 		/// <summary>

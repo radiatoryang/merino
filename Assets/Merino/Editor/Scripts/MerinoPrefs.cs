@@ -27,11 +27,16 @@ namespace Merino
 		public static bool useAutoAdvance = false;
 		public static bool useAutosave = true;
 		public static float sidebarWidth = 180f;
+		public static bool showSyntaxReference = true;
+		public enum PlaytestScope { AllFiles, SameFile, NodeOnly }
+		public static PlaytestScope playtestScope = PlaytestScope.AllFiles;
+		public static bool allowLinksAcrossFiles = false;
+
 		
 		//window specific
 		private static bool prefsLoaded = false;
 		private static Vector2 scrollPos;
-		internal static LoggingLevel loggingLevel = LoggingLevel.Error;
+		internal static LoggingLevel loggingLevel = LoggingLevel.Warning;
 
 		[InitializeOnLoadMethod]
 		public static void InitializePrefs()
@@ -108,7 +113,7 @@ namespace Merino
 		static void ResetEditorPrefs()
 		{
 			newFileTemplatePath = "NewFileTemplate.yarn";
-			loggingLevel = LoggingLevel.Error;
+			loggingLevel = LoggingLevel.Warning;
 			useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
 			useWindowsLineEnding = false;
@@ -128,6 +133,9 @@ namespace Merino
 			useAutoAdvance = false;
 			useAutosave = true;
 			sidebarWidth = 180f;
+			showSyntaxReference = true;
+			playtestScope = PlaytestScope.AllFiles;
+			allowLinksAcrossFiles = false;
 			
 			SaveHiddenPrefs();
 		}
@@ -144,7 +152,7 @@ namespace Merino
 				EditorPrefs.SetBool("MerinoFirstRun", true);
 			}
 			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
-			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int) LoggingLevel.Error);
+			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int)LoggingLevel.Warning);
 			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			useWindowsLineEnding = EditorPrefs.GetBool("MerinoUseWindowsLinesEnding", useWindowsLineEnding );
@@ -166,6 +174,9 @@ namespace Merino
 			useAutoAdvance = EditorPrefs.GetBool("MerinoAutoAdvance");
 			useAutosave = EditorPrefs.GetBool("MerinoAutosave");
 			sidebarWidth = EditorPrefs.GetFloat("MerinoSidebarWidth");
+			showSyntaxReference = EditorPrefs.GetBool("MerinoShowSyntax");
+			playtestScope = (PlaytestScope)EditorPrefs.GetInt("MerinoPlaytestScope");
+			allowLinksAcrossFiles = EditorPrefs.GetBool("MerinoAllowCrossFile");
 		}
 
 		#endregion
@@ -193,6 +204,9 @@ namespace Merino
 			EditorPrefs.SetBool("MerinoAutoAdvance", useAutoAdvance);
 			EditorPrefs.SetBool("MerinoAutosave", useAutosave);
 			EditorPrefs.SetFloat("MerinoSidebarWidth", sidebarWidth);
+			EditorPrefs.SetBool("MerinoShowSyntax", showSyntaxReference);
+			EditorPrefs.SetInt("MerinoPlaytestScope", (int)playtestScope );
+			EditorPrefs.SetBool("MerinoAllowCrossFile", allowLinksAcrossFiles );
 		}
 
 		#endregion

@@ -9,7 +9,6 @@ using UnityEngine;
 namespace Merino
 {
 	//todo: mark if the dialogue loaded in the playtest window is "stale" and that the user should restart if they wish to see the latest changes.
-	//todo: replace "<input>" in parsing errors with the name of the file instead.
 	public class MerinoPlaytestWindow : EventWindow
 	{
 		[NonSerialized] Yarn.Dialogue dialogue;
@@ -33,10 +32,10 @@ namespace Merino
 		private Texture errorIcon;
 
 		const float textSpeed = 0.01f;
-		const string windowTitle = "Merino Playtest";
+		const string windowTitle = "▶ Merino Playtest";
 		const string popupControl = "nodeJumpPopup";
 
-		private bool IsDialogueRunning
+		public bool IsDialogueRunning
 		{
 			get
 			{
@@ -46,6 +45,10 @@ namespace Merino
 				return dialogue.currentNode != null;
 			}
 		}
+
+		// this is a cache for MerinoNodemapWindow visualization... otherwise, GetWindow opens the window, even if the dialogue isn't running
+		public static string CurrentNode;
+		public static int lastFileParent = -1;
 		
 		const int margin = 10;
 		Rect bottomToolbarRect
@@ -58,6 +61,12 @@ namespace Merino
 			InitIfNeeded();
 		}
 
+		void OnDisable()
+		{
+			CurrentNode = null;
+			lastFileParent = -1;
+		}
+
 		private void InitIfNeeded()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
@@ -67,6 +76,8 @@ namespace Merino
 			// setup the logging system.
 			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, message);
 			dialogue.LogErrorMessage = PlaytestErrorLog;
+
+			CurrentNode = null;
 			
 			// icons
 			if (errorIcon == null)
@@ -116,6 +127,10 @@ namespace Merino
 		
 		#region Public Static Methods and their "Internal" versions
 
+		public static MerinoPlaytestWindow GetPlaytestWindow(bool focus) {
+			return GetWindow<MerinoPlaytestWindow>(windowTitle, focus);
+		}
+
 		public static void StopPlaytest(bool force = false)
 		{
 			if (EditorUtils.HasWindow<MerinoPlaytestWindow>())
@@ -138,15 +153,17 @@ namespace Merino
 			
 				Close();
 			}
+			CurrentNode = null;
 		}
 
-		public static void PlaytestFrom(string startPassageName)
+		public static void PlaytestFrom(string startPassageName, int onlyFromThisNodeID = -1)
 		{
 			var window = GetWindow<MerinoPlaytestWindow>(windowTitle, true);
-			window.PlaytestFrom_Internal(startPassageName);
+			lastFileParent = onlyFromThisNodeID;
+			window.PlaytestFrom_Internal(startPassageName, true, onlyFromThisNodeID );
 		}
 
-		void PlaytestFrom_Internal(string startPassageName, bool reset = true)
+		void PlaytestFrom_Internal(string startPassageName, bool reset = true, int onlyFromThisNodeID = -1)
 		{
 			if (reset)
 			{
@@ -157,10 +174,14 @@ namespace Merino
 				
 				try
 				{
-					var program = MerinoCore.SaveAllNodesAsString();
+					var program = MerinoCore.SaveAllNodesAsString(onlyFromThisNodeID);
 					if (!string.IsNullOrEmpty(program))
 					{
-						dialogue.LoadString(program);
+						string filename = MerinoData.CurrentFiles.Count > 1 ? "<input>" : MerinoData.CurrentFiles[0].name;
+						if ( onlyFromThisNodeID > 0 && MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
+							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
+						}
+						dialogue.LoadString(program, filename );
 					}
 				}
 				catch (Exception ex)
@@ -213,21 +234,40 @@ namespace Merino
 				}
 				GUILayout.Space(6);
 			
-				// view node source button
-				GUI.enabled = IsDialogueRunning; //disable if dialogue isn't running
-				if (GUILayout.Button(new GUIContent("View Node Source", "Click to see Yarn script code for this node."), EditorStyles.toolbarButton))
+				GUI.enabled = IsDialogueRunning; // disable if dialogue isn't running
+				// attempt to get current node
+				var matchingNode = MerinoData.GetNode(dialogue.currentNode);
+				if ( lastFileParent > 0 ) { // if we know the file where the playtest started, we can be more specific
+					matchingNode = MerinoData.GetAllCachedChildren(lastFileParent).Find( node => node.name == dialogue.currentNode );
+					// ok if that search failed for some reason, then just give up and fallback
+					if ( matchingNode == null ) {
+						matchingNode = MerinoData.GetNode(dialogue.currentNode);
+					}
+				}
+				var content = new GUIContent(" View Node Source", MerinoEditorResources.TextAsset, "Click to see Yarn script code for this node.");
+				if (GUILayout.Button(content, EditorStyles.toolbarButton, GUILayout.Width(EditorStyles.toolbarButton.CalcSize(content).x - 40 ) ))
 				{
-					// attempt to get current node
-					var matchingNode = MerinoData.GetNode(dialogue.currentNode);
+
 					if (matchingNode != null)
 					{
 						// display in yarn editor window
-						var window = GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true);
-						window.SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
+						GetWindow<MerinoEditorWindow>(MerinoEditorWindow.windowTitle, true).
+							SelectNodeAndZoomToLine(matchingNode.id, GuessLineNumber(matchingNode.id, displayStringFull));
 					}
 					else
 					{
-						MerinoDebug.LogFormat(LoggingLevel.Warning, "Couldn't find the node {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino culdn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+					}
+				}
+				if (GUILayout.Button(new GUIContent(" View in Node Map", MerinoEditorResources.Nodemap, "Click to see this node in the node map window."), EditorStyles.toolbarButton))
+				{
+					if ( matchingNode != null ) 
+					{
+						MerinoNodemapWindow.GetNodemapWindow().FocusNode( matchingNode.id );
+					} 
+					else 
+					{
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino couldn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
 					}
 				}
 				GUI.enabled = true;
@@ -340,6 +380,7 @@ namespace Merino
             // Get lines, options and commands from the Dialogue object, one at a time.
             foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
             {
+				CurrentNode = dialogue.currentNode;
                 if (step is Yarn.Dialogue.LineResult) 
                 {
                     // Wait for line to finish displaying
@@ -362,6 +403,7 @@ namespace Merino
             }
 	        
 			MerinoDebug.Log(LoggingLevel.Info, "Reached the end of the dialogue.");
+			CurrentNode = null;
 	        
             // No more results! The dialogue is done.
 	        yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);
@@ -474,8 +516,14 @@ namespace Merino
 				int.TryParse(numberLog, out lineNumber);
 			}
 			
-			// also output to Unity console
 			var nodeRef = MerinoData.TreeElements.Find(x => x.name == nodeName);
+
+			// v0.6, resolved: "todo: replace "<input>" in parsing errors with the name of the file instead."
+			// if filename is default "<input>" then guess filename via cached parentID data in TreeElements
+			if ( fileName == "<input>" && nodeRef != null ) {
+				fileName = MerinoData.GetFileParent(nodeRef.id).name;
+			}
+
 			MerinoEditorWindow.errorLog.Add(new MerinoEditorWindow.MerinoErrorLine(message, fileName, nodeRef != null ? nodeRef.id : -1, Mathf.Max(0, lineNumber)));
 			MerinoDebug.Log(LoggingLevel.Error, message);
 		}

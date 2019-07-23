@@ -296,7 +296,7 @@ namespace Merino
 			if (args.acceptedRename)
 			{
 				var element = treeModel.Find(args.itemID);
-				element.name = args.newName;
+				element.name = MerinoCore.CleanNodeTitle(args.newName); // v0.6, clean up name (only node titles can be edited)
 				Reload();
 			}
 		}
@@ -353,12 +353,29 @@ namespace Merino
 		{
 			if (Event.current.type == EventType.KeyDown)
 			{
-				if (Event.current.keyCode == KeyCode.Delete)
+				var keyCode = Event.current.keyCode;
+				
+				if (keyCode == KeyCode.Delete)
 				{
 					//delete selected nodes
 					if (HasSelection())
 						DeleteSelectedNodes();
 				
+					Event.current.Use();
+				}
+				
+				if (keyCode == KeyCode.F)
+				{
+					//todo: handle focusing on file node
+					// focus on selected nodes in nodemap
+					if (HasSelection() && EditorUtils.HasWindow<MerinoNodemapWindow>())
+					{
+						var w = EditorWindow.GetWindow<MerinoNodemapWindow>();
+						var selection = GetSelection().ToList();
+						w.FocusNode(selection);
+						w.SetSelectedNode(selection);
+					}
+					
 					Event.current.Use();
 				}
 			}

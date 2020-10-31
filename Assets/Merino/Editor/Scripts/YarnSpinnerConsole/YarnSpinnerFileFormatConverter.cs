@@ -7,7 +7,6 @@
 // -- Robert Yang, 11 Feb 2018
 
 using System;
-using Newtonsoft.Json;
 using System.IO;
 using System.Collections.Generic;
 
@@ -83,70 +82,6 @@ namespace Merino
 		}
 	#endregion
 
-		public static int ConvertFormat(ConvertFormatOptions options)
-		{
-
-			CheckFileList(options.files, ALLOWED_EXTENSIONS);
-
-			if (options.convertToJSON)
-			{
-				return ConvertToJSON(options);
-			}
-			if (options.convertToYarn)
-			{
-				return ConvertToYarn(options);
-			}
-
-//			var processName = System.IO.Path.GetFileName(Environment.GetCommandLineArgs()[0]);
-
-//			YarnSpinnerConsole.Error(string.Format("You must specify a destination format. Run '{0} help convert' to learn more.", processName));
-			return 1;
-		}
-
-		public static int ConvertToJSON(ConvertFormatOptions options)
-		{
-			foreach (var file in options.files)
-			{
-
-				if (YarnSpinnerLoader.GetFormatFromFileName(file) == NodeFormat.JSON)
-				{
-					MerinoDebug.LogFormat(LoggingLevel.Warning, "Not converting file {0}, because its name implies it's already in JSON format", file);
-					continue;
-				}
-
-				ConvertNodesInFile(options, file, "json", (IEnumerable<YarnSpinnerLoader.NodeInfo> nodes) => JsonConvert.SerializeObject(nodes, Formatting.Indented));
-
-			}
-			return 0;
-		}
-
-		public static int ConvertToYarn(ConvertFormatOptions options)
-		{
-			foreach (var file in options.files)
-			{
-				if (YarnSpinnerLoader.GetFormatFromFileName(file) == NodeFormat.Text)
-				{
-					MerinoDebug.LogFormat(LoggingLevel.Warning, "Not converting file {0}, because its name implies it's already in Yarn format", file);
-					continue;
-				}
-
-				ConvertNodesInFile(options, file, "yarn.txt", ConvertNodesToYarnText);
-			}
-			return 0;
-		}
-
-		public static string ConvertNodes(IEnumerable<YarnSpinnerLoader.NodeInfo> nodes, NodeFormat format) {
-			switch (format)
-			{
-			case NodeFormat.JSON:
-				return JsonConvert.SerializeObject(nodes, Formatting.Indented);
-			case NodeFormat.Text:
-				return ConvertNodesToYarnText(nodes);
-			default:
-				throw new ArgumentOutOfRangeException();
-			}
-		}
-
 		public static string ConvertNodesToYarnText(IEnumerable<YarnSpinnerLoader.NodeInfo> nodes)
 		{
 			var sb = new System.Text.StringBuilder();
@@ -163,9 +98,9 @@ namespace Merino
 					}
 
 					// piggy-back off the JsonIgnoreAttribute to sense items that should not be serialised
-					if (property.GetCustomAttributes(typeof(JsonIgnoreAttribute), false).Length > 0) {
-						continue;
-					}
+					// if (property.GetCustomAttributes(typeof(JsonIgnoreAttribute), false).Length > 0) {
+					// 	continue;
+					// }
 
 					var field = property.Name;
 
@@ -229,7 +164,7 @@ namespace Merino
 
 			IEnumerable<YarnSpinnerLoader.NodeInfo> nodes;
 			try {
-				nodes = YarnSpinnerLoader.GetNodesFromText(text, YarnSpinnerLoader.GetFormatFromFileName(file));
+				nodes = YarnSpinnerLoader.GetNodesFromText(text);
 			} catch (FormatException e) {
 				MerinoDebug.Log(LoggingLevel.Error, e.Message);
 				return;

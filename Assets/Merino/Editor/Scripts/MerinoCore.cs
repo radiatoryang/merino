@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using Yarn;
+using Yarn.Unity;
 
 namespace Merino
 {
@@ -164,6 +165,13 @@ namespace Merino
 
 			return info;
 		}
+
+		// static void LoadNodesFromProgram(YarnProgram program) {
+		// 	var p = program.GetProgram();
+		// 	foreach (var n in p.Nodes) {
+		// 		n.Value.Labels
+		// 	}
+		// }
 
 		// strip forbidden characters from node titles
 		public static string CleanNodeTitle(string newName) {
@@ -327,7 +335,7 @@ namespace Merino
 			}
 
 			// otherwise, load nodes from file
-			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text, NodeFormat.Text);
+			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text);
 			var parents = new Dictionary<MerinoTreeElement, string>();
 			foreach (var node in nodes)
 			{

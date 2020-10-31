@@ -3,6 +3,8 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEditor.IMGUI.Controls;
+using Yarn;
+using Yarn.Unity;
 
 namespace Merino
 {
@@ -59,6 +61,13 @@ namespace Merino
 		{
 			get { return Instance.viewState; }
 			set { Instance.viewState = value; }
+		}
+
+		[SerializeField] private YarnProgram currentProgram;
+		internal static YarnProgram CurrentProgram
+		{
+			get { return Instance.currentProgram; }
+			set { Instance.currentProgram = value; }
 		}
 		
 		[SerializeField] private List<TextAsset> currentFiles = new List<TextAsset>();

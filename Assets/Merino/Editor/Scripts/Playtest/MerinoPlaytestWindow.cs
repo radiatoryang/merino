@@ -5,6 +5,8 @@ using System.Text;
 using Merino.EditorCoroutines;
 using UnityEditor;
 using UnityEngine;
+using Yarn;
+using Yarn.Unity;
 
 namespace Merino
 {
@@ -13,10 +15,10 @@ namespace Merino
 	{
 		[NonSerialized] Yarn.Dialogue dialogue;
 		[NonSerialized] MerinoVariableStorage varStorage;
-		[NonSerialized] Yarn.OptionChooser optionChooser;
+		// [NonSerialized] Yarn.OptionChooser optionChooser;
 		
 		string displayString, displayStringFull;
-		string[] optionStrings = new string[0];
+		// string[] optionStrings = new string[0];
 		
 		public bool blockMouseInput; // prevents mouse input to progress text for a single frame
 		bool inputContinue;
@@ -42,13 +44,17 @@ namespace Merino
 				if (dialogue == null)
 					return false;
 				
-				return dialogue.currentNode != null;
+				return dialogue.CurrentNode != null;
 			}
 		}
 
 		// this is a cache for MerinoNodemapWindow visualization... otherwise, GetWindow opens the window, even if the dialogue isn't running
 		public static string CurrentNode;
+		public static LocalizedLine CurrentLine {get; private set;}
+		LocalizationDatabase localizationDatabase;
 		public static int lastFileParent = -1;
+
+		bool runSelectedOptionAsLine = false;
 		
 		const int margin = 10;
 		Rect bottomToolbarRect
@@ -70,8 +76,17 @@ namespace Merino
 		private void InitIfNeeded()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
+			localizationDatabase = ScriptableObject.CreateInstance<LocalizationDatabase>();
+			//var runtimeLocalization = localizationDatabase.CreateLocalization(Preferences.TextLanguage);
+
 			varStorage = new MerinoVariableStorage();
 			dialogue = new Yarn.Dialogue(varStorage);
+
+			// main flow
+			dialogue.LineHandler = HandleLine;
+			dialogue.CommandHandler = HandleCommand;
+			dialogue.OptionsHandler = HandleOptions;
+			// dialogue.NodeStartHandler
 			
 			// setup the logging system.
 			dialogue.LogDebugMessage = message => MerinoDebug.Log(LoggingLevel.Verbose, message);
@@ -170,7 +185,7 @@ namespace Merino
 				MerinoEditorWindow.errorLog.Clear();
 				dialogue.Stop();
 				dialogue.UnloadAll();
-				varStorage.ResetToDefaults();
+				varStorage.Clear();
 				
 				try
 				{
@@ -181,7 +196,8 @@ namespace Merino
 						if ( onlyFromThisNodeID > 0 && MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
 							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
 						}
-						dialogue.LoadString(program, filename );
+						// dialogue.LoadString(program, filename );
+						dialogue.AddProgram( MerinoData.CurrentProgram.GetProgram() );
 					}
 				}
 				catch (Exception ex)
@@ -194,7 +210,9 @@ namespace Merino
 
 			validDialogue = true;
 			this.StopAllCoroutines();
-			this.StartCoroutine(RunDialogue(startPassageName));
+
+			dialogue.SetNode(startPassageName);
+			ContinueDialogue();
 		}
 
 		#endregion
@@ -210,8 +228,8 @@ namespace Merino
 				GUILayout.Space(2); //small space to mimic unity editor
 			
 				// jump to node button
-				var jumpOptions = dialogue.allNodes.ToList();
-				int currentJumpIndex = jumpOptions.IndexOf(dialogue.currentNode);
+				var jumpOptions = dialogue.NodeNames.ToList();
+				int currentJumpIndex = jumpOptions.IndexOf(dialogue.CurrentNode);
 				if (!IsDialogueRunning)
 				{ 
 					// if there is no current node, then inform the user that
@@ -236,12 +254,12 @@ namespace Merino
 			
 				GUI.enabled = IsDialogueRunning; // disable if dialogue isn't running
 				// attempt to get current node
-				var matchingNode = MerinoData.GetNode(dialogue.currentNode);
+				var matchingNode = MerinoData.GetNode(dialogue.CurrentNode);
 				if ( lastFileParent > 0 ) { // if we know the file where the playtest started, we can be more specific
-					matchingNode = MerinoData.GetAllCachedChildren(lastFileParent).Find( node => node.name == dialogue.currentNode );
+					matchingNode = MerinoData.GetAllCachedChildren(lastFileParent).Find( node => node.name == dialogue.CurrentNode );
 					// ok if that search failed for some reason, then just give up and fallback
 					if ( matchingNode == null ) {
-						matchingNode = MerinoData.GetNode(dialogue.currentNode);
+						matchingNode = MerinoData.GetNode(dialogue.CurrentNode);
 					}
 				}
 				var content = new GUIContent(" View Node Source", MerinoEditorResources.TextAsset, "Click to see Yarn script code for this node.");
@@ -256,7 +274,7 @@ namespace Merino
 					}
 					else
 					{
-						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino culdn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino culdn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.CurrentNode);
 					}
 				}
 				if (GUILayout.Button(new GUIContent(" View in Node Map", MerinoEditorResources.Nodemap, "Click to see this node in the node map window."), EditorStyles.toolbarButton))
@@ -267,7 +285,7 @@ namespace Merino
 					} 
 					else 
 					{
-						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino couldn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.currentNode);
+						MerinoDebug.LogFormat(LoggingLevel.Warning, "Merino couldn't find any node called {0}. It might've been deleted or the Yarn file is corrupted.", dialogue.CurrentNode);
 					}
 				}
 				GUI.enabled = true;
@@ -324,13 +342,20 @@ namespace Merino
 			}
 			
 			// show choices
-			for (int i = 0; i < optionStrings.Length; i++)
+			for (int i = 0; CurrentOptions != null && i < CurrentOptions.Length; i++)
 			{
-				if (GUILayout.Button(optionStrings[i], MerinoStyles.ButtonStyle))
+				if (GUILayout.Button(CurrentOptions[i].Line.Text.Text, MerinoStyles.ButtonStyle))
 				{
 					inputOption = i;
-					optionChooser(inputOption);
-					optionStrings = new string[0];
+					dialogue.SetSelectedOption(inputOption);
+					
+					if (runSelectedOptionAsLine) {
+						this.StartCoroutine(RunLine( CurrentOptions[inputOption].Line ) );
+					} else {
+						ContinueDialogue();
+					}
+
+					CurrentOptions = null;
 				}
 			}
 		}
@@ -375,51 +400,63 @@ namespace Merino
 
 		#region Playtest Methods
 
-		IEnumerator RunDialogue(string startNode = "Start")
-        {        
-            // Get lines, options and commands from the Dialogue object, one at a time.
-            foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
-            {
-				CurrentNode = dialogue.currentNode;
-                if (step is Yarn.Dialogue.LineResult) 
-                {
-                    // Wait for line to finish displaying
-                    var lineResult = step as Yarn.Dialogue.LineResult;
-	                yield return this.StartCoroutine(RunLine(lineResult.line));
-                } 
-                else if (step is Yarn.Dialogue.OptionSetResult) 
-                {
-                    // Wait for user to finish picking an option
-                    var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
-	                RunOptions(optionSetResult.options, optionSetResult.setSelectedOptionDelegate);
-	                yield return new WaitWhile(() => inputOption < 0);
-                } 
-                else if (step is Yarn.Dialogue.CommandResult) 
-                {
-                    // Wait for command to finish running
-                    var commandResult = step as Yarn.Dialogue.CommandResult;
-	                yield return this.StartCoroutine(RunCommand(commandResult.command));
-                } 
-            }
+		// IEnumerator RunDialogue(string startNode = "Start")
+        // {        
+        //     // Get lines, options and commands from the Dialogue object, one at a time.
+        //     foreach (Yarn.Dialogue.RunnerResult step in dialogue.Run(startNode))
+        //     {
+		// 		CurrentNode = dialogue.CurrentNode;
+        //         if (step is Yarn.Dialogue.LineResult) 
+        //         {
+        //             // Wait for line to finish displaying
+        //             var lineResult = step as Yarn.Dialogue.LineResult;
+	    //             yield return this.StartCoroutine(RunLine(lineResult.line));
+        //         } 
+        //         else if (step is Yarn.Dialogue.OptionSetResult) 
+        //         {
+        //             // Wait for user to finish picking an option
+        //             var optionSetResult = step as Yarn.Dialogue.OptionSetResult;
+	    //             RunOptions(optionSetResult.options, optionSetResult.setSelectedOptionDelegate);
+	    //             yield return new WaitWhile(() => inputOption < 0);
+        //         } 
+        //         else if (step is Yarn.Dialogue.CommandResult) 
+        //         {
+        //             // Wait for command to finish running
+        //             var commandResult = step as Yarn.Dialogue.CommandResult;
+	    //             yield return this.StartCoroutine(RunCommand(commandResult.command));
+        //         } 
+        //     }
 	        
-			MerinoDebug.Log(LoggingLevel.Info, "Reached the end of the dialogue.");
-			CurrentNode = null;
+		// 	MerinoDebug.Log(LoggingLevel.Info, "Reached the end of the dialogue.");
+		// 	CurrentNode = null;
 	        
-            // No more results! The dialogue is done.
-	        yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);
-			StopPlaytest_Internal();
-        }
+        //     // No more results! The dialogue is done.
+	    //     yield return new WaitUntil(() => MerinoPrefs.stopOnDialogueEnd);
+		// 	StopPlaytest_Internal();
+        // }
+
+		void HandleLine(Line line) {
+			// Get the localized line from our line provider
+            CurrentLine = GetLocalizedLine(line);
+
+			// Render the markup
+			// CurrentLine.Text = Dialogue.ParseMarkup(CurrentLine.RawText);
+
+            CurrentLine.Status = LineStatus.Running;
+
+			this.StartCoroutine(RunLine(CurrentLine));
+		}
 		
-		IEnumerator RunLine(Yarn.Line line)
+		IEnumerator RunLine(LocalizedLine line)
 		{
-			displayStringFull = line.text;
-			optionStrings = new string[0];
+			displayStringFull = line.Text.Text;
+			CurrentOptions = null;
 			
 			// Display the line one character at a time
 			var stringBuilder = new StringBuilder();
 			inputContinue = false;
 			
-			foreach (char c in line.text) 
+			foreach (char c in displayStringFull) 
 			{
 				float timeWaited = 0f;
 				stringBuilder.Append(c);
@@ -434,47 +471,99 @@ namespace Merino
 
 				if (inputContinue)
 				{
-					displayString = line.text; 
+					displayString = displayStringFull; 
 					break;
 				}
 			}
 
-			showContinuePrompt = true;
-
 			// Wait for user input
+			showContinuePrompt = true;
 			inputContinue = false;
 			yield return new WaitWhile(() => !inputContinue && !MerinoPrefs.useAutoAdvance);
+			ContinueDialogue();
+		}
 
-			showContinuePrompt = false;
+		void HandleCommand(Yarn.Command command) {
+			this.StartCoroutine(RunCommand(command));
 		}
 		
         IEnumerator RunCommand(Yarn.Command command)
         {
-            optionStrings = new string[0];
-            displayString = "(Yarn command: <<" + command.text + ">>)";
-	        
-	        showContinuePrompt = true;
-            useConsolasFont = true;
+            CurrentOptions = null;
+            displayString = "(Yarn command: <<" + command.Text + ">>)";
 	        
 	        // Wait for user input
+			showContinuePrompt = true;
+            useConsolasFont = true;
 	        inputContinue = false;
 	        yield return new WaitUntil((() => inputContinue == false && MerinoPrefs.useAutoAdvance == false));
-
-            showContinuePrompt = false;
-            useConsolasFont = false;
+			ContinueDialogue();
         }
-		
-        private void RunOptions(Yarn.Options optionsCollection, Yarn.OptionChooser optionChooser)
+
+		void ContinueDialogue() {
+			showContinuePrompt = false;
+            useConsolasFont = false;
+
+			CurrentLine = null;
+            dialogue.Continue();
+		}
+
+		void HandleOptions(OptionSet options) {
+			DialogueOption[] optionSet = new DialogueOption[options.Options.Length];
+			for (int i = 0; i < options.Options.Length; i++) {
+
+				// Localize the line associated with the option
+				var localisedLine = GetLocalizedLine(options.Options[i].Line);
+				// localisedLine.Text = Dialogue.ParseMarkup(localisedLine.RawText);
+
+				optionSet[i] = new DialogueOption {
+					TextID = options.Options[i].Line.ID,
+					DialogueOptionID = options.Options[i].ID,
+					Line = localisedLine,
+				};
+			}
+			RunOptions( optionSet );
+        }
+
+		DialogueOption[] CurrentOptions;
+
+		private void RunOptions(DialogueOption[] optionsCollection)
         {
-            optionStrings = new string[optionsCollection.options.Count];
+			CurrentOptions = optionsCollection;
+            // optionStrings = new string[optionsCollection.Length];
 	        
-            for(int i = 0; i < optionStrings.Length; i++)
-            {
-                optionStrings[i] = optionsCollection.options[i];
-            }
+            // for(int i = 0; i < optionStrings.Length; i++)
+            // {
+            //     optionStrings[i] = optionsCollection[i].Line.Text.Text;
+            // }
 
             inputOption = -1;
-            this.optionChooser = optionChooser;
+			// TODO: display options?
+			// yield return new WaitWhile(() => inputOption < 0);
+        }
+
+		LocalizedLine GetLocalizedLine(Line line)
+        {
+			Localization textLocalization = localizationDatabase.GetLocalization(Preferences.TextLanguage);
+			var text = textLocalization.GetLocalizedString(line.ID);
+
+			if ( !string.IsNullOrWhiteSpace(Preferences.AudioLanguage) ) {
+            	Localization audioLocalization = localizationDatabase.GetLocalization(Preferences.AudioLanguage);
+            	var audioClip = audioLocalization.GetLocalizedObject<AudioClip>(line.ID);
+            
+				return new AudioLocalizedLine() {
+					TextID = line.ID,
+					RawText = text,
+					Substitutions = line.Substitutions,
+					AudioClip = audioClip,                
+				};
+			} else {
+				return new LocalizedLine() {
+					TextID = line.ID,
+					RawText = text,
+					Substitutions = line.Substitutions
+				};
+			}
         }
 
 		#endregion

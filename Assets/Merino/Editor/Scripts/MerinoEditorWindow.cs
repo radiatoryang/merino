@@ -8,6 +8,8 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
+using Yarn;
+using Yarn.Unity;
 
 namespace Merino
 {
@@ -43,7 +45,7 @@ namespace Merino
 		
 		Rect sidebarSearchRect
 		{
-			get { return new Rect (0, 0, MerinoPrefs.sidebarWidth, 18); }
+			get { return new Rect (0, 0, MerinoPrefs.sidebarWidth, 20); }
 		}
 		
 		Rect sidebarRect
@@ -58,12 +60,12 @@ namespace Merino
 		
 		Rect toolbarRect
 		{
-			get { return new Rect(MerinoPrefs.sidebarWidth, 0, position.width - MerinoPrefs.sidebarWidth, 18); } // was height-30
+			get { return new Rect(MerinoPrefs.sidebarWidth, 0, position.width - MerinoPrefs.sidebarWidth, 20); } // was height-30
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin, 18, position.width-MerinoPrefs.sidebarWidth-margin*1.5f, position.height-margin*4.2f); }
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin, 20, position.width-MerinoPrefs.sidebarWidth-margin*1.5f, position.height-margin*4.2f); }
 		}
 
 		Rect bottomToolbarRect
@@ -159,7 +161,8 @@ namespace Merino
 		
 		void ResetMerino()
 		{
-			MerinoData.CurrentFiles.Clear();
+			MerinoData.CurrentProgramAsset = null;
+			// MerinoData.CurrentFiles.Clear();
 			MerinoData.FileToNodeID.Clear();
 			MerinoData.DirtyFiles.Clear();
 			if (OnFileUnloaded != null)
@@ -389,6 +392,14 @@ namespace Merino
 		{
 			var defaultData = GetDefaultData();
 			ProjectWindowUtil.CreateAssetWithContent("NewYarnFile.yarn.txt", defaultData != null ? defaultData.text : "title: Start\n---\nWrite your story here.\n===");
+		}
+
+		void RefreshYarnFiles() {
+			m_TreeView.treeModel.SetData(MerinoCore.GetData());
+			m_TreeView.Reload();
+
+			if (OnFileLoaded != null)
+				OnFileLoaded();
 		}
 
 		void LoadFile()
@@ -878,32 +889,42 @@ namespace Merino
 		void DrawSidebarSearch (Rect rect)
 		{
 			GUILayout.BeginArea( rect, EditorStyles.toolbar );
+			EditorGUILayout.BeginHorizontal();
 
 			// CREATE menu
-			bool showDropdown = EditorGUILayout.DropdownButton(new GUIContent(" Create", MerinoEditorResources.PageNew, "create new Yarn.txt files and new Yarn nodes"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.MaxWidth(67));
-			var dropdownRect = GUILayoutUtility.GetLastRect();
+			// bool showDropdown = EditorGUILayout.DropdownButton(new GUIContent(" Create", MerinoEditorResources.PageNew, "create new Yarn.txt files and new Yarn nodes"), FocusType.Passive, EditorStyles.toolbarDropDown, GUILayout.MaxWidth(67));
+			// var dropdownRect = GUILayoutUtility.GetLastRect();
 
-			if (showDropdown)
-			{
-				var createMenu = new GenericMenu();
-				createMenu.AddItem(new GUIContent("Yarn.txt File"), false, CreateNewYarnFile);
-				if (MerinoData.CurrentFiles.Count > 0)
-				{
-					createMenu.AddItem(new GUIContent("New Yarn Node"), false, AddNewNode);
-				}
-				else
-				{
-					createMenu.AddDisabledItem( new GUIContent("New Yarn Node"), false);
-				}
+			// if (showDropdown)
+			// {
+			// 	var createMenu = new GenericMenu();
+			// 	createMenu.AddItem(new GUIContent("Yarn.txt File"), false, CreateNewYarnFile);
+			// 	if (MerinoData.CurrentFiles.Count > 0)
+			// 	{
+			// 		createMenu.AddItem(new GUIContent("New Yarn Node"), false, AddNewNode);
+			// 	}
+			// 	else
+			// 	{
+			// 		createMenu.AddDisabledItem( new GUIContent("New Yarn Node"), false);
+			// 	}
 
-				var menuRect = new Rect(dropdownRect);
-				menuRect.y += 16;
-				createMenu.DropDown(menuRect);
+			// 	var menuRect = new Rect(dropdownRect);
+			// 	menuRect.y += 16;
+			// 	createMenu.DropDown(menuRect);
+			// }
+			if ( GUILayout.Button(new GUIContent("+", MerinoEditorResources.Page, "create new .yarn file and add to current Yarn Program" ), EditorStyles.toolbarButton, GUILayout.Width(32) ) ) {
+				CreateNewYarnFile();
 			}
 
+			if ( MerinoData.CurrentFiles.Count > 0 && GUILayout.Button(new GUIContent("+", MerinoEditorResources.Node, "create new Yarn node" ), EditorStyles.toolbarButton, GUILayout.Width(32) ) ) {
+				AddNewNode();
+			}
+			EditorGUILayout.EndHorizontal();
+
 			// search bar
-			rect.x += dropdownRect.width+12;
-			rect.width -= dropdownRect.width+12;
+			rect.x += 64+12;
+			rect.width -= 64+12;
+			rect.y += 2;
 			treeView.searchString = m_SearchField.OnGUI (rect, treeView.searchString);
 			GUILayout.EndArea();
 		}
@@ -937,15 +958,35 @@ namespace Merino
 			
 			GUILayout.BeginHorizontal( EditorStyles.toolbar );
 			
-			if ( FluidGUIButtonIcon(" + Folder ", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70) ))
-			{
-				LoadFolder();
+			// if ( FluidGUIButtonIcon(" + Folder ", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70) ))
+			// {
+			// 	LoadFolder();
+			// }
+
+			// if ( FluidGUIButtonIcon(" + File", textIcon, "Load a single .yarn.txt file into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(55) ))
+			// {
+			// 	LoadFile();
+			// }
+
+			bool noProgramWasLoaded = MerinoData.CurrentProgramAsset == null;
+			MerinoData.CurrentProgramAsset = EditorGUILayout.ObjectField( MerinoData.CurrentProgramAsset, typeof(YarnProgram), false ) as YarnProgram; 
+			
+			// if user has loaded a new program, then let's now edit i!
+			if ( noProgramWasLoaded && MerinoData.CurrentProgramAsset != null ) {
+				RefreshYarnFiles();
+				treeView.ExpandAll();
+			}
+			// I don't know what happened but let's try to recover
+			if ( !noProgramWasLoaded && MerinoData.CurrentProgramAsset == null ) {
+				ResetMerino();
 			}
 
-			if ( FluidGUIButtonIcon(" + File", textIcon, "Load a single .yarn.txt file into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(55) ))
-			{
-				LoadFile();
-			}
+			// if ( MerinoData.CurrentProgramAsset != null) {
+			// 	var p = MerinoData.CurrentProgramAsset.GetProgram();
+			// 	foreach ( var n in p.Nodes ) {
+			// 		Debug.Log( $"{n.Key}... {n.Value}");
+			// 	}
+			// }
 			
 			if (MerinoData.CurrentFiles.Count > 0 )
 			{

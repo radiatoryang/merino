@@ -37,9 +37,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Yarn;
-using Antlr4.Runtime;
-using Antlr4.Runtime.Misc;
-using Antlr4.Runtime.Tree;
 using System.Text;
 using System.IO;
 using System.Linq;
@@ -67,21 +64,21 @@ namespace Merino {
 			public Position position { get; set; }
 
 			// The tags for this node, as a list of individual strings.
-			public List<string> tagsList
-			{
-				get
-				{
-					// If we have no tags list, or it's empty, return the empty list
-					if (tags == null || tags.Length == 0) {
-						return new List<string>();
-					}
+			// public List<string> tagsList
+			// {
+			// 	get
+			// 	{
+			// 		// If we have no tags list, or it's empty, return the empty list
+			// 		if (tags == null || tags.Length == 0) {
+			// 			return new List<string>();
+			// 		}
 
-					return new List<string>(tags.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
-				}
-			}
+			// 		return new List<string>(tags.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+			// 	}
+			// }
 			
-			// 5 September 2018 -- this is just for Merino
-			public string parent { get; set; }
+			// // 5 September 2018 -- this is just for Merino
+			// public string parent { get; set; }
 
 		}
 
@@ -90,6 +87,11 @@ namespace Merino {
 		{
 			// All the nodes we found in this file
 			var nodes = new List<NodeInfo> ();
+
+			if (string.IsNullOrEmpty(text) ) {
+				Debug.Log("Error: can't read text file for some reason?");
+				return null;
+			}
 
 			// check for the existence of at least one "---"+newline sentinel, which divides
 			// the headers from the body
@@ -120,6 +122,11 @@ namespace Merino {
 					do
 					{
 						lineNumber++;
+
+						if (line == null) {
+							Debug.Log("break??");
+							break;
+						}
 
 						// skip empty lines
 						if (line.Length == 0)

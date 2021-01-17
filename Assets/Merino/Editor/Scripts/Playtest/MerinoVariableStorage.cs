@@ -25,6 +25,7 @@ namespace Merino
             return stringBuilder.ToString();
         }
 
+
         #region Setters
 
         /// <summary>
@@ -63,19 +64,19 @@ namespace Merino
             }
         }
 
-        public virtual void SetValue(string variableName, string stringValue)
+        public void SetValue(string variableName, string stringValue)
         {
             variables[variableName] = stringValue;
             variableTypes[variableName] = typeof(string);
         }
 
-        public virtual void SetValue(string variableName, float floatValue)
+        public void SetValue(string variableName, float floatValue)
         {
             variables[variableName] = floatValue;
             variableTypes[variableName] = typeof(float);
         }
 
-        public virtual void SetValue(string variableName, bool boolValue)
+        public void SetValue(string variableName, bool boolValue)
         {
             variables[variableName] = boolValue;
             variableTypes[variableName] = typeof(bool);
@@ -89,7 +90,7 @@ namespace Merino
         /// <returns>The <see cref="Value"/>. If a variable by the name of
         /// <paramref name="variableName"/> is not present, returns a value
         /// representing `null`.</returns>
-        public virtual bool TryGetValue<T>(string variableName, out T result)
+        public bool TryGetValue<T>(string variableName, out T result)
         {
             // If we don't have a variable with this name, return the null
             // value
@@ -114,7 +115,7 @@ namespace Merino
         /// <summary>
         /// Removes all variables from storage.
         /// </summary>
-        public virtual void Clear ()
+        public void Clear ()
         {
             variables.Clear();
             variableTypes.Clear();
@@ -258,6 +259,6 @@ namespace Merino
             return ((IEnumerable<KeyValuePair<string, object>>)variables).GetEnumerator();
         }
 
-			
+        
     }
 }

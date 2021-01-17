@@ -197,7 +197,7 @@ namespace Merino
 							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
 						}
 						// dialogue.LoadString(program, filename );
-						dialogue.AddProgram( MerinoData.CurrentProgram.GetProgram() );
+						dialogue.AddProgram( MerinoData.CurrentProgramAsset.GetProgram() );
 					}
 				}
 				catch (Exception ex)

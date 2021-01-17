@@ -158,10 +158,10 @@ namespace Merino
 			};
 			info.position = newPosition;
 			
-			if (((MerinoTreeElement) treeNode.parent).leafType != MerinoTreeElement.LeafType.File)
-			{
-				info.parent = treeNode.parent.name;
-			}
+			// if (((MerinoTreeElement) treeNode.parent).leafType != MerinoTreeElement.LeafType.File)
+			// {
+			// 	info.parent = treeNode.parent.name;
+			// }
 
 			return info;
 		}
@@ -275,8 +275,8 @@ namespace Merino
 
                 // v0.5.4, handle if yarn file might've been deleted
                 if ( yarnFile == null) {
-					MerinoData.CurrentFiles.RemoveAt(i);
-					i--;
+					// MerinoData.CurrentFiles.RemoveAt(i);
+					// i--;
 					continue;
 				}
 
@@ -336,54 +336,58 @@ namespace Merino
 
 			// otherwise, load nodes from file
 			var nodes = YarnSpinnerLoader.GetNodesFromText(source.text);
-			var parents = new Dictionary<MerinoTreeElement, string>();
+			// var parents = new Dictionary<MerinoTreeElement, string>();
 			foreach (var node in nodes)
 			{
+				if ( string.IsNullOrEmpty(node.title) ) {
+					continue;
+				}
+
 				// clean some of the stuff to help prevent file corruption
 				string cleanName = MerinoUtils.CleanYarnField(node.title, true);
-				string cleanBody = MerinoUtils.CleanYarnField(node.body);
-				string cleanTags = MerinoUtils.CleanYarnField(node.tags, true);
-				string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : MerinoUtils.CleanYarnField(node.parent, true);
+				string cleanBody = !string.IsNullOrEmpty(node.body) ? MerinoUtils.CleanYarnField(node.body) : "";
+				string cleanTags = !string.IsNullOrEmpty(node.tags) ? MerinoUtils.CleanYarnField(node.tags, true) : "";
+				// string cleanParent = string.IsNullOrEmpty(node.parent) ? "" : MerinoUtils.CleanYarnField(node.parent, true);
 				
 				// write data to the objects
 				var newItem = new MerinoTreeElement( cleanName, 0, startID + treeElements.Count);
 				newItem.nodeBody = cleanBody;
 				newItem.nodePosition = new Vector2Int(node.position.x, node.position.y);
 				newItem.nodeTags = cleanTags;
-				if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
-				{
+				// if (string.IsNullOrEmpty(cleanParent) || cleanParent == "Root")
+				// {
 					newItem.parent = fileRoot;
 					newItem.cachedParentID = fileRoot.id;
 					fileRoot.children.Add(newItem);
-				}
-				else
-				{
-					parents.Add(newItem, cleanParent); // we have to assign parents in a second pass later on, not right now
-				}
+				// }
+				// else
+				// {
+				// 	parents.Add(newItem, cleanParent); // we have to assign parents in a second pass later on, not right now
+				// }
 				treeElements.Add(newItem);
 			}
 			
 			// second pass: now that all nodes have been created, we can finally assign parents
-			foreach (var kvp in parents )
-			{
-				var parent = treeElements.Find(x => x.name == kvp.Value);
-				if (parent == null)
-				{
-					MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
-				}
-				else
-				{
-					// tell child about it's parent
-					kvp.Key.parent = parent;
-					kvp.Key.cachedParentID = parent.id;
-					// tell parent about it's child
-					if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
-					{
-						kvp.Key.parent.children = new List<TreeElement>();
-					}
-					kvp.Key.parent.children.Add(kvp.Key);
-				}
-			}
+			// foreach (var kvp in parents )
+			// {
+			// 	var parent = treeElements.Find(x => x.name == kvp.Value);
+			// 	if (parent == null)
+			// 	{
+			// 		MerinoDebug.LogFormat(LoggingLevel.Error, "Merino couldn't assign parent for node {0}: can't find a parent called {1}", kvp.Key.name, kvp.Value);
+			// 	}
+			// 	else
+			// 	{
+			// 		// tell child about it's parent
+			// 		kvp.Key.parent = parent;
+			// 		kvp.Key.cachedParentID = parent.id;
+			// 		// tell parent about it's child
+			// 		if (kvp.Key.parent.children == null) // init parent's list of children if not already initialized
+			// 		{
+			// 			kvp.Key.parent.children = new List<TreeElement>();
+			// 		}
+			// 		kvp.Key.parent.children.Add(kvp.Key);
+			// 	}
+			// }
 			return treeElements;
 		}
 

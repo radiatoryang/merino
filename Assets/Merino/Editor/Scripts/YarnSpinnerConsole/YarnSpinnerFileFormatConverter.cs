@@ -124,6 +124,9 @@ namespace Merino
 						var position = (YarnSpinnerLoader.NodeInfo.Position)property.GetValue(node, null);
 
 						value = string.Format("{0},{1}", position.x, position.y);
+					} else if (propertyType.IsAssignableFrom(typeof(List<string>))) {
+						value = string.Join( ", ", (List<string>)property.GetValue(node, null) );
+
 					} else {
 						MerinoDebug.LogFormat(LoggingLevel.Error, "Internal error: Node {0}'s property {1} has unsupported type {2}", node.title, property.Name, propertyType.FullName);
 
@@ -146,7 +149,7 @@ namespace Merino
 
 				sb.Append(MerinoPrefs.lineEnding + node.body);
 
-				sb.Append(MerinoPrefs.lineEnding + "===");
+				sb.Append(MerinoPrefs.lineEnding + "===" + MerinoPrefs.lineEnding + MerinoPrefs.lineEnding);
 
 			}
 

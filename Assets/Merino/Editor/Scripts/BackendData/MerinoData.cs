@@ -63,18 +63,40 @@ namespace Merino
 			set { Instance.viewState = value; }
 		}
 
-		[SerializeField] private YarnProgram currentProgram;
-		internal static YarnProgram CurrentProgram
+		[SerializeField] private YarnProgram currentProgramAsset;
+		internal static YarnProgram CurrentProgramAsset
 		{
-			get { return Instance.currentProgram; }
-			set { Instance.currentProgram = value; }
+			get { return Instance.currentProgramAsset; }
+			set { Instance.currentProgramAsset = value; }
+		}
+
+		[SerializeField] private YarnProgramImporter programImporter; 
+		
+		internal static YarnProgramImporter ProgramImporter { 
+			get { 
+				if ( Instance.programImporter == null && CurrentProgramAsset != null ) {
+					Instance.programImporter = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(CurrentProgramAsset)) as YarnProgramImporter;
+				}
+				return Instance.programImporter;
+			}
 		}
 		
-		[SerializeField] private List<TextAsset> currentFiles = new List<TextAsset>();
+		internal static List<TextAsset> emptyList = new List<TextAsset>();
+		// [SerializeField] private List<TextAsset> currentFiles = new List<TextAsset>();
 		internal static List<TextAsset> CurrentFiles
 		{
-			get { return Instance.currentFiles; }
-			set { Instance.currentFiles = value; }
+			get { 
+				if ( ProgramImporter != null ) {
+					return ProgramImporter.sourceScripts; 
+				} else {
+					return emptyList;
+				}
+			}
+			set { 
+				if ( ProgramImporter != null) {
+					ProgramImporter.sourceScripts = value;
+				}  
+			}
 		}
 		
 		[SerializeField] private List<TextAsset> dirtyFiles = new List<TextAsset>();
@@ -207,7 +229,7 @@ namespace Merino
 		public void RegenerateFileToNodeIDIfNeeded () {
 			if ( FileToNodeID == null || FileToNodeID.Count == 0) {
 				FileToNodeID = new Dictionary<TextAsset, int>();
-				foreach ( var file in currentFiles ) {
+				foreach ( var file in CurrentFiles ) {
 					FileToNodeID.Add( file, TreeElements.Find( node => node.leafType == MerinoTreeElement.LeafType.File && node.name == file.name ).id );
 				}
 			}

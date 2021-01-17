@@ -1,0 +1,16 @@
+{
+    "name": "Merino",
+    "references": [
+        "GUID:34aa492b82754644eac2f903cd496268",
+        "GUID:3a299c53e4c683b4eb4a04c9ad9e648f"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

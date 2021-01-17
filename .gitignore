@@ -45,3 +45,4 @@ Assets/Plugins/Editor/JetBrains*
 /Assets/Merino/Editor/MerinoTempData*
 *yarn.txt
 *yarn.txt.meta
+UserSettings/

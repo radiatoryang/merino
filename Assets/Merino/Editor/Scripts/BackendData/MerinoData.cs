@@ -81,7 +81,7 @@ namespace Merino
 			}
 		}
 		
-		internal static List<TextAsset> emptyList = new List<TextAsset>();
+		public List<TextAsset> emptyList = new List<TextAsset>();
 		// [SerializeField] private List<TextAsset> currentFiles = new List<TextAsset>();
 		internal static List<TextAsset> CurrentFiles
 		{
@@ -89,7 +89,7 @@ namespace Merino
 				if ( ProgramImporter != null ) {
 					return ProgramImporter.sourceScripts; 
 				} else {
-					return emptyList;
+					return Instance.emptyList;
 				}
 			}
 			set { 
@@ -148,7 +148,9 @@ namespace Merino
 			var newFile = AssetDatabase.LoadAssetAtPath<TextAsset>( isRelativePath ? path : "Assets" + path.Substring(Application.dataPath.Length) );
 			if (MerinoData.CurrentFiles.Contains(newFile) == false)
 			{
-				MerinoData.CurrentFiles.Add(newFile);
+				MerinoData.ProgramImporter.sourceScripts.Add(newFile);
+				EditorUtility.SetDirty(MerinoData.ProgramImporter);
+				MerinoData.ProgramImporter.SaveAndReimport();
 			}
 			else
 			{
@@ -171,7 +173,9 @@ namespace Merino
 			{
 				if (MerinoData.CurrentFiles.Contains(file)==false )
 				{
-					MerinoData.CurrentFiles.Add(file);
+					MerinoData.ProgramImporter.sourceScripts.Add(file);
+					EditorUtility.SetDirty( MerinoData.ProgramImporter );
+					MerinoData.ProgramImporter.SaveAndReimport();
 				}
 			}
 

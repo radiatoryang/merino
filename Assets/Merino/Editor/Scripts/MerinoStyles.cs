@@ -77,6 +77,18 @@ namespace Merino
 				return smallMonoStyle;
 			}
 		}
+
+		public static GUIStyle SmallMonoTextStyleNoWrap
+		{
+			get 
+			{
+				var smallMonoStyle = new GUIStyle(SmallMonoTextStyle);
+
+				smallMonoStyle.wordWrap = false;
+
+				return smallMonoStyle;
+			}
+		}
 		
 		public static GUIStyle ButtonStyle
 		{

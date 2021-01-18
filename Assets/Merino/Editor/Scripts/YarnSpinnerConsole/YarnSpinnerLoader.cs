@@ -124,7 +124,7 @@ namespace Merino {
 						lineNumber++;
 
 						if (line == null) {
-							Debug.Log("break??");
+//							Debug.Log("break??");
 							break;
 						}
 

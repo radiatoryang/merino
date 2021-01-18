@@ -63,6 +63,8 @@ namespace Merino
                 if (GUI.Button(clearSortRect, new GUIContent("x", "no sort / clear column sorting"), EditorStyles.miniButton))
                 {
                     state.sortedColumnIndex = -1;
+                    OnSortingChanged();
+                    Repaint();
                 }
             }
 

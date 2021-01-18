@@ -67,16 +67,16 @@ namespace Merino
 						} else {
 		                	File.WriteAllText(AssetDatabase.GetAssetPath(file), SaveFileNodesAsString(MerinoData.FileToNodeID[file]));
 		                	EditorUtility.SetDirty(file);
-		                	LastSaveTime = EditorApplication.timeSinceStartup;
 						}
 	                }
 	                else
 	                {
-		                MerinoDebug.Log(LoggingLevel.Warning, file.name + " has not been mapped to a NodeID and cannot be saved, reload the file and try again.");
+		                MerinoDebug.Log(LoggingLevel.Warning, file.name + " has not been mapped to a TreeNodeID and cannot be saved, reload the file and try again.");
 	                }
                 }
 				EditorUtility.SetDirty( MerinoData.Instance );
             }
+			LastSaveTime = EditorApplication.timeSinceStartup;
         }
 
 		// used for file saving
@@ -264,7 +264,10 @@ namespace Merino
 			root.children = new List<TreeElement>();
 			treeElements.Add(root);
 			
-			// ok, now let's load the data
+			// ok, now let's load the data if we have it?
+			if ( MerinoData.CurrentFiles == null) {
+				return treeElements;
+			}
 	
 			// then go through each file and get nodes for it, adding folder nodes as appropriate
 			int nodeID = 1;

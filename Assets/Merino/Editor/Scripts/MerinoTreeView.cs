@@ -123,6 +123,7 @@ namespace Merino
 			
 			if (multiColumnHeader.sortedColumnIndex == -1)
 			{
+				SetExpanded( GetExpanded() ); // TERRIBLE hack to make sure TreeView refreshes to unsorted order
 				return; // No column to sort for (just use the order the data are in)
 			}
 			

@@ -7,6 +7,12 @@ using UnityEditor;
 using UnityEngine;
 using Yarn;
 using Yarn.Unity;
+#if UNITY_2020_2_OR_NEWER
+using UnityEditor.AssetImporters;
+#else
+using UnityEditor.Experimental.AssetImporters;
+#endif
+
 
 namespace Merino
 {
@@ -50,7 +56,7 @@ namespace Merino
 
 		// this is a cache for MerinoNodemapWindow visualization... otherwise, GetWindow opens the window, even if the dialogue isn't running
 		public static string CurrentNode;
-		public static LocalizedLine CurrentLine {get; private set;}
+		public static LocalizedLine CurrentLine {get; set;}
 		LocalizationDatabase localizationDatabase;
 		public static int lastFileParent = -1;
 
@@ -76,9 +82,6 @@ namespace Merino
 		private void InitIfNeeded()
 		{
 			// create the main Dialogue runner, and pass our variableStorage to it
-			localizationDatabase = ScriptableObject.CreateInstance<LocalizationDatabase>();
-			//var runtimeLocalization = localizationDatabase.CreateLocalization(Preferences.TextLanguage);
-
 			varStorage = new MerinoVariableStorage();
 			dialogue = new Yarn.Dialogue(varStorage);
 
@@ -86,6 +89,8 @@ namespace Merino
 			dialogue.LineHandler = HandleLine;
 			dialogue.CommandHandler = HandleCommand;
 			dialogue.OptionsHandler = HandleOptions;
+			dialogue.NodeCompleteHandler = OnNodeComplete;
+			dialogue.DialogueCompleteHandler = OnDialogueComplete;
 			// dialogue.NodeStartHandler
 			
 			// setup the logging system.
@@ -97,6 +102,16 @@ namespace Merino
 			// icons
 			if (errorIcon == null)
 				errorIcon = EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture;
+		}
+
+		void OnDialogueComplete() {
+			if ( MerinoPrefs.stopOnDialogueEnd ) {
+				StopPlaytest_Internal();
+			}
+		}
+
+		void OnNodeComplete(string completedNodeName) {
+
 		}
 
 		private void Update()
@@ -189,16 +204,32 @@ namespace Merino
 				
 				try
 				{
-					var program = MerinoCore.SaveAllNodesAsString(onlyFromThisNodeID);
-					if (!string.IsNullOrEmpty(program))
-					{
-						string filename = MerinoData.CurrentFiles.Count > 1 ? "<input>" : MerinoData.CurrentFiles[0].name;
-						if ( onlyFromThisNodeID > 0 && MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
-							filename = MerinoData.GetNode(onlyFromThisNodeID).name;
-						}
-						// dialogue.LoadString(program, filename );
-						dialogue.AddProgram( MerinoData.CurrentProgramAsset.GetProgram() );
+					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(MerinoData.CurrentProgramAsset) );
+					dialogue.AddProgram(MerinoData.CurrentProgramAsset.GetProgram() );
+
+					if ( localizationDatabase != null ) {
+						ScriptableObject.DestroyImmediate(localizationDatabase);
+						localizationDatabase = null;
 					}
+					localizationDatabase = ScriptableObject.CreateInstance<LocalizationDatabase>();
+					var runtimeLocalization = ScriptableObject.CreateInstance<Localization>();
+					runtimeLocalization.LocaleCode = Preferences.TextLanguage;
+
+					var text = MerinoData.CurrentProgramAsset.defaultStringTable.text;
+					var parsedStringTableEntries = StringTableEntry.ParseFromCSV(text);
+					runtimeLocalization.AddLocalizedStrings(parsedStringTableEntries);
+					localizationDatabase.AddLocalization( runtimeLocalization );
+
+					// var sourceYarnText = MerinoCore.SaveAllNodesAsString(onlyFromThisNodeID);
+					// if (!string.IsNullOrEmpty(sourceYarnText))
+					// {
+					// 	string filename = MerinoData.CurrentFiles.Count > 1 ? "<input>" : MerinoData.CurrentFiles[0].name;
+					// 	if ( onlyFromThisNodeID > 0 && MerinoData.GetNode(onlyFromThisNodeID).leafType == MerinoTreeElement.LeafType.File ) {
+					// 		filename = MerinoData.GetNode(onlyFromThisNodeID).name;
+					// 	}
+
+					// 	dialogue.LoadString(program, filename );
+					// }
 				}
 				catch (Exception ex)
 				{
@@ -263,7 +294,7 @@ namespace Merino
 					}
 				}
 				var content = new GUIContent(" View Node Source", MerinoEditorResources.TextAsset, "Click to see Yarn script code for this node.");
-				if (GUILayout.Button(content, EditorStyles.toolbarButton, GUILayout.Width(EditorStyles.toolbarButton.CalcSize(content).x - 40 ) ))
+				if (GUILayout.Button(content, EditorStyles.toolbarButton, GUILayout.Width(140) ))
 				{
 
 					if (matchingNode != null)
@@ -344,7 +375,7 @@ namespace Merino
 			// show choices
 			for (int i = 0; CurrentOptions != null && i < CurrentOptions.Length; i++)
 			{
-				if (GUILayout.Button(CurrentOptions[i].Line.Text.Text, MerinoStyles.ButtonStyle))
+				if (GUILayout.Button(CurrentOptions[i].Line.RawText, MerinoStyles.ButtonStyle))
 				{
 					inputOption = i;
 					dialogue.SetSelectedOption(inputOption);
@@ -437,19 +468,24 @@ namespace Merino
 
 		void HandleLine(Line line) {
 			// Get the localized line from our line provider
-            CurrentLine = GetLocalizedLine(line);
+			var newLine = GetLocalizedLine(line);
+
+			// Expand substitutions
+			var text = Dialogue.ExpandSubstitutions(newLine.RawText, newLine.Substitutions);
 
 			// Render the markup
-			// CurrentLine.Text = Dialogue.ParseMarkup(CurrentLine.RawText);
+			// newLine.Text = dialogue.ParseMarkup(text);
 
-            CurrentLine.Status = LineStatus.Running;
+			newLine.Status = LineStatus.Running;
 
-			this.StartCoroutine(RunLine(CurrentLine));
+			this.StartCoroutine(RunLine(newLine));
 		}
 		
 		IEnumerator RunLine(LocalizedLine line)
 		{
-			displayStringFull = line.Text.Text;
+			// displayStringFull = line.Text.Text;
+			displayStringFull = line.RawText;
+
 			CurrentOptions = null;
 			
 			// Display the line one character at a time
@@ -534,7 +570,7 @@ namespace Merino
 	        
             // for(int i = 0; i < optionStrings.Length; i++)
             // {
-            //     optionStrings[i] = optionsCollection[i].Line.Text.Text;
+            //     optionStrings[i] = optionsCollection[i].Line.RawText;
             // }
 
             inputOption = -1;

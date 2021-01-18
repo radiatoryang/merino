@@ -16,6 +16,7 @@ namespace Merino
 		public static Color highlightCommands = new Color(0.8f, 0.5f, 0.1f);
 		public static Color highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
 		public static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
+		public static Color highlightLineTags = new Color(0.37f, 0.37f, 0.37f);
 		// public static Color highlightVariables;
 		public static bool useYarnSpinnerExperimentalMode = false;
 		public static bool validateNodeTitles = true;
@@ -60,15 +61,15 @@ namespace Merino
 			// Preferences GUI
 			GUILayout.Label("File Handling", EditorStyles.boldLabel); // =============================================================
 
-			GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
-			newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
+			//GUILayout.Label("New File Template filepath (relative to /Resources/, omit .txt)");
+			//newFileTemplatePath = EditorGUILayout.TextField("/Resources/", newFileTemplatePath);
 			loggingLevel = (LoggingLevel) EditorGUILayout.EnumPopup("Logging Level", loggingLevel);
 
 			// 23 Jan 2019: in reponse to GitHub issue #16, let user disable node validation? (even though I don't really see the point...)
 			validateNodeTitles = EditorGUILayout.ToggleLeft(" Validate and correct duplicate node titles", validateNodeTitles);
 			
 			// 5 May 2019: user-configurable line endings, fix for issue #26 https://github.com/radiatoryang/merino/issues/26
-			useWindowsLineEnding = EditorGUILayout.ToggleLeft(@" Use Windows line endings [\r\n]? false = [\n]", useWindowsLineEnding);
+			useWindowsLineEnding = EditorGUILayout.ToggleLeft(@" Use Windows line endings ( \r\n )?... false means \n", useWindowsLineEnding);
 
 			GUILayout.Space(16);
 			GUILayout.Label("Experimental / kinda buggy", EditorStyles.boldLabel); // =============================================================
@@ -78,14 +79,15 @@ namespace Merino
 			tabSize = EditorGUILayout.IntField("Size (<= 0: keep tabs)", tabSize );
 			
 			// 14 Oct 2018: commented out experimental mode, it seems to have the same parser problem as before: can't read "---" sentinel, keeps looking for node header data  -RY
-			useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
+			// useYarnSpinnerExperimentalMode = EditorGUILayout.ToggleLeft("Use Yarn Spinner's experimental ANTLR parser", useYarnSpinnerExperimentalMode);
 
 			GUILayout.Space(16);
 			GUILayout.Label("Syntax Highlighting Colors", EditorStyles.boldLabel); // =============================================================
 			highlightCommands = EditorGUILayout.ColorField("<<Commands>>", highlightCommands);
 			highlightComments = EditorGUILayout.ColorField("// Comments", highlightComments);
-			highlightNodeOptions = EditorGUILayout.ColorField("[[NodeOptions]]", highlightNodeOptions);
+			highlightNodeOptions = EditorGUILayout.ColorField("<<jump ToNextNode>>", highlightNodeOptions);
 			highlightShortcutOptions = EditorGUILayout.ColorField("-> ShortcutOptions", highlightShortcutOptions);
+			highlightLineTags = EditorGUILayout.ColorField("#line:Tags", highlightLineTags);
 			
 			EditorGUILayout.EndScrollView();
 			
@@ -123,6 +125,7 @@ namespace Merino
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
 			highlightNodeOptions = new Color(0.8f, 0.4f, 0.6f);
 			highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
+			highlightLineTags = new Color(0.37f, 0.37f, 0.37f);
 			
 			SaveEditorPrefs();
 		}
@@ -162,6 +165,7 @@ namespace Merino
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightComments"), out highlightComments);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightNodeOptions"), out highlightNodeOptions);
 			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightShortcutOptions"), out highlightShortcutOptions);
+			ColorUtility.TryParseHtmlString(EditorPrefs.GetString("MerinoHighlightLineTags"), out highlightLineTags);
 		}
 		
 		static void LoadHiddenPrefs()
@@ -196,6 +200,7 @@ namespace Merino
 			EditorPrefs.SetString("MerinoHighlightComments", "#"+ColorUtility.ToHtmlStringRGB(highlightComments) );
 			EditorPrefs.SetString("MerinoHighlightNodeOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightNodeOptions) );
 			EditorPrefs.SetString("MerinoHighlightShortcutOptions", "#"+ColorUtility.ToHtmlStringRGB(highlightShortcutOptions) );
+			EditorPrefs.SetString("MerinoHighlightLineTags", "#"+ColorUtility.ToHtmlStringRGB(highlightLineTags) );
 		}
 
 		public static void SaveHiddenPrefs()

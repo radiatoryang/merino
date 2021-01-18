@@ -84,6 +84,20 @@ namespace Merino
 
         void OnGUI()
         {
+            if ( MerinoData.CurrentProgramAsset == null || MerinoData.CurrentFiles.Count == 0) {
+                scrollPos = Vector2.zero;
+                DrawGrid();
+                GUILayout.BeginArea( new Rect( position.width / 2 - 128, position.height / 2 - 40, 256, 80));
+                GUILayout.BeginVertical();
+                EditorGUILayout.HelpBox("  No Yarn Program or .yarn files loaded.", MessageType.Info);
+                if ( GUILayout.Button(new GUIContent("  Merino (Yarn Editor) window", MerinoEditorResources.TextAsset, "click to open the main Merino editor window"), EditorStyles.miniButton ) ) {
+                    MerinoEditorWindow.GetEditorWindow(true);
+                }
+                GUILayout.EndVertical();
+                GUILayout.EndArea();
+                return;
+            }
+
             wantsMouseMove = currentLinkingNode != null;
             // ValidateNodeManifest(); 
             DrawNodemap();
@@ -161,9 +175,9 @@ namespace Merino
                     EditorGUILayout.HelpBox( "Left-click: Link node [" + currentLinkingNode.name + "] to another node.", MessageType.Info );
                 } else {
 #if UNITY_EDITOR_WIN
-                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLMB + Alt: Pan view\nRMB: Pan view", MessageType.Info );
+                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLMB + Alt: Pan view\nMiddle Mouse: Pan view", MessageType.Info );
 #else
-                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLMB + Option: Pan view\nRMB: Pan view", MessageType.Info );
+                    EditorGUILayout.HelpBox( "Left-click (drag): Move nodes\nDouble-click: Edit node\nScroll: Zoom in and out\nLMB + Option: Pan view\nMiddle Mouse: Pan view", MessageType.Info );
 #endif
                 }
                 GUILayout.EndArea();
@@ -807,19 +821,51 @@ namespace Merino
             // parse body for node names
             foreach ( var searchNode in nodeSearch ) {
 
-                 // TODO: refactor to use regex
-                string[] splitBody = searchNode.nodeBody.Split('[', ']');
-                for (int i = 2; i < splitBody.Length; i = i + 4)
-                {
-                    // remove delimiter and text prior to it if applicable
-                    int delimiter = splitBody[i].IndexOf('|');
-                    if (delimiter != -1) splitBody[i] = splitBody[i].Remove(0, delimiter + 1);
+                // TODO: refactor to use regex
+
+                // this is the old way of looking for links, before v2.0
+                // string[] splitBody = searchNode.nodeBody.Split('[', ']');
+                // for (int i = 2; i < splitBody.Length; i = i + 4)
+                // {
+                //     // remove delimiter and text prior to it if applicable
+                //     int delimiter = splitBody[i].IndexOf('|');
+                //     if (delimiter != -1) splitBody[i] = splitBody[i].Remove(0, delimiter + 1);
+
+                //     // skip options which link to the same node
+                //     if (baseNode == searchNode && splitBody[i] == baseNode.name) continue;
+                    
+                //     // get and add connected node to list of connections
+                //     var nodeList = (MerinoPrefs.allowLinksAcrossFiles ? allNodes : currentNodes.internalList ).Select( id => MerinoData.GetNode(id)).Where( node => node.name == splitBody[i] );
+                //     foreach ( var node in nodeList ) {
+                //         if (node != null ) {
+                //             if ( !connected.Contains(node) ) {
+                //                 connected.Add(node); 
+                //             }
+                //         } else if ( includeNullLinks ) {
+                //             connected.Add(null);
+                //         }
+                //     }
+                // }
+
+                // this is the new way, where we're looking for lines that start with <<jump
+                string[] splitBody = searchNode.nodeBody.Replace(" ", "").Split( new string[] { "<<jump"}, StringSplitOptions.RemoveEmptyEntries);
+                for ( int i=1; i<splitBody.Length; i++) {
+                    string nodeName = "";
+                    for( int c=0; c<splitBody[i].Length; c++) {
+                        // if we find a ">" character, we can stop reading the line and extract the node name
+                        if ( splitBody[i][c] == '>' ) { // && splitBody[i][c+1] == '>'
+                            nodeName = splitBody[i].Substring(0, c);
+                            break;
+                        }
+                    }
 
                     // skip options which link to the same node
-                    if (baseNode == searchNode && splitBody[i] == baseNode.name) continue;
-                    
+                    if ( string.IsNullOrEmpty(nodeName) || (baseNode == searchNode && splitBody[i] == baseNode.name) ) {
+                        continue;
+                    }
+
                     // get and add connected node to list of connections
-                    var nodeList = (MerinoPrefs.allowLinksAcrossFiles ? allNodes : currentNodes.internalList ).Select( id => MerinoData.GetNode(id)).Where( node => node.name == splitBody[i] );
+                    var nodeList = (MerinoPrefs.allowLinksAcrossFiles ? allNodes : currentNodes.internalList ).Select( id => MerinoData.GetNode(id)).Where( node => node.name == nodeName );
                     foreach ( var node in nodeList ) {
                         if (node != null ) {
                             if ( !connected.Contains(node) ) {
@@ -881,7 +927,11 @@ namespace Merino
                     {
                         if ( currentLinkingNode != null ) {
                             // connect node with new node
-                            currentLinkingNode.nodeBody += string.Format("\n[[Go to {0}|{0}]]", node.name);
+                            currentLinkingNode.nodeBody += string.Format($"\n<<jump {node.name}>>");
+                            if ( currentLinkingNode.parent != node.parent ) {
+                                // if linking to a node in another file, automatically turn on show links
+                                MerinoPrefs.allowLinksAcrossFiles = true;
+                            }
                             currentLinkingNode = null;
                             EditorUtility.SetDirty( MerinoData.Instance );
                             UpdateNodeManifest();

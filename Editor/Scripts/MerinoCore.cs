@@ -443,7 +443,7 @@ namespace Merino
 			if (results.Length > 0)
 			{
 				var parent = Directory.GetParent(results[0]);
-				while (parent.Name != "Merino")
+				while (parent.Name != "Assets")
 					parent = parent.Parent;
 
 				if ( relativeToProjectFolder ) {
@@ -452,7 +452,8 @@ namespace Merino
 				return parent.FullName;
 			}
 
-			return null;
+			// 7 Feb 2021, now this is a UPM package so Merino might not be in Assets/ anymore
+			return "Packages\\com.radiatoryang.merino";
 		}
 
 		/// <summary>
@@ -461,8 +462,10 @@ namespace Merino
 		public static string GetTempDataPath()
 		{
 			var path = LocateMerinoFolder(); //find folder in project...
+			if ( !string.IsNullOrEmpty(path) && path.StartsWith("Assets")) {
+				path = path.Substring(path.IndexOf("Assets")); //remove path before the assets folder
+			}
 			path += "\\Editor\\MerinoTempData.asset"; //append on the path for temp data;
-			path = path.Substring(path.IndexOf("Assets")); //remove path before the assets folder
 			return (path);
 		}
 

@@ -1,0 +1,22 @@
+{
+  "name": "com.radiatoryang.merino",
+  "version": "2.0.0",
+  "displayName": "Merino",
+  "description": "Merino is a narrative design / dialogue tree tool that lets you write Yarn scripts inside the Unity Editor, built on top of Yarn Spinner and Yarn (a Twine-like script language). For more info, see https://github.com/radiatoryang/merino",
+  "unity": "2018.4",
+  "license": "MIT",
+  "dependencies": {
+  
+  }
+  "keywords": [
+    "Dialogue",
+    "Yarn"
+  ],
+  "author": {
+    "name": "Robert Yang",
+	"email": "2285943+radiatoryang@users.noreply.github.com",
+    "url": "https://debacle.us"
+  },
+  "hideInEditor": false,
+  "type": "tool"
+}

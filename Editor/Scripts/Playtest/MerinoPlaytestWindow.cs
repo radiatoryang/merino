@@ -195,6 +195,11 @@ namespace Merino
 
 		void PlaytestFrom_Internal(string startPassageName, bool reset = true, int onlyFromThisNodeID = -1)
 		{
+			if ( Application.isPlaying ) {
+				PlaytestErrorLog("for now, you can't Playtest while in Play Mode, sorry");
+				return;
+			}
+
 			if (reset)
 			{
 				MerinoEditorWindow.errorLog.Clear();
@@ -207,18 +212,27 @@ namespace Merino
 					AssetDatabase.ImportAsset( AssetDatabase.GetAssetPath(MerinoData.CurrentProgramAsset) );
 					dialogue.AddProgram(MerinoData.CurrentProgramAsset.GetProgram() );
 
-					if ( localizationDatabase != null ) {
-						ScriptableObject.DestroyImmediate(localizationDatabase);
-						localizationDatabase = null;
-					}
-					localizationDatabase = ScriptableObject.CreateInstance<LocalizationDatabase>();
-					var runtimeLocalization = ScriptableObject.CreateInstance<Localization>();
-					runtimeLocalization.LocaleCode = Preferences.TextLanguage;
+					// if ( localizationDatabase != null ) {
+					// 	ScriptableObject.DestroyImmediate(localizationDatabase);
+					// 	localizationDatabase = null;
+					// }
+					if ( MerinoData.LocalizationDatabase != null ) {
+						localizationDatabase = MerinoData.LocalizationDatabase;
+					} else {
+						localizationDatabase = ScriptableObject.CreateInstance<LocalizationDatabase>();
+						var runtimeLocalization = ScriptableObject.CreateInstance<Localization>();
+						runtimeLocalization.LocaleCode = Preferences.TextLanguage;
+						
+						if ( MerinoData.CurrentProgramAsset.defaultStringTable == null ) {
+							Debug.LogWarning($"No base localization string table was included for the Yarn script {MerinoData.CurrentProgramAsset}.");
 
-					var text = MerinoData.CurrentProgramAsset.defaultStringTable.text;
-					var parsedStringTableEntries = StringTableEntry.ParseFromCSV(text);
-					runtimeLocalization.AddLocalizedStrings(parsedStringTableEntries);
-					localizationDatabase.AddLocalization( runtimeLocalization );
+						} else {
+							var text = MerinoData.CurrentProgramAsset.defaultStringTable.text;
+							var parsedStringTableEntries = StringTableEntry.ParseFromCSV(text);
+							runtimeLocalization.AddLocalizedStrings(parsedStringTableEntries);
+							localizationDatabase.AddLocalization( runtimeLocalization );
+						}
+					}
 
 					// var sourceYarnText = MerinoCore.SaveAllNodesAsString(onlyFromThisNodeID);
 					// if (!string.IsNullOrEmpty(sourceYarnText))
@@ -234,7 +248,11 @@ namespace Merino
 				catch (Exception ex)
 				{
 					validDialogue = false;
-					PlaytestErrorLog(ex.Message);
+					if ( ex.Message.Contains("The variable defaultStringTable of YarnProgram has not been assigned") ) {
+						PlaytestErrorLog("Couldn't playtest! If you're using line tags, make sure every line has a line tag. You can automatically add line tags by selecting the .yarn file and clicking Add Line Tags button.");
+					} else {
+						PlaytestErrorLog(ex.Message);
+					}
 					return;
 				}
 			}
@@ -323,6 +341,8 @@ namespace Merino
 			}
 		
 			GUILayout.FlexibleSpace();
+
+			MerinoLocalization.DrawLanguageSelectDropdownGUI( EditorStyles.toolbarDropDown );
 
 			// playtesting preferences popup
 			if (GUILayout.Button(new GUIContent("Preferences"), EditorStyles.toolbarDropDown))

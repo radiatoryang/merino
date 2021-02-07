@@ -18,12 +18,14 @@ namespace Merino
 		public static Color highlightShortcutOptions = new Color(0.2f, 0.6f, 0.7f);
 		public static Color highlightLineTags = new Color(0.37f, 0.37f, 0.37f);
 		// public static Color highlightVariables;
-		public static bool useYarnSpinnerExperimentalMode = false;
+		// public static bool useYarnSpinnerExperimentalMode = false;
 		public static bool validateNodeTitles = true;
-		public static int tabSize = 0;
+		public static int tabSize = 4;
 		public static bool useTabbedBackspace { get { return tabSize > 0; } }
 
 		//hidden prefs
+		public static string textLanguage = "";
+		public static string audioLanguage = "";
 		public static bool stopOnDialogueEnd = true;
 		public static bool useAutoAdvance = false;
 		public static bool useAutosave = true;
@@ -116,10 +118,10 @@ namespace Merino
 		{
 			newFileTemplatePath = "NewFileTemplate.yarn";
 			loggingLevel = LoggingLevel.Warning;
-			useYarnSpinnerExperimentalMode = false;
+			// useYarnSpinnerExperimentalMode = false;
 			validateNodeTitles = true;
 			useWindowsLineEnding = false;
-			tabSize = 0;
+			tabSize = 4;
 			
 			highlightComments = new Color(0.3f, 0.6f, 0.25f);
 			highlightCommands = new Color(0.8f, 0.5f, 0.1f);
@@ -139,6 +141,8 @@ namespace Merino
 			showSyntaxReference = true;
 			playtestScope = PlaytestScope.AllFiles;
 			allowLinksAcrossFiles = false;
+			textLanguage = "";
+			audioLanguage = "";
 			
 			SaveHiddenPrefs();
 		}
@@ -156,7 +160,7 @@ namespace Merino
 			}
 			newFileTemplatePath = EditorPrefs.GetString("MerinoTemplatePath", newFileTemplatePath);
 			loggingLevel = (LoggingLevel) EditorPrefs.GetInt("MerinoLoggingLevel", (int)LoggingLevel.Warning);
-			useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
+			// useYarnSpinnerExperimentalMode = EditorPrefs.GetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			validateNodeTitles = EditorPrefs.GetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			useWindowsLineEnding = EditorPrefs.GetBool("MerinoUseWindowsLinesEnding", useWindowsLineEnding );
 			tabSize = EditorPrefs.GetInt("MerinoTabSize", tabSize);
@@ -181,6 +185,8 @@ namespace Merino
 			showSyntaxReference = EditorPrefs.GetBool("MerinoShowSyntax");
 			playtestScope = (PlaytestScope)EditorPrefs.GetInt("MerinoPlaytestScope");
 			allowLinksAcrossFiles = EditorPrefs.GetBool("MerinoAllowCrossFile");
+			textLanguage = EditorPrefs.GetString("MerinoTextLanguage");
+			audioLanguage = EditorPrefs.GetString("MerinoAudioLanguage");
 		}
 
 		#endregion
@@ -191,7 +197,7 @@ namespace Merino
 		{
 			EditorPrefs.SetString("MerinoTemplatePath", newFileTemplatePath);
 			EditorPrefs.SetInt("MerinoLoggingLevel", (int) loggingLevel);
-			EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
+			// EditorPrefs.SetBool("MerinoExperimentalMode", useYarnSpinnerExperimentalMode);
 			EditorPrefs.SetBool("MerinoValidateNodeTitles", validateNodeTitles );
 			EditorPrefs.SetBool("MerinoWindowsLineEnding", useWindowsLineEnding );
 			EditorPrefs.SetInt("MerinoTabSize", tabSize );
@@ -212,6 +218,8 @@ namespace Merino
 			EditorPrefs.SetBool("MerinoShowSyntax", showSyntaxReference);
 			EditorPrefs.SetInt("MerinoPlaytestScope", (int)playtestScope );
 			EditorPrefs.SetBool("MerinoAllowCrossFile", allowLinksAcrossFiles );
+			EditorPrefs.SetString("MerinoTextLanguage", textLanguage);
+			EditorPrefs.SetString("MerinoAudioLanguage", audioLanguage);
 		}
 
 		#endregion

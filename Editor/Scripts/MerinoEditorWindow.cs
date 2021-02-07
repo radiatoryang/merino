@@ -26,6 +26,8 @@ namespace Merino
 			get { return m_TreeView; }
 		}
 
+		Dictionary<TextAsset, YarnImporterEditor> textInspectors = new Dictionary<TextAsset, YarnImporterEditor>();
+
 		// used for keyboard tab / space replacement
 		double lastTabTime = 0.0; 
 		bool moveCursorAfterTab = false;
@@ -60,12 +62,12 @@ namespace Merino
 		
 		Rect toolbarRect
 		{
-			get { return new Rect(MerinoPrefs.sidebarWidth, 0, position.width - MerinoPrefs.sidebarWidth, 20); } // was height-30
+			get { return new Rect(MerinoPrefs.sidebarWidth, 0, position.width - MerinoPrefs.sidebarWidth, 21); } // was height-30
 		}
 
 		Rect nodeEditRect
 		{
-			get { return new Rect( MerinoPrefs.sidebarWidth+margin, 20, position.width-MerinoPrefs.sidebarWidth-margin*1.5f, position.height-margin*4.2f); }
+			get { return new Rect( MerinoPrefs.sidebarWidth+margin, 20, position.width-MerinoPrefs.sidebarWidth-margin*1.5f, position.height-margin*4.4f); }
 		}
 
 		Rect bottomToolbarRect
@@ -158,6 +160,13 @@ namespace Merino
 
 		void OnEnable() {
 			// GetEditorWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Node );
+			foreach ( var file in MerinoData.CurrentFiles ) {
+				RefreshTextInspectorEditor(file);
+			}
+			foreach ( var editor in textInspectors ) {
+				editor.Value.ResetTarget();
+				editor.Value.OnEnable();
+			}
 		}
 
 		void OnFocus() {
@@ -838,6 +847,9 @@ namespace Merino
 					MerinoData.CurrentFiles.Remove(fileToRemove);
 					MerinoData.DirtyFiles.Remove(fileToRemove);
 
+					EditorUtility.SetDirty( MerinoData.ProgramImporter );
+					MerinoData.ProgramImporter.SaveAndReimport();
+
 					if (OnFileUnloaded != null)
 						OnFileUnloaded();
 				} 
@@ -1124,6 +1136,14 @@ namespace Merino
 				{
 					MerinoPrefs.SaveHiddenPrefs();
 				}
+
+				GUILayout.FlexibleSpace();
+
+				if ( ProjectSettings.TextProjectLanguages.Count > 0 ) {
+					MerinoData.LocalizationDatabase = EditorGUILayout.ObjectField( MerinoData.LocalizationDatabase, typeof(LocalizationDatabase), false ) as LocalizationDatabase;
+				} else {
+					MerinoData.LocalizationDatabase = null;
+				}
 			}
 			
 			GUILayout.FlexibleSpace();
@@ -1137,6 +1157,16 @@ namespace Merino
 			GUILayout.EndArea();
 		}
 		
+		void RefreshTextInspectorEditor(TextAsset textAsset) {
+			if ( !textInspectors.ContainsKey(textAsset) ) {
+				textInspectors.Add(textAsset, null);
+			}
+
+			var assImp = AssetImporter.GetAtPath( AssetDatabase.GetAssetPath(textAsset) ) as YarnImporter;
+			var previousEditor = (Editor)textInspectors[textAsset];
+			Editor.CreateCachedEditorWithContext(assImp, assImp, typeof(YarnImporterEditor), ref previousEditor);
+			textInspectors[textAsset] = (YarnImporterEditor)previousEditor;
+		}
 				
 		void DrawMainPane(Rect rect)
 		{
@@ -1203,11 +1233,19 @@ namespace Merino
 							GUI.enabled = false;
 							EditorGUILayout.ObjectField(textAsset, typeof(TextAsset), false);
 							GUI.enabled = true;
-							EditorGUILayout.SelectableLabel( AssetDatabase.GetAssetPath(textAsset) );
+							EditorGUILayout.SelectableLabel( AssetDatabase.GetAssetPath(textAsset), GUILayout.Height(18) );
 							EditorGUILayout.EndHorizontal();
 
+							// var allAssets = AssetDatabase.LoadAllAssetRepresentationsAtPath( AssetDatabase.GetAssetPath(textAsset) );
+							// foreach ( var ass in allAssets ) {
+							// 	Debug.Log( $"{ass.name} : {ass.GetType()}" );
+							// }
+
+							RefreshTextInspectorEditor(textAsset);
+							textInspectors[textAsset].OnInspectorGUI();
+
 							// if ( !MerinoPrefs.useAutosave) {
-								EditorGUILayout.HelpBox("Merino can't edit .yarn files directly. Instead, select a node in the left sidebar. Or open the .yarn file in a text editor.", MessageType.Warning);
+								EditorGUILayout.HelpBox("Merino doesn't edit .yarn files directly. Instead, select a node in the left sidebar. Or open the .yarn file in a text editor.", MessageType.Warning);
 							// }
 							GUI.enabled = false; //MerinoPrefs.useAutosave;
 							// EditorGUI.BeginChangeCheck();

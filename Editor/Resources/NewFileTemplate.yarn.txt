@@ -1,43 +1,91 @@
-title: Start
+title: Examples_Start
 tags: 
 colorID: 0
-position: 0,0
+position: 39,-110
 ---
-This is the Start node. Write the beginning of your Yarn story here.
+This is the Examples_Start node. 
+
 // You can make comments with '//' and the player won't see it.
+Write the beginning of your Yarn story here.
 
-// There's two ways to do choices in Yarn. The most basic way is to link to other nodes like this:
-[[Go see more examples|Start_MoreExamples]]
-[[Actually, let's restart this node again|Start]]
+To do choices in Yarn, use 'shortcut options' like this:
+->This is option 1
+	You selected option 1. Option text for this choice should be indented 4 spaces
+->This is option 2
+	You selected option 2. Option text for this choice should be indented 4 spaces
 
-// IMPORTANT: node options are only offered at the end of the passage
-Do you want to read more about Yarn features?
+If you want to move to another node, use the jump command.
+<<jump Examples_Choices>>
 ===
-title: Start_MoreExamples
+
+title: Examples_Choices
+tags:
+colorID: 0
+position: -151,149
+---
+Now you are in the Examples_Choices node.
+
+You can combine choices with jumps to let the player choose where they want to go...
+
+-> Show me how to work with variables!
+	<<jump Examples_Variables>>
+-> Take me back to the Start node!
+	<<jump Examples_Start>>
+
+===
+
+title: Examples_Variables
 tags: 
 colorID: 0
-position: 0,0
+position: 194,139
 ---
-This node is called Start_MoreExamples.
-The second way to do choices in Yarn is with 'shortcut options' like this:
+This node is called Examples_Variables.
+You can set variables and then check those variables later.
 
-->This is option 1
-	You selected option 1.
-->This is option 2
-	You selected option 2.
-	<<set $didOption2 to true>>
+In Yarn Spinner v2, you must first declare a variable with "declare" command. As long as the declaration is in any node, anywhere in the Yarn Program, Yarn Spinner can find it and compile the program.
+<<declare $apples to 1>>
+<<declare $happy to true>>
 
-Based on choices, you can set variables, and then check those variables later.
-<<if $didOption2 is true>>
-By checking $didOption2, I remember you chose option 2!
+OK, I declared the variables. Now what do you want to do?
+-> Add 1 to a variable called "$apples".
+	<<set $apples to $apples+1>>
+-> Toggle a boolean variable called "$happy" (set to opposite value)
+	<<if $happy is true>>
+	<<set $happy to false>>
+	<<else>>
+	<<set $happy to true>>
+	<<endif>>
+
+// in-line substitution: print the value of the variable as text
+It looks like $happy is {$happy} and $apples is {$apples}.
+
+// using <<if>> to print different text based on the variables
+<<if $happy is true>>
+I'm happy that you're happy!
 <<else>>
-I can't detect a variable $didOption2, so that means you chose option 1
+I'm sad thay you're sad! I hope you feel better soon.
+<<endif>>
+// always end your <<if>> blocks with <<endif>>
+
+// we can also nest <<if>> statements inside each other
+<<if $apples > 2>>
+Wow that's a lot of apples!
+<<if $happy is true>>
+Are you happy because you have so many apples?
+<<else>>
+Are you sad because you have too many apples?
+<<endif>>
 <<endif>>
 
-Do you want to go back to Start now?
--> Yes, send me back to Start.
-	[[Start]]
--> No thanks, I want to stop.
+// you can also make more complicated <<if>> statements with && (and) || (or)
+<<if $apples > 4 && $happy is false>>
+You have {$apples} apples and you're still upset?
+Oh, I get it. These are BAD apples, huh? I'm sorry.
+<<endif>>
 
-Ok here's the end, good luck!
+-> Restart this node again!
+	<<jump Examples_Variables>>
+-> Go back to Start.
+	<<jump Examples_Start>>
+
 ===

@@ -80,6 +80,13 @@ namespace Merino
 				return Instance.programImporter;
 			}
 		}
+
+		[SerializeField] private LocalizationDatabase currentLocalizationDatabase;
+		internal static LocalizationDatabase LocalizationDatabase
+		{
+			get { return Instance.currentLocalizationDatabase; }
+			set { Instance.currentLocalizationDatabase = value; }
+		}
 		
 		public List<TextAsset> emptyList = new List<TextAsset>();
 		// [SerializeField] private List<TextAsset> currentFiles = new List<TextAsset>();

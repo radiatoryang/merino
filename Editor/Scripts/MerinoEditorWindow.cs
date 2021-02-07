@@ -74,7 +74,7 @@ namespace Merino
 		}
 
 		// misc resources
-		Texture helpIcon, errorIcon, folderIcon, textIcon, deleteIcon, resetIcon;
+		Texture helpIcon, errorIcon, folderIcon, textIcon, deleteIcon, resetIcon, refreshIcon;
 		
 		// undo management
 		double lastUndoTime;
@@ -159,6 +159,12 @@ namespace Merino
 		void OnEnable() {
 			// GetEditorWindow().titleContent = new GUIContent( windowTitle, MerinoEditorResources.Node );
 		}
+
+		void OnFocus() {
+			if (MerinoPrefs.useAutosave && !needsAutosave && m_Initialized && m_TreeView != null) {
+				RefreshYarnFiles();
+			}
+		}
 		
 		void ResetMerino()
 		{
@@ -200,6 +206,11 @@ namespace Merino
 			{
 				string path =  EditorGUIUtility.isProSkin ? "icons/d_animation.prevkey.png" : "icons/animation.prevkey.png";
 				resetIcon = EditorGUIUtility.Load(path) as Texture;
+			}
+
+			if ( refreshIcon == null)
+			{
+				refreshIcon = EditorGUIUtility.Load( EditorGUIUtility.isProSkin ? "icons/d_Refresh.png" : "icons/Refresh.png") as Texture;
 			}
 
 			// TODO: put this type of check into the getters / setters in MerinoEditorResources?
@@ -1092,6 +1103,10 @@ namespace Merino
 					}
 				}
 				
+				if ( FluidGUIButtonIcon(" Refresh", refreshIcon, "force Merino to reload from disk, for when you've added line tags or edited outside of Merino... if autosave is enabled, Merino will also try to auto-refresh whenever this window gains keyboard focus", EditorStyles.toolbarButton, GUILayout.MaxWidth(80) ) ) {
+					RefreshYarnFiles();
+				}
+
 				GUILayout.FlexibleSpace();
 				
 				// autosave / save button
@@ -1251,15 +1266,13 @@ namespace Merino
 					
 					// display file parent
 					var fileParent = GetFileParent(m_TreeView.treeModel.Find(id));
-					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "click to view " + fileParent.name + ".txt", EditorStyles.miniButton, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
+					if ( FluidGUIButtonIcon(fileParent.name.Length > 20 ? " View File" : " " + fileParent.name + ".txt", textIcon, "view " + fileParent.name + ".txt", EditorStyles.miniButton, GUILayout.Width(0), GUILayout.MaxWidth(200), GUILayout.Height(20) ) )
 					{
 						idToZoomTo = fileParent.id;
 					}
-
-					GUILayout.FlexibleSpace();
 					
 					// delete button
-					if ( GUILayout.Button(new GUIContent(deleteIcon, "click to delete this node"), GUILayout.Width(26), GUILayout.Height(20) ) )
+					if ( GUILayout.Button(new GUIContent(deleteIcon, "delete this node"), GUILayout.Width(26), GUILayout.Height(20) ) )
 					{
 						AddNodeToDelete(id);
 					}

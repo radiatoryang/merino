@@ -19,13 +19,13 @@ namespace Merino {
             { 
                 if ( isAudioLanguage ) {
                     if ( ProjectSettings.AudioProjectLanguages.Count == 0) {
-                        jumpOptions.Insert(0, "(no audio languages defined)");
+                        jumpOptions.Insert(0, "(no languages defined)");
                     } else {
                         SetLanguageAudio( ProjectSettings.AudioProjectLanguageDefault );
                     }
                 } else {
                     if ( ProjectSettings.TextProjectLanguages.Count == 0) {
-                        jumpOptions.Insert(0, "(no text languages defined)");
+                        jumpOptions.Insert(0, "(no languages defined)");
                     } else {
                         SetLanguageText( ProjectSettings.TextProjectLanguageDefault );
                     }
@@ -45,10 +45,11 @@ namespace Merino {
 
             if (currentJumpIndex != newJumpIndex)
             {
-                if ( newJumpIndex == jumpOptions.Count-1 ) {
+                if ( jumpOptions[newJumpIndex] == "(Add languages...)" ) {
                     Debug.Log("show settings");
                     ShowYarnSpinnerProjectSettings();
-                } else {
+                    newJumpIndex = 0;
+                } else if ( jumpOptions[newJumpIndex] != "(no languages defined)" ) {
                     if ( isAudioLanguage ) {
                         SetLanguageAudio( jumpOptions[newJumpIndex] );
                     } else {

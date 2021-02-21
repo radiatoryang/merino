@@ -12,6 +12,7 @@ namespace Merino
     internal static class MerinoCore
     {
 	    public static double LastSaveTime;
+		public static bool needsAutosave;
 		const string forbiddenCharactersInNodeTitles_regex = @"[\[<>\]{}\|:\s#\$]";
 
         public static void ReimportFiles(bool forceReimportAll = false)

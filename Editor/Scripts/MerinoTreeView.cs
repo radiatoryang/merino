@@ -299,6 +299,9 @@ namespace Merino
 				var element = treeModel.Find(args.itemID);
 				element.name = MerinoCore.CleanNodeTitle(args.newName); // v0.6, clean up name (only node titles can be edited)
 				Reload();
+				if ( MerinoPrefs.useAutosave ) {
+					MerinoCore.needsAutosave = true;
+				}
 			}
 		}
 

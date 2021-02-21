@@ -90,7 +90,10 @@ namespace Merino
 		// node management
 		private List<int> DeleteList = new List<int>();
 		int currentNodeIDEditing, currentNodeWordCountCache;
-		bool needsAutosave = false;
+		bool needsAutosave { 
+			get { return MerinoCore.needsAutosave; }
+			set { MerinoCore.needsAutosave = value; }
+		}
 		
 		// some help strings
 		const string compileErrorHoverString = "{0}\n\n(DEBUGGING TIP: This line number is just Yarn's guess. Look before this point too.)\n\nLeft-click to dismiss.";
@@ -605,9 +608,9 @@ namespace Merino
 					AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(newFile));
 					LoadYarnFileAtFullPath(AssetDatabase.GetAssetPath(newFile), true);
 
-					MerinoData.ProgramImporter.sourceScripts.Add(newFile);
-					EditorUtility.SetDirty( MerinoData.ProgramImporter );
-					MerinoData.ProgramImporter.SaveAndReimport();
+					// MerinoData.ProgramImporter.sourceScripts.Add(newFile);
+					// EditorUtility.SetDirty( MerinoData.ProgramImporter );
+					// MerinoData.ProgramImporter.SaveAndReimport();
 
 					m_TreeView.treeModel.SetData(MerinoCore.GetData());
 					m_TreeView.Reload();
@@ -1262,7 +1265,7 @@ namespace Merino
 							RefreshTextInspectorEditor(textAsset);
 							textInspectors[textAsset].OnInspectorGUI();
 
-								EditorGUILayout.HelpBox("Merino doesn't edit .yarn files directly. Instead, select a node in the left sidebar. Or open the .yarn file in a text editor.", MessageType.Warning);
+							EditorGUILayout.HelpBox("Merino doesn't edit .yarn files directly. Instead, select a node in the left sidebar. Or open the .yarn file in a text editor.", MessageType.Warning);
 							if ( !MerinoPrefs.useAutosave) {
 								EditorGUILayout.HelpBox("Autosave is disabled, so your changes won't appear in the file until you click the Save button.", MessageType.Warning);
 							}
@@ -1576,7 +1579,7 @@ namespace Merino
 					EditorGUILayout.Separator();
 					
 					// did user edit something?
-					if (EditorGUI.EndChangeCheck() || forceSave )
+					if (EditorGUI.EndChangeCheck() || oldName != newName || forceSave )
 					{
 						// remember last edited node, for the "playtest this" button in lower-right corner
 						currentNodeIDEditing = id;

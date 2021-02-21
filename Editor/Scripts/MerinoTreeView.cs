@@ -391,7 +391,7 @@ namespace Merino
 
 		protected override DragAndDropVisualMode HandleDragAndDrop(DragAndDropArgs args)
 		{
-			if (args.parentItem == null || args.parentItem.depth == -1)
+			if (args.parentItem == null || args.parentItem.depth == -1 || args.parentItem.depth == 1)
 			{
 				return DragAndDropVisualMode.Rejected;
 			}

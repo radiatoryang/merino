@@ -506,6 +506,10 @@ namespace Merino
 			// displayStringFull = line.Text.Text;
 			displayStringFull = line.RawText;
 
+			if ( string.IsNullOrEmpty(displayStringFull) ) {
+				PlaytestErrorLog("couldn't find the text for this line. If you're using line tags, make sure the line is tagged and the Localization is updated.");
+			}
+
 			CurrentOptions = null;
 			
 			// Display the line one character at a time
@@ -600,6 +604,12 @@ namespace Merino
 
 		LocalizedLine GetLocalizedLine(Line line)
         {
+			if (!localizationDatabase.HasLocalization(Preferences.TextLanguage) ) {
+				PlaytestErrorLog($"couldn't find a Localization for language {Preferences.TextLanguage}. Double-check your language settings in Project Settings > Yarn Spinner.");
+				if ( MerinoData.LocalizationDatabase == null) {
+					PlaytestErrorLog($"you haven't assigned a Localization Database in the top-right of the Merino editor window, so maybe that's why this broke.");
+				}
+			}
 			Localization textLocalization = localizationDatabase.GetLocalization(Preferences.TextLanguage);
 			var text = textLocalization.GetLocalizedString(line.ID);
 

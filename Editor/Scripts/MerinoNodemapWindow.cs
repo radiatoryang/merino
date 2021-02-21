@@ -401,7 +401,7 @@ namespace Merino
                     if ( isSelected && currentLinkingNode == null ) {
                         windowRect.x += 10;
                         windowRect.y += windowRect.height;
-                        windowRect.width -= 20;
+                        windowRect.width = Mathf.Max(80, windowRect.width-20);
                         windowRect.height = 20;
                         if ( GUI.Button( windowRect, "+ New Link", EditorStyles.miniButton) ) {
                             OnRightClickStartConnectNode( node );

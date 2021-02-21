@@ -1035,10 +1035,28 @@ namespace Merino
 			// search bar
 			if ( MerinoData.CurrentProgramAsset != null && MerinoData.CurrentFiles.Count > 0) {
 				rect.x += 64+12;
-				rect.width -= 64+12;
+				rect.width -= 64+28;
 				rect.y += 2;
 				treeView.searchString = m_SearchField.OnGUI (rect, treeView.searchString);
 			}
+
+			rect.x += rect.width;
+			rect.width = 28;
+			
+			if ( EditorGUI.DropdownButton(rect, new GUIContent(MerinoEditorResources.IconDropdown, "extra functions for Merino sidebar"), FocusType.Passive, EditorStyles.toolbarButton ) ) {
+				// create the menu and add items to it
+				GenericMenu menu = new GenericMenu();
+				menu.AddItem(new GUIContent("Expand All"), false, treeView.ExpandAll );
+				menu.AddItem(new GUIContent("Collapse All"), false, treeView.CollapseAll );
+				menu.ShowAsContext();
+
+				// display the menu
+				// rect.x -= 128;
+				// rect.y += rect.height;
+				// rect.width = 128;
+				// menu.DropDown(rect);
+			}
+
 			GUILayout.EndArea();
 		}
 
@@ -1070,7 +1088,7 @@ namespace Merino
 			GUILayout.BeginArea(rect);
 			
 			GUILayout.BeginHorizontal( EditorStyles.toolbar );
-			GUILayout.Space(16);
+			GUILayout.Space(8);
 			
 			// if ( FluidGUIButtonIcon(" + Folder ", folderIcon, "Load all .yarn.txt files in a folder (and its subfolders) into Merino", EditorStyles.toolbarButton, GUILayout.Height(18), GUILayout.MaxWidth(70) ))
 			// {
@@ -1244,9 +1262,10 @@ namespace Merino
 							RefreshTextInspectorEditor(textAsset);
 							textInspectors[textAsset].OnInspectorGUI();
 
-							// if ( !MerinoPrefs.useAutosave) {
 								EditorGUILayout.HelpBox("Merino doesn't edit .yarn files directly. Instead, select a node in the left sidebar. Or open the .yarn file in a text editor.", MessageType.Warning);
-							// }
+							if ( !MerinoPrefs.useAutosave) {
+								EditorGUILayout.HelpBox("Autosave is disabled, so your changes won't appear in the file until you click the Save button.", MessageType.Warning);
+							}
 							GUI.enabled = false; //MerinoPrefs.useAutosave;
 							// EditorGUI.BeginChangeCheck();
 							string newText = EditorGUILayout.TextArea(textAsset.text, MerinoStyles.GetBodyStyle(0) );
@@ -1852,17 +1871,17 @@ namespace Merino
 
 			using (new EditorGUILayout.HorizontalScope (EditorStyles.helpBox))
 			{
-				var style = GUI.skin.button; //EditorStyles.miniButton;
+				// var style = GUI.skin.button; //EditorStyles.miniButton;
 				
-				if (GUILayout.Button("Expand All", style))
-				{
-					treeView.ExpandAll ();
-				}
+				// if (GUILayout.Button("Expand All", style))
+				// {
+				// 	treeView.ExpandAll ();
+				// }
 
-				if (GUILayout.Button("Collapse All", style))
-				{
-					treeView.CollapseAll ();
-				}
+				// if (GUILayout.Button("Collapse All", style))
+				// {
+				// 	treeView.CollapseAll ();
+				// }
 
 				GUILayout.FlexibleSpace();
 

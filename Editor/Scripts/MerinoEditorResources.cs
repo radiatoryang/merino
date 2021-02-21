@@ -30,6 +30,10 @@ namespace Merino
             }
         }
 
+        public static Texture IconDropdown {
+            get { return EditorGUIUtility.IconContent("_Menu").image;}
+        }
+
         public static Texture Error { 
             get { return EditorGUIUtility.Load("icons/d_console.erroricon.sml.png") as Texture; }
         }

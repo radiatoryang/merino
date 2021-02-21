@@ -33,7 +33,8 @@ namespace Merino {
             } else {
                 currentJumpIndex = jumpOptions.IndexOf(isAudioLanguage ? MerinoPrefs.audioLanguage : MerinoPrefs.textLanguage);
             }
-            jumpOptions.Add("(Add languages...)");
+            // 21 Feb 2021 - disabled this, can't figure out why this keeps causing problems?
+            // jumpOptions.Add("(Add languages...)");
 
             GUI.SetNextControlName(popupControl);
             int newJumpIndex = EditorGUILayout.Popup(
@@ -46,10 +47,9 @@ namespace Merino {
             if (currentJumpIndex != newJumpIndex)
             {
                 if ( jumpOptions[newJumpIndex] == "(Add languages...)" ) {
-                    Debug.Log("show settings");
                     ShowYarnSpinnerProjectSettings();
                     newJumpIndex = 0;
-                } else if ( jumpOptions[newJumpIndex] != "(no languages defined)" ) {
+                } else if ( jumpOptions[newJumpIndex].Contains("(") == false ) {
                     if ( isAudioLanguage ) {
                         SetLanguageAudio( jumpOptions[newJumpIndex] );
                     } else {
